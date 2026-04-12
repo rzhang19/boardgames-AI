@@ -1,0 +1,7 @@
+1. Install `whitenoise` (needs your approval per AGENTS.md rules)
+2. Add `whitenoise.middleware.WhiteNoiseMiddleware` to `MIDDLEWARE` in `settings.py` (right after `SecurityMiddleware`)
+3. Add `STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'` to `settings.py` (enables compression + cache-busting)
+4. Run `python manage.py collectstatic` to build the `staticfiles` directory
+5. Test that CSS loads with `DEBUG=False`
+
+Also: The empty `staticcss/` and `staticjs/` folders at the project root look like accidental creations - you may want to delete those.

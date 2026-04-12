@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Vote: {{ event.title }}{% endblock %}
+
+{% block content %}
+<h1>Vote for {{ event.title }}</h1>
+
+<p>Rank the games you want to play. Rank 1 = top choice. Leave blank to skip a row.</p>
+
+<form method="post">
+    {% csrf_token %}
+    {{ formset.management_form }}
+
+    <div id="vote-forms">
+        {% for form in formset %}
+        <div class="vote-row">
+            {{ form.board_game }} {{ form.rank }}
+            {{ form.errors }}
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="btn-group">
+        <button type="submit" class="btn btn-primary">Submit Votes</button>
+        <a href="{% url 'event_detail' event.pk %}" class="btn btn-neutral">Back to Event</a>
+    </div>
+</form>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm Changes{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>Confirm Role Changes</h1>
+
+    <form method="post" action="{% url 'manage_users_confirm' %}">
+        {% csrf_token %}
+
+        {% if promote_organizer_users %}
+        <h2>Promote to Organizer</h2>
+        <ul>
+            {% for user in promote_organizer_users %}
+            <li>{{ user.username }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if demote_organizer_users %}
+        <h2>Remove Organizer</h2>
+        <ul>
+            {% for user in demote_organizer_users %}
+            <li>{{ user.username }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if promote_site_admin_users %}
+        <h2>Promote to Site Admin</h2>
+        <ul>
+            {% for user in promote_site_admin_users %}
+            <li>{{ user.username }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if demote_site_admin_users %}
+        <h2>Remove Site Admin</h2>
+        <ul>
+            {% for user in demote_site_admin_users %}
+            <li>{{ user.username }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        <p>Are you sure you want to make these changes?</p>
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">Confirm</button>
+            <a href="{% url 'manage_users_cancel' %}" class="btn btn-neutral">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

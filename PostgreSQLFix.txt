@@ -1,0 +1,96 @@
+PostgreSQL Migration Plan
+================================================================================
+
+1. requirements.txt
+   - Add: psycopg[binary]==3.3.3
+   - Add: dj-database-url==2.3.0
+   - Note: psycopg v3 is the modern successor to psycopg2. Django 6.0 supports it natively.
+
+2. boardgameclub/settings.py
+   - Add import at top: import dj_database_url
+   - Replace DATABASES block (lines 82-88) with:
+
+     DATABASES = {
+         'default': dj_database_url.config(
+             default=os.environ.get('DATABASE_URL', f'sqlite:///{BASE_DIR / "db.sqlite3"}')
+         )
+     }
+
+   - This falls back to SQLite locally when no DATABASE_URL is set, so local dev
+     continues to work unchanged.
+
+3. docker-compose.yml
+   - Replace entire file with:
+
+     services:
+       db:
+         image: postgres:17
+         environment:
+           POSTGRES_DB: ${POSTGRES_DB:-boardgameclub}
+           POSTGRES_USER: ${POSTGRES_USER:-boardgameclub}
+           POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+         volumes:
+           - postgres_data:/var/lib/postgresql/data
+         restart: unless-stopped
+
+       web:
+         build: .
+         ports:
+           - "8000:8000"
+         env_file:
+           - .env
+         depends_on:
+           - db
+         restart: unless-stopped
+
+     volumes:
+       postgres_data:
+
+   - Removes the db.sqlite3 volume mount (no longer needed)
+   - Adds a named volume for persistent Postgres data
+   - Adds depends_on so web waits for db
+
+4. Dockerfile
+   - Update apt-get install line to include libpq-dev:
+
+     RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev \
+         && rm -rf /var/lib/apt/lists/*
+
+5. entrypoint.sh
+   - Add wait-for-db step before migrations. Insert before "Running migrations...":
+
+     echo "Waiting for database..."
+     python -c "
+     import socket, time
+     while True:
+         try:
+             s = socket.create_connection(('db', 5432), timeout=2)
+             s.close()
+             break
+         except OSError:
+             time.sleep(1)
+     "
+
+   - This ensures Postgres is ready before Django tries to connect.
+
+6. .env.example
+   - Add the following lines:
+
+     DATABASE_URL=postgres://boardgameclub:changeme@db:5432/boardgameclub
+     POSTGRES_DB=boardgameclub
+     POSTGRES_USER=boardgameclub
+     POSTGRES_PASSWORD=changeme
+
+7. .gitignore - No change needed
+   - db.sqlite3 is already ignored
+   - postgres_data lives in a Docker volume (not on disk)
+
+8. .dockerignore - No change needed
+   - db.sqlite3 is already excluded
+
+================================================================================
+Files changed: requirements.txt, settings.py, docker-compose.yml, Dockerfile,
+               entrypoint.sh, .env.example
+
+Files unchanged: All models, views, forms, templates, tests, URLs, BGG
+                 integration, Borda logic - Django ORM handles the abstraction.

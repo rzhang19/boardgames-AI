@@ -1,0 +1,43 @@
+Phase 1 - Project Scaffolding
+- Django project (boardgameclub) and app (club)
+- Settings (SQLite, templates dir, static files)
+- Custom User model with is_admin
+- Initial migration
+
+Phase 2 - Models and Admin
+- All 5 models with constraints
+- Django admin registration
+- Tests for model creation, constraints, string representations
+- Superuser user management page:
+    - View listing all users with is_admin checkboxes
+    - Confirmation page showing promote/demote changes
+    - Session-based pending change storage
+    - Cancel returns to form; form Cancel goes to dashboard
+    - Tests: access control (superuser only), preview, confirm, cancel
+
+Phase 3 - Authentication
+- Login/logout using Django's built-in views
+- Registration view + form
+- Tests for registration, login, logout, access control
+
+Phase 4 - Board Games (CRUD)
+- List, create, detail, update, delete views
+- Only owners can edit/delete their games
+- Tests for all CRUD operations + permissions
+
+Phase 5 - Events and Attendance
+- Event list, detail, create (admin only)
+- RSVP toggle (attending users)
+- Tests for event creation restrictions, RSVP
+
+Phase 6 - Voting and Borda Count
+- Vote submission/editing (ranked, unlimited entries, can submit 0)
+- Borda count calculation
+- Results view
+- Admin: toggle vote visibility, filter votes by attendance
+- Tests for vote constraints, Borda calculation, visibility toggling
+
+Phase 7 - Templates and UI
+- Base template with nav
+- Dashboard, all page templates
+- Forms styling

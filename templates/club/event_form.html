@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action }} Event{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1>{{ action }} Event</h1>
+
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">{{ action }} Event</button>
+            <a href="{% url 'event_list' %}" class="btn btn-neutral">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

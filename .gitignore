@@ -1,0 +1,33 @@
+# Environment variables
+.env
+
+# Database
+db.sqlite3
+db.sqlite3-journal
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Static files (collected)
+staticfiles/
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Nested repos
+boardgames_organizer/
+
+# OS
+.DS_Store
+Thumbs.db

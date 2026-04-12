@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Events{% endblock %}
+
+{% block content %}
+<h1>Events</h1>
+
+{% if user.is_organizer %}
+<div class="action-bar">
+    <a href="{% url 'event_add' %}" class="btn btn-primary">Create Event</a>
+</div>
+{% endif %}
+
+{% if events %}
+<table>
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Date</th>
+            <th>Location</th>
+            <th>Created By</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for event in events %}
+        <tr>
+            <td><a href="{% url 'event_detail' event.pk %}">{{ event.title }}</a></td>
+            <td>{{ event.date }}</td>
+            <td>{{ event.location|default:"-" }}</td>
+            <td>{{ event.created_by.username }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    <p>No events scheduled yet.</p>
+</div>
+{% endif %}
+{% endblock %}

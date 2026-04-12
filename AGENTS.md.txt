@@ -1,0 +1,24 @@
+### DO
+- always use test driven development
+- understand expected behavior based on criteria given during prompting
+- create tests based on expected behavior, with "Given, When, Then" situations, and a test per GWT
+- after creating the code, run the tests and ensure all tests pass before continuing
+- if any tests fail, stop the generation so I can review
+
+### DON'T
+- do not add any heavy dependencies without approval
+
+### Permissions
+Allowed without prompting:
+- read files
+- list files
+
+Ask first before acting:
+- package installs
+- git push
+- deleting files, chmod
+- running full build or end to end suites
+
+### When editing text documents (design documents)
+- ALWAYS ask for permission before editing
+- Display a preview of the changes before making any changes, and prompt for permission

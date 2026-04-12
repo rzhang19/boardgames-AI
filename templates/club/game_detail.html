@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}{{ game.name }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    {% if game.image_url %}
+    <img src="{{ game.image_url }}" alt="{{ game.name }}" class="bgg-detail-image">
+    {% endif %}
+
+    <h1>{{ game.name }}</h1>
+
+    <p><strong>Owner:</strong> {{ game.owner.username }}</p>
+
+    {% if game.description %}
+    <p><strong>Description:</strong> {{ game.description }}</p>
+    {% endif %}
+
+    {% if game.min_players or game.max_players %}
+    <p><strong>Players:</strong>
+        {% if game.min_players and game.max_players %}
+            {{ game.min_players }}-{{ game.max_players }}
+        {% elif game.min_players %}
+            {{ game.min_players }}+
+        {% endif %}
+    </p>
+    {% endif %}
+
+    {% if game.bgg_link %}
+    <a href="{{ game.bgg_link }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm bgg-link">View on BoardGameGeek</a>
+    {% endif %}
+
+    <div class="btn-group">
+        {% if user == game.owner %}
+        <a href="{% url 'game_edit' game.pk %}" class="btn btn-primary btn-sm">Edit</a>
+        <a href="{% url 'game_delete' game.pk %}" class="btn btn-danger btn-sm">Delete</a>
+        {% endif %}
+        <a href="{% url 'game_list' %}" class="btn btn-outline btn-sm">Back to Games</a>
+    </div>
+</div>
+{% endblock %}

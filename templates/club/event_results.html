@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Results: {{ event.title }}{% endblock %}
+
+{% block content %}
+<h1>Results for {{ event.title }}</h1>
+
+<h2>Borda Count Scores</h2>
+{% if results %}
+{% if results|length > 0 %}
+<div class="podium">
+    <div class="game-name">{{ results.0.game.name }}</div>
+    <div class="game-score">{{ results.0.score }} points</div>
+</div>
+{% endif %}
+
+<table>
+    <thead>
+        <tr>
+            <th>Rank</th>
+            <th>Game</th>
+            <th>Score</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in results %}
+        <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ item.game.name }}</td>
+            <td>{{ item.score }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    <p>No votes have been cast yet.</p>
+</div>
+{% endif %}
+
+{% if show_individual and individual_votes %}
+<h2>Individual Votes</h2>
+{% for username, votes in individual_votes.items %}
+<div class="card">
+    <h3>{{ username }}</h3>
+    <ul>
+        {% for vote in votes %}
+        <li>#{{ vote.rank }}: {{ vote.board_game.name }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endfor %}
+{% endif %}
+
+<a href="{% url 'event_detail' event.pk %}" class="btn btn-outline btn-sm">Back to Event</a>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>Board Game Club</h1>
+    {% if user.is_authenticated %}
+    <p>Welcome, {{ user.username }}!
+        {% if user.is_site_admin %}
+        <span class="badge badge-admin">Site Admin</span>
+        {% elif user.is_organizer %}
+        <span class="badge">Organizer</span>
+        {% endif %}
+    </p>
+    {% else %}
+    <p>Welcome!</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,198 @@
+Complete Implementation Plan for Feature #6 (BGG Integration)
+
+Working BGG API Endpoints:
+- Search: GET api.geekdo.com/api/geekitems?objecttype=thing&subtype=boardgame&search=<query>
+  Returns: List of {name, objectid}
+- Game Details: GET api.geekdo.com/api/geekitems?objecttype=thing&objectid=<id>
+  Returns: Full data (name, description, players, playtime, images, categories, mechanics, BGG link)
+- No authentication or API key needed -- just a User-Agent header
+- No external dependency required (uses urllib + json from stdlib)
+
+================================================================================
+
+Step 1: Create club/bgg.py - BGG API Utility Module
+
+- search_bgg(query) -- hits api.geekdo.com/api/geekitems?objecttype=thing&subtype=boardgame&search=<query>
+  Returns list of {'id': int, 'name': str} (max 20)
+- fetch_bgg_game(bgg_id) -- hits api.geekdo.com/api/geekitems?objecttype=thing&objectid=<id>
+  Returns dict with: name, description, min_players, max_players, bgg_link, image_url, bgg_id
+- Uses urllib + json from stdlib (no new dependencies)
+- Graceful error handling (returns [] / None on failures)
+- Uses short_description from BGG API instead of full HTML description
+
+================================================================================
+
+Step 2: Create club/tests/test_bgg.py - Tests for BGG API Module
+
+Tests for search_bgg:
+- Given a search query, when calling search_bgg, then a list of dicts with id and name is returned
+- Given a search query with no matches, when calling search_bgg, then an empty list is returned
+- Given a search returning many results, when calling search_bgg, then only first 20 are returned
+- Given an API error, when calling search_bgg, then an empty list is returned
+- Given a search query, when calling search_bgg, then the correct BGG API URL is called
+
+Tests for fetch_bgg_game:
+- Given a valid BGG ID, when calling fetch_bgg_game, then game data dict is returned
+- Given a BGG game with minimal data, when calling fetch_bgg_game, then None is used for missing fields
+- Given an API error, when calling fetch_bgg_game, then None is returned
+- Given a game with HTML description, when calling fetch_bgg_game, then short_description is used as fallback
+
+All tests use mocked urllib calls (no real network requests)
+
+================================================================================
+
+Step 3: Update BoardGame Model in club/models.py
+
+Add the following fields to the BoardGame model:
+- bgg_id: PositiveIntegerField(null=True, blank=True) -- stores the BGG object ID
+- bgg_link: URLField(blank=True) -- stores canonical BGG URL
+- image_url: URLField(blank=True) -- stores BGG thumbnail image URL
+- bgg_last_synced: DateTimeField(null=True, blank=True) -- when data was last pulled from BGG
+
+================================================================================
+
+Step 4: Create Migration club/migrations/0006_bgg_fields.py
+
+- Run python manage.py makemigrations to auto-generate migration
+- Adds bgg_id, bgg_link, image_url, bgg_last_synced fields to BoardGame table
+- All fields are nullable/blank since existing games won't have BGG data
+
+================================================================================
+
+Step 5: Update BoardGameForm in club/forms.py
+
+- Add bgg_id to fields list (as HiddenInput, for pre-filling from BGG search selection)
+- The form will accept bgg_id as a hidden field that gets submitted alongside manual fields
+
+================================================================================
+
+Step 6: Add bgg_search View in club/views.py
+
+- AJAX endpoint: GET /games/bgg-search/?q=<query>
+- Returns JSON: [{"id": 13, "name": "Catan"}, ...]
+- Login required (redirects to /login/ if unauthenticated)
+- Calls search_bgg() from club/bgg.py
+- Returns JsonResponse with results or empty list on error
+
+================================================================================
+
+Step 7: Add bgg_search URL to club/urls.py
+
+- path('games/bgg-search/', views.bgg_search, name='bgg_search')
+
+================================================================================
+
+Step 8: Add bgg_import View in club/views.py
+
+- AJAX endpoint: GET /games/bgg-import/<int:bgg_id>/
+- Returns JSON: {"name": "Catan", "min_players": 3, "max_players": 4, "description": "...", "bgg_link": "...", "image_url": "..."}
+- Login required (redirects to /login/ if unauthenticated)
+- Calls fetch_bgg_game() from club/bgg.py
+- Returns JsonResponse with game data or error on failure
+
+================================================================================
+
+Step 9: Add bgg_import URL to club/urls.py
+
+- path('games/bgg-import/<int:bgg_id>/', views.bgg_import, name='bgg_import')
+
+================================================================================
+
+Step 10: Update game_add and game_edit Views in club/views.py
+
+- On POST: check for bgg_id parameter
+- If bgg_id is present and non-empty, call fetch_bgg_game(bgg_id)
+- Auto-fill form fields from BGG data (name, description, min_players, max_players)
+- Save bgg_id, bgg_link, image_url, bgg_last_synced on the BoardGame instance
+- The bgg_id hidden field in the form carries the selected BGG game through submission
+
+================================================================================
+
+Step 11: Create club/tests/test_bgg_views.py - Tests for BGG-Related Views
+
+Tests for bgg_search view:
+- Given user is logged in, when searching BGG, then JSON results are returned
+- Given user is not logged in, when searching BGG, then redirect to login
+- Given BGG API fails, when searching, then empty JSON list is returned
+- Given a query parameter, when searching, then the correct query is passed to search_bgg
+
+Tests for bgg_import view:
+- Given user is logged in, when importing a BGG game, then JSON game data is returned
+- Given user is not logged in, when importing, then redirect to login
+- Given an invalid BGG ID, when importing, then JSON error is returned
+
+Tests for game_add with BGG data:
+- Given a logged-in user, when posting game_add with bgg_id, then game is created with BGG data
+- Given a logged-in user, when posting game_add with bgg_id, then bgg_link and image_url are saved
+- Given a logged-in user, when posting game_add without bgg_id, then game is created normally (backward compatibility)
+
+Tests for game_edit with BGG data:
+- Given a game owner, when posting game_edit with bgg_id, then game is updated with BGG data
+
+Tests for game_detail with BGG data:
+- Given a game with bgg_link, when viewing detail, then "View on BoardGameGeek" link is shown
+- Given a game with image_url, when viewing detail, then BGG image is shown
+- Given a game without BGG data, when viewing detail, then no BGG elements are shown
+
+================================================================================
+
+Step 12: Update templates/club/game_form.html - Add BGG Search UI
+
+- Add "Search BoardGameGeek" section above the existing form
+- Include a text input for BGG search query
+- Include a "Search" button
+- JavaScript behavior:
+  1. User types game name and clicks Search
+  2. AJAX GET to /games/bgg-search/?q=<query>
+  3. Display results in a dropdown/list below search input
+  4. User clicks a result from the list
+  5. AJAX GET to /games/bgg-import/<bgg_id>/
+  6. Populate the form fields (name, description, min_players, max_players)
+  7. Set the hidden bgg_id field
+  8. Show BGG image preview thumbnail
+- Include a "Clear BGG Data" button to reset the BGG fields
+- Style the search section to match existing form styling
+
+================================================================================
+
+Step 13: Update templates/club/game_detail.html - Show BGG Data
+
+- If game.image_url exists, show BGG thumbnail image at top of card
+- If game.bgg_link exists, show "View on BoardGameGeek" link/button
+- Show BGG badge or indicator if game has linked BGG data
+
+================================================================================
+
+Step 14: Update templates/club/game_list.html - Show BGG Thumbnails
+
+- If game.image_url exists, show small BGG thumbnail in the game name column
+- Keep layout clean; thumbnail should be small (e.g., 30x30px) inline with game name
+
+================================================================================
+
+Step 15: Add CSS for BGG Elements in static/css/style.css
+
+- .bgg-search-section styling (search input + button + results dropdown)
+- .bgg-results-list styling (search results dropdown)
+- .bgg-result-item styling (individual search result, hover state)
+- .bgg-image-preview styling (image preview on form)
+- .bgg-link styling ("View on BGG" button/link on detail page)
+- .bgg-thumbnail styling (small thumbnail on game list)
+- Ensure all new styles match existing design system (CSS variables for colors/spacing)
+
+================================================================================
+
+Implementation Order (TDD):
+1. Write tests for bgg.py (test_bgg.py) -- Step 2
+2. Implement bgg.py -- Step 1
+3. Run test_bgg.py, ensure all pass
+4. Update BoardGame model -- Step 3
+5. Create migration -- Step 4
+6. Write tests for BGG views (test_bgg_views.py) -- Step 11
+7. Update forms.py -- Step 5
+8. Add views and URLs -- Steps 6-10
+9. Run test_bgg_views.py, ensure all pass
+10. Update templates -- Steps 12-14
+11. Update CSS -- Step 15
+12. Run full test suite, ensure all existing + new tests pass
+13. Mark in ExtraFeatures.txt that #6 is DONE.

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Users{% endblock %}
+
+{% block content %}
+<h1>Manage Users</h1>
+
+<div class="action-bar">
+    <a href="{% url 'user_add' %}" class="btn btn-primary btn-sm">Add User</a>
+</div>
+
+{% if no_changes %}
+<div class="alert alert-warning">No changes detected.</div>
+{% endif %}
+
+<form method="post">
+    {% csrf_token %}
+    {{ formset.management_form }}
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Organizer</th>
+                {% if is_superuser %}
+                <th>Site Admin</th>
+                {% endif %}
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for form in formset %}
+            <tr>
+                <td>{{ form.id }}{{ form.instance.username }}</td>
+                <td>{{ form.is_organizer }}</td>
+                {% if is_superuser %}
+                <td>{{ form.is_site_admin }}</td>
+                {% endif %}
+                <td>
+                    {% if not form.instance.is_superuser %}
+                    <a href="{% url 'user_delete' form.instance.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="btn-group">
+        <button type="submit" class="btn btn-primary">Preview Changes</button>
+        <button type="submit" name="cancel" value="true" class="btn btn-neutral">Cancel</button>
+    </div>
+</form>
+{% endblock %}

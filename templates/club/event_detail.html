@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}{{ event.title }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>{{ event.title }}</h1>
+
+    <p><strong>Date:</strong> {{ event.date }}</p>
+
+    {% if event.location %}
+    <p><strong>Location:</strong> {{ event.location }}</p>
+    {% endif %}
+
+    {% if event.description %}
+    <p><strong>Description:</strong> {{ event.description }}</p>
+    {% endif %}
+
+    <p><strong>Created by:</strong> {{ event.created_by.username }}</p>
+
+    {% if user.is_authenticated %}
+    <form method="post" action="{% url 'event_rsvp' event.pk %}">
+        {% csrf_token %}
+        {% if is_attending %}
+        <button type="submit" class="btn btn-warning">Cancel RSVP</button>
+        {% else %}
+        <button type="submit" class="btn btn-success">RSVP</button>
+        {% endif %}
+    </form>
+    {% endif %}
+
+    <div class="btn-group">
+        {% if user.is_authenticated and is_attending %}
+        <a href="{% url 'event_vote' event.pk %}" class="btn btn-primary btn-sm">Vote for Games</a>
+        {% endif %}
+
+        <a href="{% url 'event_results' event.pk %}" class="btn btn-outline btn-sm">View Results</a>
+
+        {% if user.is_organizer %}
+        <form method="post" action="{% url 'event_toggle_visibility' event.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-neutral btn-sm">
+                {% if event.show_individual_votes %}
+                    Hide Individual Votes
+                {% else %}
+                    Show Individual Votes
+                {% endif %}
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <h2>Attendees ({{ attendees|length }})</h2>
+    {% if attendees %}
+    <ul>
+        {% for attendance in attendees %}
+        <li>{{ attendance.user.username }}</li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>No one is attending yet.</p>
+    {% endif %}
+</div>
+
+<a href="{% url 'event_list' %}" class="btn btn-outline btn-sm">Back to Events</a>
+{% endblock %}

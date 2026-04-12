@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action }} Game{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1>{{ action }} Game</h1>
+
+    <div class="bgg-search-section">
+        <h2>Search BoardGameGeek</h2>
+        <div class="bgg-search-bar">
+            <input type="text" id="bgg-search-input" placeholder="Search for a game...">
+            <button type="button" id="bgg-search-btn" class="btn btn-primary btn-sm">Search</button>
+            <button type="button" id="bgg-clear-btn" class="btn btn-neutral btn-sm" style="display:none;">Clear</button>
+        </div>
+        <div id="bgg-search-results" class="bgg-results-list" style="display:none;"></div>
+        <div id="bgg-image-preview" class="bgg-image-preview" style="display:none;"></div>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">{{ action }} Game</button>
+            <a href="{% url 'game_list' %}" class="btn btn-neutral">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<script>
+(function() {
+    var searchInput = document.getElementById('bgg-search-input');
+    var searchBtn = document.getElementById('bgg-search-btn');
+    var clearBtn = document.getElementById('bgg-clear-btn');
+    var resultsDiv = document.getElementById('bgg-search-results');
+    var imagePreview = document.getElementById('bgg-image-preview');
+    var bggIdField = document.getElementById('id_bgg_id');
+    var nameField = document.getElementById('id_name');
+    var descField = document.getElementById('id_description');
+    var minField = document.getElementById('id_min_players');
+    var maxField = document.getElementById('id_max_players');
+
+    function getCookie(name) {
+        var cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            var cookies = document.cookie.split(';');
+            for (var i = 0; i < cookies.length; i++) {
+                var cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    searchBtn.addEventListener('click', function() {
+        var query = searchInput.value.trim();
+        if (!query) return;
+
+        resultsDiv.innerHTML = '<p>Searching...</p>';
+        resultsDiv.style.display = 'block';
+
+        fetch('{% url "bgg_search" %}?q=' + encodeURIComponent(query))
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                resultsDiv.innerHTML = '';
+                if (data.length === 0) {
+                    resultsDiv.innerHTML = '<p>No results found.</p>';
+                    return;
+                }
+                data.forEach(function(item) {
+                    var div = document.createElement('div');
+                    div.className = 'bgg-result-item';
+                    div.textContent = item.name;
+                    div.setAttribute('data-bgg-id', item.id);
+                    div.addEventListener('click', function() {
+                        selectGame(item.id, item.name);
+                    });
+                    resultsDiv.appendChild(div);
+                });
+            })
+            .catch(function() {
+                resultsDiv.innerHTML = '<p>Search failed. Please try again.</p>';
+            });
+    });
+
+    searchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            searchBtn.click();
+        }
+    });
+
+    function selectGame(bggId, gameName) {
+        resultsDiv.innerHTML = '<p>Loading game data...</p>';
+
+        fetch('{% url "bgg_import" bgg_id=0 %}'.replace('/0/', '/' + bggId + '/'))
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    resultsDiv.innerHTML = '<p>' + data.error + '</p>';
+                    return;
+                }
+                if (nameField && !nameField.value) {
+                    nameField.value = data.name || '';
+                }
+                if (descField && !descField.value) {
+                    descField.value = data.description || '';
+                }
+                if (minField && !minField.value) {
+                    minField.value = data.min_players || '';
+                }
+                if (maxField && !maxField.value) {
+                    maxField.value = data.max_players || '';
+                }
+                if (bggIdField) {
+                    bggIdField.value = data.bgg_id || bggId;
+                }
+                if (data.image_url) {
+                    imagePreview.innerHTML = '<img src="' + data.image_url + '" alt="' + (data.name || '') + '">';
+                    imagePreview.style.display = 'block';
+                }
+                resultsDiv.style.display = 'none';
+                searchInput.value = '';
+                clearBtn.style.display = 'inline-block';
+            })
+            .catch(function() {
+                resultsDiv.innerHTML = '<p>Failed to load game data.</p>';
+            });
+    }
+
+    clearBtn.addEventListener('click', function() {
+        if (bggIdField) bggIdField.value = '';
+        imagePreview.innerHTML = '';
+        imagePreview.style.display = 'none';
+        clearBtn.style.display = 'none';
+    });
+})();
+</script>
+{% endblock %}

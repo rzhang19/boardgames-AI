@@ -1,0 +1,25 @@
+Extra features:
+
+AGENT: if you complete one of these steps, mark it as DONE by including a "(DONE)" text - DONE inside parentheses - in between the number and the start of the instructions.
+AGENT: if any of these lines are marked with a "(DONE)" in between the number and the feature, this has already been completed and should be skipped
+
+1. (DONE) Make the pages look better include coloring and modern looks to the buttons and accounts
+2. (DONE) Improve the home page when not logged in, as the current page currently shows "Welcome, " with no user there. We can simply make it "Welcome!"
+3. (DONE) Show administrator privileges for users that are marked as admin, on their home page when they log in.
+4. (DONE) Require an email to login and for users to register their account via a link through their email, once this product is in production. For testing purposes on my local machine, don't make it required
+5. (DONE) Allow a higher level of privilege, "site administrator" that can be given to users. Make the same confirmation as it would be done for making a user a "(regular) admin".
+5a. (DONE) Change the current "admin" to "organizer". Keep the current power levels the same. The "site administrator" should be named "admin" and hold the privileges listed in 5b and 5c.
+5b. (DONE) A site administrator would be allowed to add and remove users, as well as make anyone (but the superuser) an admin/organizer or remove admin/organizer privileges.
+5c. (DONE) A site administrator cannot change the privilege level of other site administrators, as this is left only to the superuser.
+6. (DONE) Connect to BoardGameGeek and use their API to allow direct linking to a board game from that site, and allow importing information about the game from that site.
+7. (DONE) Past events can be viewed, but I should not be able to create an event in the past. 
+8. Modify the event date field when creating a new event. Let's make it such that we don't need seconds, just an hours and minutes. Also update this "time" to be a separate, optional field from date. Any events with no inputted time can be set at 12am. Keep this field on the same line as the date.
+9. Mark the fields that are required, in the Create Event task, with a red asterisk. Any fields that are not required (such as the separate time field) should not have a red asterisk.
+10. Add timezone functionality to the date and time. Allow defaulting time zones based on the current user time zone. Can we default users to a timezone based on their computer time?
+11. Add settings button and page to all users. Put this as a new button with a gear symbol in the upper right of the screen, left of the "Logout" button.
+11a. Can set/change timezone.
+12. Look into using Google Locations API to set Location in the Create Event task.
+13. Add an Edit Event task.
+14. Add an end voting (and resume voting) button to events (in the future only), only by organizer level or higher (admins and superusers).
+15. Allow admin to set minimum time between end voting and event time start. End voting permanently ends at this time, and resume voting cannot be done after this.
+16.

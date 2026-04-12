@@ -1,0 +1,15 @@
+This project is to create a Django-based web application where users are members of a board game club and want to coordinate what board game to play.
+
+The main objects of this application are:
+
+1. The user
+2. Board games
+3. Events (where users play board games)
+
+Users can consist of regular users and administrators. Administrators will also have the same usage abilities as regular users.
+
+Regular users can add board games to their collection. Regular users can say which events they are attending. Regular users can vote for games to play at the events they are attending.
+
+Administrators can do everything regular users can do and also create events. Administrators can also filter votes based on who is present at an event, and filter out anyone's votes who is not in attendance.
+
+This proejct will be developed with Django and Python, using SQLite and PostgresQL if needed.

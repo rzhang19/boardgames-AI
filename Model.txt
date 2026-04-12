@@ -1,0 +1,48 @@
+User (extends AbstractUser)
+  - All default Django user fields
+  - is_admin: BooleanField - distinguishes admins from regular users
+  - Admins get all regular user capabilities plus: create events, toggle vote visibility, filter votes
+  Superuser Management:
+    - Only is_superuser=True users can access /manage-users/
+    - Superusers can promote/demote is_admin on any user
+    - Two-step confirmation: preview changes, then confirm or cancel
+    - Cancel on confirmation page returns to /manage-users/
+    - Cancel on form page returns to dashboard
+
+BoardGame
+  - name: CharField
+  - description: TextField (blank=True)
+  - owner: ForeignKey(User) - the user who added it to their collection
+  - min_players: PositiveIntegerField (null=True, blank=True)
+  - max_players: PositiveIntegerField (null=True, blank=True)
+  - created_at: DateTimeField(auto_now_add=True)
+
+Event
+  - title: CharField
+  - date: DateTimeField
+  - location: CharField (blank=True)
+  - description: TextField (blank=True)
+  - created_by: ForeignKey(User) - admin who created it
+  - show_individual_votes: BooleanField(default=False) - admin toggle to show/hide who voted for what
+  - is_active: BooleanField(default=True) - soft close for past events
+
+EventAttendance (M2M through table: User <-> Event)
+  - user: ForeignKey(User)
+  - event: ForeignKey(Event)
+  - joined_at: DateTimeField(auto_now_add=True)
+  - UniqueConstraint(user, event)
+
+Vote
+  - user: ForeignKey(User)
+  - event: ForeignKey(Event)
+  - board_game: ForeignKey(BoardGame)
+  - rank: PositiveIntegerField - 1 = top choice, 2 = second, etc. Unlimited depth; users can vote for 0-N games
+  - UniqueConstraint(user, event, rank) - no two games at same rank
+  - UniqueConstraint(user, event, board_game) - can't rank same game twice
+
+Borda Count Logic
+  - If a user ranks N games: rank 1 = N points, rank 2 = N-1, ..., rank N = 1 point
+  - Unranked games = 0 points
+  - Game's total score = sum of points across all attending users who ranked it
+  - Highest total = suggested game to play
+  - Admin can filter votes to only count attending users

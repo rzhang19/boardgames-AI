@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Board Games{% endblock %}
+
+{% block content %}
+<h1>Board Games</h1>
+
+{% if user.is_authenticated %}
+<div class="action-bar">
+    <a href="{% url 'game_add' %}" class="btn btn-primary">Add a Game</a>
+</div>
+{% endif %}
+
+{% if games %}
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Players</th>
+            <th>Owner</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for game in games %}
+        <tr>
+            <td>
+                {% if game.image_url %}
+                <img src="{{ game.image_url }}" alt="{{ game.name }}" class="bgg-thumbnail">
+                {% endif %}
+                <a href="{% url 'game_detail' game.pk %}">{{ game.name }}</a>
+            </td>
+            <td>
+                {% if game.min_players and game.max_players %}
+                    {{ game.min_players }}-{{ game.max_players }}
+                {% elif game.min_players %}
+                    {{ game.min_players }}+
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>{{ game.owner.username }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    <p>No games have been added yet.</p>
+</div>
+{% endif %}
+{% endblock %}
