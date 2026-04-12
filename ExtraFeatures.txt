@@ -16,7 +16,7 @@ AGENT: if any of these lines are marked with a "(DONE)" in between the number an
 8. Modify the event date field when creating a new event. Let's make it such that we don't need seconds, just an hours and minutes. Also update this "time" to be a separate, optional field from date. Any events with no inputted time can be set at 12am. Keep this field on the same line as the date.
 9. Mark the fields that are required, in the Create Event task, with a red asterisk. Any fields that are not required (such as the separate time field) should not have a red asterisk.
 10. Add timezone functionality to the date and time. Allow defaulting time zones based on the current user time zone. Can we default users to a timezone based on their computer time?
-11. Add settings button and page to all users. Put this as a new button with a gear symbol in the upper right of the screen, left of the "Logout" button.
+11. (DONE) Add settings button and page to all users. Put this as a new button with a gear symbol in the upper right of the screen, left of the "Logout" button.
 11a. Can set/change timezone.
 12. Look into using Google Locations API to set Location in the Create Event task.
 13. Add an Edit Event task.
