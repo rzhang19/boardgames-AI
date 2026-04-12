@@ -31,3 +31,12 @@ boardgames_organizer/
 # OS
 .DS_Store
 Thumbs.db
+
+# Nonsensitive Setup text files (for AI purposes)
+AGENTS.md
+ExtraFeatures.txt
+Model.txt
+Structure.txt
+WhitenoiseCSS.txt
+Design.txt
+BGGImp.txt
