@@ -19,7 +19,7 @@ class EmailOrUsernameBackend(ModelBackend):
         if not user.check_password(password):
             return None
 
-        if getattr(settings, 'REQUIRE_EMAIL_VERIFICATION', False) and not user.email_verified:
+        if getattr(settings, 'REQUIRE_EMAIL_VERIFICATION', False) and user.email and not user.email_verified:
             return None
 
         return user

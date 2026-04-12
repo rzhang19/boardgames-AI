@@ -12,8 +12,8 @@ from django.utils import timezone
 from .bgg import fetch_bgg_game, search_bgg
 from .borda import calculate_borda_scores
 from .forms import (
-    BoardGameForm, EventForm, SetPasswordForm, UserAddForm,
-    UserManageForm, RegistrationForm, VoteForm,
+    BoardGameForm, EventForm, SetPasswordForm, SettingsEmailForm,
+    UserAddForm, UserManageForm, RegistrationForm, VoteForm,
 )
 from .models import BoardGame, Event, EventAttendance, Vote
 
@@ -204,11 +204,52 @@ def dashboard(request):
     return render(request, 'club/dashboard.html')
 
 
+def user_settings(request):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+
+    if request.method == 'POST':
+        form = SettingsEmailForm(request.POST)
+        if form.is_valid():
+            new_email = form.cleaned_data['email']
+            user = request.user
+
+            if new_email == user.email:
+                return redirect('user_settings')
+
+            user.email = new_email
+            if new_email:
+                user.email_verified = False
+                user.save()
+                signer = TimestampSigner()
+                token = signer.sign(user.pk)
+                verify_url = request.build_absolute_uri(f'/verify-email/{token}/')
+                send_mail(
+                    'Verify your email - Board Game Club',
+                    f'Click the link to verify your email: {verify_url}',
+                    settings.DEFAULT_FROM_EMAIL,
+                    [user.email],
+                )
+            else:
+                user.email_verified = False
+                user.save()
+            return redirect('user_settings')
+    else:
+        form = SettingsEmailForm(initial={'email': request.user.email})
+
+    return render(request, 'club/settings.html', {'form': form})
+
+
 def register(request):
     if request.method == 'POST':
         form = RegistrationForm(request.POST)
         if form.is_valid():
             user = form.save()
+            if not user.email:
+                user.email_verified = False
+                user.save()
+                login(request, user)
+                return redirect('dashboard')
             if settings.REQUIRE_EMAIL_VERIFICATION:
                 signer = TimestampSigner()
                 token = signer.sign(user.pk)
@@ -424,7 +465,7 @@ def event_results(request, pk):
         ).select_related('user', 'board_game').order_by('user', 'rank')
         user_votes = {}
         for vote in votes:
-            user_votes.setdefault(vote.user.username, []).append(vote)
+            user_votes.setdefault(vote.user, []).append(vote)
         individual_votes = user_votes
 
     return render(request, 'club/event_results.html', {

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load club_tags %}
 
 {% block title %}Results: {{ event.title }}{% endblock %}
 
@@ -40,9 +41,9 @@
 
 {% if show_individual and individual_votes %}
 <h2>Individual Votes</h2>
-{% for username, votes in individual_votes.items %}
+{% for voter, votes in individual_votes.items %}
 <div class="card">
-    <h3>{{ username }}</h3>
+    <h3>{{ voter.username }}{% verified_badge voter %}</h3>
     <ul>
         {% for vote in votes %}
         <li>#{{ vote.rank }}: {{ vote.board_game.name }}</li>

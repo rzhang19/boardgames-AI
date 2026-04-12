@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load club_tags %}
 
 {% block title %}Dashboard{% endblock %}
 
@@ -6,7 +7,7 @@
 <div class="card">
     <h1>Board Game Club</h1>
     {% if user.is_authenticated %}
-    <p>Welcome, {{ user.username }}!
+    <p>Welcome, {{ user.username }}{% verified_badge user %}!
         {% if user.is_site_admin %}
         <span class="badge badge-admin">Site Admin</span>
         {% elif user.is_organizer %}

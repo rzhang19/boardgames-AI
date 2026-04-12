@@ -9,6 +9,9 @@
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
+        <div class="alert alert-info">
+            Adding an email lets you become a verified user. You can always add one later in Settings.
+        </div>
         <button type="submit" class="btn btn-primary">Register</button>
     </form>
 

@@ -6,6 +6,7 @@ from club.forms import EmailOrUsernameLoginForm
 
 urlpatterns = [
     path('', views.dashboard, name='dashboard'),
+    path('settings/', views.user_settings, name='user_settings'),
     path('register/', views.register, name='register'),
     path('login/', auth_views.LoginView.as_view(template_name='registration/login.html', authentication_form=EmailOrUsernameLoginForm), name='login'),
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),

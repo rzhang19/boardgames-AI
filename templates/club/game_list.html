@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load club_tags %}
 
 {% block title %}Board Games{% endblock %}
 
@@ -38,7 +39,7 @@
                     -
                 {% endif %}
             </td>
-            <td>{{ game.owner.username }}</td>
+            <td>{{ game.owner.username }}{% verified_badge game.owner %}</td>
         </tr>
         {% endfor %}
     </tbody>

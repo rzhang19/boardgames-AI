@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load club_tags %}
 
 {% block title %}{{ event.title }}{% endblock %}
 
@@ -16,7 +17,7 @@
     <p><strong>Description:</strong> {{ event.description }}</p>
     {% endif %}
 
-    <p><strong>Created by:</strong> {{ event.created_by.username }}</p>
+    <p><strong>Created by:</strong> {{ event.created_by.username }}{% verified_badge event.created_by %}</p>
 
     {% if user.is_authenticated %}
     <form method="post" action="{% url 'event_rsvp' event.pk %}">
@@ -56,7 +57,7 @@
     {% if attendees %}
     <ul>
         {% for attendance in attendees %}
-        <li>{{ attendance.user.username }}</li>
+        <li>{{ attendance.user.username }}{% verified_badge attendance.user %}</li>
         {% endfor %}
     </ul>
     {% else %}

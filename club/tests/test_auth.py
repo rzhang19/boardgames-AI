@@ -72,15 +72,18 @@ class RegistrationTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(User.objects.filter(username='').exists())
 
-    def test_registration_without_email_fails(self):
+    def test_registration_without_email_succeeds(self):
         response = self.client.post(reverse('register'), {
             'username': 'newuser',
             'email': '',
             'password1': 'Str0ngP@ss123',
             'password2': 'Str0ngP@ss123',
         })
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(User.objects.filter(username='newuser').exists())
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(User.objects.filter(username='newuser').exists())
+        user = User.objects.get(username='newuser')
+        self.assertEqual(user.email, '')
+        self.assertFalse(user.email_verified)
 
 
 class LoginTest(TestCase):

@@ -43,7 +43,7 @@ class SetPasswordForm(forms.Form):
 
 
 class RegistrationForm(UserCreationForm):
-    email = forms.EmailField(required=True)
+    email = forms.EmailField(required=False)
 
     class Meta:
         model = User
@@ -83,3 +83,7 @@ class VoteForm(forms.ModelForm):
     class Meta:
         model = Vote
         fields = ['board_game', 'rank']
+
+
+class SettingsEmailForm(forms.Form):
+    email = forms.EmailField(required=False)
