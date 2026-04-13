@@ -1,3 +1,5 @@
+from datetime import datetime, time as dt_time
+
 from django.conf import settings
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.hashers import make_password
@@ -379,7 +381,10 @@ def game_delete(request, pk):
 
 def event_list(request):
     events = Event.objects.select_related('created_by').all()
-    return render(request, 'club/event_list.html', {'events': events})
+    return render(request, 'club/event_list.html', {
+        'events': events,
+        'time_midnight': dt_time(0, 0),
+    })
 
 
 def event_add(request):
@@ -391,6 +396,7 @@ def event_add(request):
         form = EventForm(request.POST)
         if form.is_valid():
             event = form.save(commit=False)
+            event.date = form.cleaned_data['date']
             event.created_by = request.user
             event.save()
             return redirect('event_detail', pk=event.pk)
@@ -499,6 +505,7 @@ def event_detail(request, pk):
         'event': event,
         'attendees': attendees,
         'is_attending': is_attending,
+        'time_midnight': dt_time(0, 0),
     })
 
 

@@ -309,6 +309,8 @@ input[type="password"],
 input[type="email"],
 input[type="number"],
 input[type="datetime-local"],
+input[type="date"],
+input[type="time"],
 input[type="url"],
 textarea,
 select {
@@ -565,4 +567,43 @@ li {
     margin-left: 2px;
     vertical-align: middle;
     font-weight: 700;
+}
+
+.datetime-row {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+}
+
+.datetime-row .form-field {
+    flex: 1;
+    margin-bottom: 16px;
+}
+
+.form-field {
+    margin-bottom: 16px;
+}
+
+.form-field label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 0.875rem;
+    color: var(--text);
+}
+
+.form-errors {
+    margin-top: 4px;
+}
+
+.form-errors ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.form-errors li {
+    color: var(--danger);
+    font-size: 0.813rem;
+    font-weight: 500;
 }

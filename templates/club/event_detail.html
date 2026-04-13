@@ -7,7 +7,7 @@
 <div class="card">
     <h1>{{ event.title }}</h1>
 
-    <p><strong>Date:</strong> {{ event.date }}</p>
+    <p><strong>Date:</strong> {{ event.date|date:"N j, Y" }}{% if event.date.time != time_midnight %} at {{ event.date|date:"g:i A" }}{% endif %}</p>
 
     {% if event.location %}
     <p><strong>Location:</strong> {{ event.location }}</p>

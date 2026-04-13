@@ -26,7 +26,7 @@
         {% for event in events %}
         <tr>
             <td><a href="{% url 'event_detail' event.pk %}">{{ event.title }}</a></td>
-            <td>{{ event.date }}</td>
+            <td>{{ event.date|date:"N j, Y" }}{% if event.date.time != time_midnight %} {{ event.date|date:"g:i A" }}{% endif %}</td>
             <td>{{ event.location|default:"-" }}</td>
             <td>{{ event.created_by.username }}{% verified_badge event.created_by %}</td>
         </tr>

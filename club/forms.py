@@ -1,3 +1,5 @@
+from datetime import datetime, time as dt_time
+
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
@@ -63,19 +65,36 @@ class BoardGameForm(forms.ModelForm):
 
 
 class EventForm(forms.ModelForm):
+    date = forms.DateField(
+        widget=forms.DateInput(attrs={'type': 'date'}),
+    )
+    time = forms.TimeField(
+        required=False,
+        widget=forms.TimeInput(attrs={'type': 'time'}),
+    )
 
     class Meta:
         model = Event
-        fields = ['title', 'date', 'location', 'description']
-        widgets = {
-            'date': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
-        }
+        fields = ['title', 'location', 'description']
 
-    def clean_date(self):
-        date = self.cleaned_data.get('date')
-        if date and date < timezone.now():
-            raise forms.ValidationError('The event date cannot be in the past.')
-        return date
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk and self.instance.date:
+            self.fields['date'].initial = self.instance.date.date()
+            if self.instance.date.time() != dt_time(0, 0):
+                self.fields['time'].initial = self.instance.date.time()
+
+    def clean(self):
+        cleaned_data = super().clean()
+        date_val = cleaned_data.get('date')
+        time_val = cleaned_data.get('time') or dt_time(0, 0)
+        if date_val:
+            combined = datetime.combine(date_val, time_val)
+            combined = timezone.make_aware(combined) if timezone.is_naive(combined) else combined
+            if combined < timezone.now():
+                self.add_error('date', 'The event date cannot be in the past.')
+            cleaned_data['date'] = combined
+        return cleaned_data
 
 
 class VoteForm(forms.ModelForm):

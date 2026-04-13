@@ -1,8 +1,9 @@
+from datetime import timedelta, time
+
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
-from datetime import timedelta
 
 from club.models import Event, EventAttendance
 
@@ -60,11 +61,12 @@ class EventCreateViewTest(TestCase):
         response = self.client.get(reverse('event_add'))
         self.assertEqual(response.status_code, 403)
 
-    def test_admin_can_create_event(self):
+    def test_admin_can_create_event_with_date_and_time(self):
         self.client.login(username='admin', password='testpass123')
         response = self.client.post(reverse('event_add'), {
             'title': 'Game Night',
-            'date': '2026-07-01T18:00:00',
+            'date': '2026-07-01',
+            'time': '18:00',
             'location': 'The Den',
             'description': 'Weekly meetup',
         })
@@ -72,12 +74,28 @@ class EventCreateViewTest(TestCase):
         event = Event.objects.get(title='Game Night')
         self.assertEqual(event.created_by, self.admin)
         self.assertEqual(event.location, 'The Den')
+        self.assertEqual(event.date.hour, 18)
+        self.assertEqual(event.date.minute, 0)
+
+    def test_create_event_with_date_only_defaults_time_to_midnight(self):
+        self.client.login(username='admin', password='testpass123')
+        response = self.client.post(reverse('event_add'), {
+            'title': 'Midnight Event',
+            'date': '2026-08-01',
+        })
+        self.assertEqual(response.status_code, 302)
+        event = Event.objects.get(title='Midnight Event')
+        self.assertEqual(event.date.hour, 0)
+        self.assertEqual(event.date.minute, 0)
+        self.assertEqual(event.location, '')
+        self.assertEqual(event.description, '')
 
     def test_create_event_with_required_fields_only(self):
         self.client.login(username='admin', password='testpass123')
         response = self.client.post(reverse('event_add'), {
             'title': 'Minimal Event',
-            'date': '2026-08-01T18:00:00',
+            'date': '2026-08-01',
+            'time': '18:00',
         })
         self.assertEqual(response.status_code, 302)
         event = Event.objects.get(title='Minimal Event')
@@ -88,16 +106,28 @@ class EventCreateViewTest(TestCase):
         self.client.login(username='admin', password='testpass123')
         response = self.client.post(reverse('event_add'), {
             'title': '',
-            'date': '2026-08-01T18:00:00',
+            'date': '2026-08-01',
+            'time': '18:00',
         })
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Event.objects.exists())
+
+    def test_create_event_without_date_fails(self):
+        self.client.login(username='admin', password='testpass123')
+        response = self.client.post(reverse('event_add'), {
+            'title': 'No Date Event',
+            'date': '',
+            'time': '18:00',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Event.objects.filter(title='No Date Event').exists())
 
     def test_regular_user_cannot_create_event(self):
         self.client.login(username='regular', password='testpass123')
         response = self.client.post(reverse('event_add'), {
             'title': 'Sneaky Event',
-            'date': '2026-08-01T18:00:00',
+            'date': '2026-08-01',
+            'time': '18:00',
         })
         self.assertEqual(response.status_code, 403)
         self.assertFalse(Event.objects.filter(title='Sneaky Event').exists())
@@ -106,14 +136,15 @@ class EventCreateViewTest(TestCase):
         self.client.login(username='admin', password='testpass123')
         response = self.client.post(reverse('event_add'), {
             'title': 'New Event',
-            'date': '2026-08-01T18:00:00',
+            'date': '2026-08-01',
+            'time': '18:00',
         })
         event = Event.objects.get(title='New Event')
         self.assertEqual(response.url, reverse('event_detail', kwargs={'pk': event.pk}))
 
     def test_cannot_create_event_with_past_date(self):
         self.client.login(username='admin', password='testpass123')
-        past = (timezone.now() - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
+        past = (timezone.now() - timedelta(days=1)).strftime('%Y-%m-%d')
         response = self.client.post(reverse('event_add'), {
             'title': 'Past Event',
             'date': past,
@@ -123,7 +154,7 @@ class EventCreateViewTest(TestCase):
 
     def test_cannot_create_event_with_past_date_shows_error(self):
         self.client.login(username='admin', password='testpass123')
-        past = (timezone.now() - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
+        past = (timezone.now() - timedelta(days=1)).strftime('%Y-%m-%d')
         response = self.client.post(reverse('event_add'), {
             'title': 'Past Event',
             'date': past,
@@ -132,13 +163,25 @@ class EventCreateViewTest(TestCase):
 
     def test_can_create_event_with_future_date(self):
         self.client.login(username='admin', password='testpass123')
-        future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%dT%H:%M')
+        future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
         response = self.client.post(reverse('event_add'), {
             'title': 'Future Event',
             'date': future,
         })
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Event.objects.filter(title='Future Event').exists())
+
+    def test_create_form_has_separate_date_and_time_inputs(self):
+        self.client.login(username='admin', password='testpass123')
+        response = self.client.get(reverse('event_add'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'type="date"')
+        self.assertContains(response, 'type="time"')
+
+    def test_date_and_time_rendered_on_same_line(self):
+        self.client.login(username='admin', password='testpass123')
+        response = self.client.get(reverse('event_add'))
+        self.assertContains(response, 'datetime-row')
 
 
 class EventDetailViewTest(TestCase):

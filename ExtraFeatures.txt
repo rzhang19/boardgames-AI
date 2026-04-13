@@ -13,7 +13,7 @@ AGENT: if any of these lines are marked with a "(DONE)" in between the number an
 5c. (DONE) A site administrator cannot change the privilege level of other site administrators, as this is left only to the superuser.
 6. (DONE) Connect to BoardGameGeek and use their API to allow direct linking to a board game from that site, and allow importing information about the game from that site.
 7. (DONE) Past events can be viewed, but I should not be able to create an event in the past. 
-8. Modify the event date field when creating a new event. Let's make it such that we don't need seconds, just an hours and minutes. Also update this "time" to be a separate, optional field from date. Any events with no inputted time can be set at 12am. Keep this field on the same line as the date.
+8. (DONE) Modify the event date field when creating a new event. Let's make it such that we don't need seconds, just an hours and minutes. Also update this "time" to be a separate, optional field from date. Any events with no inputted time can be set at 12am. Keep this field on the same line as the date.
 9. Mark the fields that are required, in the Create Event task, with a red asterisk. Any fields that are not required (such as the separate time field) should not have a red asterisk.
 10. Add timezone functionality to the date and time. Allow defaulting time zones based on the current user time zone. Can we default users to a timezone based on their computer time?
 11. (DONE) Add settings button and page to all users. Put this as a new button with a gear symbol in the upper right of the screen, left of the "Logout" button.
@@ -42,3 +42,4 @@ AGENT: if any of these lines are marked with a "(DONE)" in between the number an
 18b. Is there a link back to the BGG instance? I would like a non-editable (only deletable), non-required "ID" that is basically BGG's ID for that game, and basically provide a way back to the site if someone wants to view it on BGG. If we could, possibly also add a warning if someone adds/edits a game without this value (i.e. they deleted it). But it should also be replaceable as listd in 18a.
 19. Change the blue checkmark that indicates a user is verified to be a customizable option in the Settings page.
 20. Allow mobile access. Let's make sure the CSS allows for narrower screens.
+21. Allow superuser to delete users in the system. The confirmation page has the superuser enter the player's username to be able to delete it. Also restrict usernames to letters, numbers, underscores and dashes only.
