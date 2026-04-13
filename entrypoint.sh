@@ -2,12 +2,14 @@
 
 set -e
 
+DB_HOST="${DB_HOST:-db}"
+
 echo "Waiting for database..."
 python -c "
 import socket, time
 while True:
     try:
-        s = socket.create_connection(('db', 5432), timeout=2)
+        s = socket.create_connection(('$DB_HOST', 5432), timeout=2)
         s.close()
         break
     except OSError:

@@ -1,0 +1,10 @@
+{$DOMAIN} {
+	reverse_proxy web:8000
+}
+
+{$STAGING_DOMAIN} {
+	basicauth * {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_PASSWORD_HASH}
+	}
+	reverse_proxy staging-web:8000
+}

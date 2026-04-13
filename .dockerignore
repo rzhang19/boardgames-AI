@@ -16,5 +16,6 @@ env/
 .git/
 .DS_Store
 Thumbs.db
+.env.staging
 boardgames_organizer/
 debugs/
