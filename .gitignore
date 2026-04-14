@@ -42,6 +42,8 @@ WhitenoiseCSS.txt
 Design.txt
 BGGImp.txt
 PostgreSQLFix.txt
+FutureScript.txt
+GroupsFeature.txt
 
 # Deploy history
 scripts/.deploy_history_*
