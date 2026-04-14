@@ -44,6 +44,10 @@ BGGImp.txt
 PostgreSQLFix.txt
 FutureScript.txt
 GroupsFeature.txt
+Instructions.txt
 
 # Deploy history
 scripts/.deploy_history_*
+
+# Local testing/Debugs
+debugs/
