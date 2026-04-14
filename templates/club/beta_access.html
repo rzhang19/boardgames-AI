@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beta Access - Board Game Club</title>
+    <link rel="stylesheet" href="{% load static %}{% static 'css/style.css' %}">
+</head>
+<body>
+    <main>
+        <div class="form-container">
+            <h1>Beta Access</h1>
+            <p>Enter the beta access code to continue.</p>
+
+            <form method="post">
+                {% csrf_token %}
+
+                <div class="form-field">
+                    <label for="id_access_code">Access Code:</label>
+                    {{ form.access_code }}
+                    {% if form.errors %}
+                    <div class="form-errors">{{ form.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="btn-group">
+                    <button type="submit" class="btn btn-primary">Enter</button>
+                </div>
+            </form>
+        </div>
+    </main>
+</body>
+</html>

@@ -106,3 +106,9 @@ class VoteForm(forms.ModelForm):
 
 class SettingsEmailForm(forms.Form):
     email = forms.EmailField(required=False)
+
+
+class BetaAccessForm(forms.Form):
+    access_code = forms.CharField(
+        widget=forms.PasswordInput(attrs={'autofocus': True}),
+    )

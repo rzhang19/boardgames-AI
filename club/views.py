@@ -2,7 +2,7 @@ from datetime import datetime, time as dt_time
 
 from django.conf import settings
 from django.contrib.auth import get_user_model, login
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import PermissionDenied
 from django.core.mail import send_mail
 from django.core.signing import TimestampSigner
@@ -14,7 +14,7 @@ from django.utils import timezone
 from .bgg import fetch_bgg_game, search_bgg
 from .borda import calculate_borda_scores
 from .forms import (
-    BoardGameForm, EventForm, SetPasswordForm, SettingsEmailForm,
+    BetaAccessForm, BoardGameForm, EventForm, SetPasswordForm, SettingsEmailForm,
     UserAddForm, UserManageForm, RegistrationForm, VoteForm,
 )
 from .models import BoardGame, Event, EventAttendance, Vote
@@ -200,6 +200,35 @@ def user_set_password(request, token):
         'form': form,
         'invalid_token': False,
     })
+
+
+def beta_access(request):
+    beta_hash = getattr(settings, 'BETA_ACCESS_CODE_HASH', '')
+    if not beta_hash:
+        return redirect('dashboard')
+
+    if request.method == 'POST':
+        form = BetaAccessForm(request.POST)
+        if form.is_valid():
+            code = form.cleaned_data['access_code']
+            if check_password(code, beta_hash):
+                response = redirect('dashboard')
+                signer = TimestampSigner()
+                signed = signer.sign('granted')
+                response.set_cookie(
+                    'beta_access',
+                    signed,
+                    max_age=90 * 86400,
+                    httponly=True,
+                    secure=not settings.DEBUG,
+                    samesite='Lax',
+                )
+                return response
+            form.add_error('access_code', 'Invalid access code.')
+    else:
+        form = BetaAccessForm()
+
+    return render(request, 'club/beta_access.html', {'form': form})
 
 
 def dashboard(request):
