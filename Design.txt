@@ -6,10 +6,16 @@ The main objects of this application are:
 2. Board games
 3. Events (where users play board games)
 
-Users can consist of regular users and administrators. Administrators will also have the same usage abilities as regular users.
+Users can consist of regular users and administrators.
+Administrators will also have the same usage abilities as regular users.
 
-Regular users can add board games to their collection. Regular users can say which events they are attending. Regular users can vote for games to play at the events they are attending.
+Regular users can add board games to their collection.
+Regular users can say which events they are attending.
+Regular users can vote for games to play at the events they are attending.
 
-Administrators can do everything regular users can do and also create events. Administrators can also filter votes based on who is present at an event, and filter out anyone's votes who is not in attendance.
+Organizers have all the abilities of regular users and can also create and edit events.
+Organizers can also filter votes based on who is present at an event, and filter out anyone's votes who is not in attendance.
 
-This proejct will be developed with Django and Python, using SQLite and PostgresQL if needed.
+Administrators can do everything organizers can do but also have administrative privileges to remove someone as an organizer, games, or events.
+
+This project will be developed with Django and Python, using PostgresQL.

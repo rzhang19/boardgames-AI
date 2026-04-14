@@ -14,7 +14,14 @@ services:
     env_file:
       - .env
     depends_on:
-      - db
+      db:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s = socket.create_connection(('localhost', 8000), timeout=5); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
 
   staging-db:
@@ -32,7 +39,14 @@ services:
     env_file:
       - .env.staging
     depends_on:
-      - staging-db
+      staging-db:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s = socket.create_connection(('localhost', 8000), timeout=5); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
 
   caddy:
@@ -50,8 +64,38 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - web
-      - staging-web
+      web:
+        condition: service_healthy
+      staging-web:
+        condition: service_healthy
+    restart: unless-stopped
+
+  runner:
+    image: myoung34/github-runner:latest
+    env_file:
+      - .env
+    environment:
+      REPO_URL: ${GITHUB_REPO_URL}
+      RUNNER_NAME: ${RUNNER_NAME:-boardgames-runner}
+      RUNNER_TOKEN: ${GITHUB_RUNNER_TOKEN}
+      RUNNER_WORKDIR: /home/runner/work
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:${PROJECT_DIR:-/opt/boardgames}
+      - runner_data:/home/runner
+    restart: unless-stopped
+
+  telegram:
+    build: ./telegram_bot
+    env_file:
+      - .env
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS:-}
+      PROJECT_DIR: ${PROJECT_DIR:-/opt/boardgames}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:${PROJECT_DIR:-/opt/boardgames}
     restart: unless-stopped
 
 volumes:
@@ -59,3 +103,4 @@ volumes:
   staging_postgres_data:
   caddy_data:
   caddy_config:
+  runner_data:
