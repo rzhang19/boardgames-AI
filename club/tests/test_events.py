@@ -178,10 +178,30 @@ class EventCreateViewTest(TestCase):
         self.assertContains(response, 'type="date"')
         self.assertContains(response, 'type="time"')
 
-    def test_date_and_time_rendered_on_same_line(self):
+    def test_event_form_has_field_groups(self):
         self.client.login(username='admin', password='testpass123')
         response = self.client.get(reverse('event_add'))
-        self.assertContains(response, 'datetime-row')
+        self.assertContains(response, 'Event Details')
+        self.assertContains(response, 'Date &amp; Time')
+        self.assertContains(response, 'Location')
+
+    def test_required_fields_have_red_asterisk(self):
+        self.client.login(username='admin', password='testpass123')
+        response = self.client.get(reverse('event_add'))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        asterisk_count = html.count('<span class="required-asterisk">')
+        self.assertEqual(asterisk_count, 2)
+        title_section = html[html.find('id="id_title"') - 200:html.find('id="id_title"') + 50]
+        self.assertIn('required-asterisk', title_section)
+        date_section = html[html.find('id="id_date"') - 200:html.find('id="id_date"') + 50]
+        self.assertIn('required-asterisk', date_section)
+        time_section = html[html.find('id="id_time"') - 200:html.find('id="id_time"') + 50]
+        self.assertNotIn('required-asterisk', time_section)
+        location_section = html[html.find('id="id_location"') - 200:html.find('id="id_location"') + 50]
+        self.assertNotIn('required-asterisk', location_section)
+        description_section = html[html.find('id="id_description"') - 200:html.find('id="id_description"') + 50]
+        self.assertNotIn('required-asterisk', description_section)
 
 
 class EventDetailViewTest(TestCase):
