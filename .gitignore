@@ -44,7 +44,9 @@ BGGImp.txt
 PostgreSQLFix.txt
 FutureScript.txt
 GroupsFeature.txt
+VotingFeature.txt
 Instructions.txt
+GroupOwnedGamesFeature.txt
 
 # Deploy history
 scripts/.deploy_history_*

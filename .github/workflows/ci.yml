@@ -29,5 +29,10 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: self-hosted
     steps:
+      - name: Configure git authentication
+        run: |
+          git config --global credential.helper store
+          echo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
+
       - name: Deploy to production
-        run: cd ${{ vars.PROJECT_DIR }} && bash scripts/deploy.sh production
+        run: cd ${{ vars.PROJECT_DIR || '/opt/boardgames' }} && bash scripts/deploy.sh production
