@@ -6,6 +6,7 @@ from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.utils import timezone
 
 from .models import BoardGame, Event, Vote
+from .timezone_utils import get_timezone_choices, is_valid_timezone
 
 User = get_user_model()
 
@@ -91,7 +92,14 @@ class EventForm(forms.ModelForm):
         if date_val:
             combined = datetime.combine(date_val, time_val)
             combined = timezone.make_aware(combined) if timezone.is_naive(combined) else combined
-            if combined < timezone.now():
+            original_date = getattr(self.instance, 'date', None)
+            is_same_datetime = (
+                original_date
+                and combined.date() == original_date.date()
+                and combined.hour == original_date.hour
+                and combined.minute == original_date.minute
+            )
+            if combined < timezone.now() and not is_same_datetime:
                 self.add_error('date', 'The event date cannot be in the past.')
             cleaned_data['date'] = combined
         return cleaned_data
@@ -104,8 +112,18 @@ class VoteForm(forms.ModelForm):
         fields = ['board_game', 'rank']
 
 
-class SettingsEmailForm(forms.Form):
+class SettingsForm(forms.Form):
     email = forms.EmailField(required=False)
+    timezone = forms.ChoiceField(
+        choices=get_timezone_choices,
+        initial='UTC',
+    )
+
+    def clean_timezone(self):
+        tz = self.cleaned_data['timezone']
+        if not is_valid_timezone(tz):
+            raise forms.ValidationError('Invalid timezone.')
+        return tz
 
 
 class BetaAccessForm(forms.Form):

@@ -56,6 +56,7 @@ class SettingsAddEmailTest(TestCase):
     def test_add_email_saves_to_user(self):
         self.client.post(reverse('user_settings'), {
             'email': 'new@example.com',
+            'timezone': 'UTC',
         })
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, 'new@example.com')
@@ -63,6 +64,7 @@ class SettingsAddEmailTest(TestCase):
     def test_add_email_resets_email_verified_to_false(self):
         self.client.post(reverse('user_settings'), {
             'email': 'new@example.com',
+            'timezone': 'UTC',
         })
         self.user.refresh_from_db()
         self.assertFalse(self.user.email_verified)
@@ -71,6 +73,7 @@ class SettingsAddEmailTest(TestCase):
     def test_add_email_sends_verification_link(self):
         self.client.post(reverse('user_settings'), {
             'email': 'new@example.com',
+            'timezone': 'UTC',
         })
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn('new@example.com', mail.outbox[0].to)
@@ -79,6 +82,7 @@ class SettingsAddEmailTest(TestCase):
     def test_add_email_verification_link_actually_verifies(self):
         self.client.post(reverse('user_settings'), {
             'email': 'new@example.com',
+            'timezone': 'UTC',
         })
         signer = TimestampSigner()
         token = signer.sign(self.user.pk)
@@ -99,6 +103,7 @@ class SettingsUpdateEmailTest(TestCase):
     def test_update_email_changes_email(self):
         self.client.post(reverse('user_settings'), {
             'email': 'updated@example.com',
+            'timezone': 'UTC',
         })
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, 'updated@example.com')
@@ -106,6 +111,7 @@ class SettingsUpdateEmailTest(TestCase):
     def test_update_email_resets_verification(self):
         self.client.post(reverse('user_settings'), {
             'email': 'updated@example.com',
+            'timezone': 'UTC',
         })
         self.user.refresh_from_db()
         self.assertFalse(self.user.email_verified)
@@ -114,6 +120,7 @@ class SettingsUpdateEmailTest(TestCase):
     def test_update_email_sends_new_verification(self):
         self.client.post(reverse('user_settings'), {
             'email': 'updated@example.com',
+            'timezone': 'UTC',
         })
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn('updated@example.com', mail.outbox[0].to)
@@ -121,6 +128,7 @@ class SettingsUpdateEmailTest(TestCase):
     def test_submit_same_email_keeps_verified(self):
         self.client.post(reverse('user_settings'), {
             'email': 'old@example.com',
+            'timezone': 'UTC',
         })
         self.user.refresh_from_db()
         self.assertTrue(self.user.email_verified)
@@ -128,12 +136,14 @@ class SettingsUpdateEmailTest(TestCase):
     def test_submit_same_email_does_not_send_email(self):
         self.client.post(reverse('user_settings'), {
             'email': 'old@example.com',
+            'timezone': 'UTC',
         })
         self.assertEqual(len(mail.outbox), 0)
 
     def test_submit_blank_email_clears_email(self):
         self.client.post(reverse('user_settings'), {
             'email': '',
+            'timezone': 'UTC',
         })
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, '')
@@ -141,6 +151,7 @@ class SettingsUpdateEmailTest(TestCase):
     def test_submit_blank_email_resets_verified(self):
         self.client.post(reverse('user_settings'), {
             'email': '',
+            'timezone': 'UTC',
         })
         self.user.refresh_from_db()
         self.assertFalse(self.user.email_verified)

@@ -31,5 +31,21 @@
     <main>
         {% block content %}{% endblock %}
     </main>
+    {% if user.is_authenticated and not user.timezone_detected %}
+    <script>
+    (function() {
+        try {
+            var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if (tz) {
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', '{% url "save_timezone" %}', true);
+                xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                xhr.setRequestHeader('X-CSRFToken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+                xhr.send('timezone=' + encodeURIComponent(tz) + '&next=' + encodeURIComponent(window.location.pathname));
+            }
+        } catch(e) {}
+    })();
+    </script>
+    {% endif %}
 </body>
 </html>

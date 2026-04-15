@@ -300,3 +300,238 @@ class EventRSVPTest(TestCase):
         self.client.login(username='attendee', password='testpass123')
         response = self.client.post(reverse('event_rsvp', kwargs={'pk': 9999}))
         self.assertEqual(response.status_code, 404)
+
+
+class EventEditViewTest(TestCase):
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(
+            username='organizer', password='testpass123', is_organizer=True
+        )
+        self.other_organizer = User.objects.create_user(
+            username='other_org', password='testpass123', is_organizer=True
+        )
+        self.regular = User.objects.create_user(
+            username='regular', password='testpass123'
+        )
+        self.site_admin = User.objects.create_user(
+            username='siteadmin', password='testpass123',
+            is_site_admin=True, is_organizer=True,
+        )
+        self.future_date = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        self.event = Event.objects.create(
+            title='Original Title',
+            date=timezone.now() + timedelta(days=7),
+            location='Original Location',
+            description='Original Description',
+            created_by=self.organizer,
+        )
+
+    def test_edit_page_requires_login(self):
+        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_organizer_can_access_edit_page(self):
+        self.client.login(username='organizer', password='testpass123')
+        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+        self.assertEqual(response.status_code, 200)
+
+    def test_other_organizer_can_access_edit_page(self):
+        self.client.login(username='other_org', password='testpass123')
+        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+        self.assertEqual(response.status_code, 200)
+
+    def test_regular_user_cannot_access_edit_page(self):
+        self.client.login(username='regular', password='testpass123')
+        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+        self.assertEqual(response.status_code, 403)
+
+    def test_site_admin_can_access_edit_page(self):
+        self.client.login(username='siteadmin', password='testpass123')
+        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+        self.assertEqual(response.status_code, 200)
+
+    def test_edit_page_shows_pre_populated_form(self):
+        self.client.login(username='organizer', password='testpass123')
+        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+        self.assertContains(response, 'Original Title')
+        self.assertContains(response, 'Original Location')
+        self.assertContains(response, 'Original Description')
+
+    def test_edit_page_uses_edit_action(self):
+        self.client.login(username='organizer', password='testpass123')
+        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+        self.assertContains(response, 'Edit Event')
+        self.assertContains(response, 'Edit Event</button>')
+
+    def test_organizer_can_edit_event_title(self):
+        self.client.login(username='organizer', password='testpass123')
+        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+            'title': 'Updated Title',
+            'date': self.future_date,
+            'time': '',
+            'location': 'Original Location',
+            'description': 'Original Description',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.title, 'Updated Title')
+
+    def test_organizer_can_edit_all_fields(self):
+        self.client.login(username='organizer', password='testpass123')
+        new_date = (timezone.now() + timedelta(days=14)).strftime('%Y-%m-%d')
+        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+            'title': 'Completely New Title',
+            'date': new_date,
+            'time': '19:30',
+            'location': 'New Venue',
+            'description': 'Updated description',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.title, 'Completely New Title')
+        self.assertEqual(self.event.location, 'New Venue')
+        self.assertEqual(self.event.description, 'Updated description')
+        self.assertEqual(self.event.date.hour, 19)
+        self.assertEqual(self.event.date.minute, 30)
+
+    def test_edit_redirects_to_event_detail(self):
+        self.client.login(username='organizer', password='testpass123')
+        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+            'title': 'Updated Title',
+            'date': self.future_date,
+            'time': '',
+            'location': 'Original Location',
+            'description': 'Original Description',
+        })
+        self.assertRedirects(response, reverse('event_detail', kwargs={'pk': self.event.pk}))
+
+    def test_cannot_edit_date_to_past(self):
+        self.client.login(username='organizer', password='testpass123')
+        past = (timezone.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+            'title': 'Original Title',
+            'date': past,
+            'time': '',
+            'location': 'Original Location',
+            'description': 'Original Description',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'past')
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.title, 'Original Title')
+
+    def test_can_edit_past_event_keeping_same_date(self):
+        past_event = Event.objects.create(
+            title='Past Event',
+            date=timezone.now() - timedelta(days=1),
+            location='Somewhere',
+            created_by=self.organizer,
+        )
+        self.client.login(username='organizer', password='testpass123')
+        date_str = past_event.date.strftime('%Y-%m-%d')
+        time_str = past_event.date.strftime('%H:%M')
+        response = self.client.post(reverse('event_edit', kwargs={'pk': past_event.pk}), {
+            'title': 'Updated Past Event',
+            'date': date_str,
+            'time': time_str,
+            'location': 'Somewhere',
+            'description': '',
+        })
+        self.assertEqual(response.status_code, 302)
+        past_event.refresh_from_db()
+        self.assertEqual(past_event.title, 'Updated Past Event')
+
+    def test_edit_past_event_with_other_field_changes(self):
+        past_event = Event.objects.create(
+            title='Old Past Event',
+            date=timezone.now() - timedelta(days=2),
+            location='Old Place',
+            description='Old Desc',
+            created_by=self.organizer,
+        )
+        self.client.login(username='organizer', password='testpass123')
+        date_str = past_event.date.strftime('%Y-%m-%d')
+        time_str = past_event.date.strftime('%H:%M')
+        response = self.client.post(reverse('event_edit', kwargs={'pk': past_event.pk}), {
+            'title': 'Updated Past Event',
+            'date': date_str,
+            'time': time_str,
+            'location': 'New Place',
+            'description': 'New Desc',
+        })
+        self.assertEqual(response.status_code, 302)
+        past_event.refresh_from_db()
+        self.assertEqual(past_event.title, 'Updated Past Event')
+        self.assertEqual(past_event.location, 'New Place')
+        self.assertEqual(past_event.description, 'New Desc')
+
+    def test_edit_nonexistent_event_returns_404(self):
+        self.client.login(username='organizer', password='testpass123')
+        response = self.client.get(reverse('event_edit', kwargs={'pk': 9999}))
+        self.assertEqual(response.status_code, 404)
+
+    def test_edit_preserves_created_by(self):
+        self.client.login(username='other_org', password='testpass123')
+        self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+            'title': 'Updated by Other',
+            'date': self.future_date,
+            'time': '',
+            'location': 'Original Location',
+            'description': 'Original Description',
+        })
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.created_by, self.organizer)
+
+    def test_regular_user_cannot_edit_event_via_post(self):
+        self.client.login(username='regular', password='testpass123')
+        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+            'title': 'Hacked Title',
+            'date': self.future_date,
+            'time': '',
+            'location': 'Original Location',
+            'description': 'Original Description',
+        })
+        self.assertEqual(response.status_code, 403)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.title, 'Original Title')
+
+    def test_edit_page_shows_required_asterisks(self):
+        self.client.login(username='organizer', password='testpass123')
+        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        asterisk_count = html.count('<span class="required-asterisk">')
+        self.assertEqual(asterisk_count, 2)
+
+
+class EventDetailEditButtonTest(TestCase):
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(
+            username='organizer', password='testpass123', is_organizer=True
+        )
+        self.regular = User.objects.create_user(
+            username='regular', password='testpass123'
+        )
+        self.event = Event.objects.create(
+            title='Test Event',
+            date=timezone.now() + timedelta(days=7),
+            created_by=self.organizer,
+        )
+
+    def test_organizer_sees_edit_button_on_event_detail(self):
+        self.client.login(username='organizer', password='testpass123')
+        response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
+        self.assertContains(response, reverse('event_edit', kwargs={'pk': self.event.pk}))
+        self.assertContains(response, 'Edit Event')
+
+    def test_regular_user_does_not_see_edit_button(self):
+        self.client.login(username='regular', password='testpass123')
+        response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
+        self.assertNotContains(response, 'Edit Event')
+
+    def test_anonymous_user_does_not_see_edit_button(self):
+        response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
+        self.assertNotContains(response, 'Edit Event')

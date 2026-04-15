@@ -16,6 +16,8 @@ class User(AbstractUser):
     is_organizer = models.BooleanField(default=False)
     is_site_admin = models.BooleanField(default=False)
     email_verified = models.BooleanField(default=False)
+    timezone = models.CharField(max_length=63, default='UTC')
+    timezone_detected = models.BooleanField(default=False)
 
     def __str__(self):
         return self.username

@@ -14,10 +14,11 @@ from django.utils import timezone
 from .bgg import fetch_bgg_game, search_bgg
 from .borda import calculate_borda_scores
 from .forms import (
-    BetaAccessForm, BoardGameForm, EventForm, SetPasswordForm, SettingsEmailForm,
+    BetaAccessForm, BoardGameForm, EventForm, SetPasswordForm, SettingsForm,
     UserAddForm, UserManageForm, RegistrationForm, VoteForm,
 )
 from .models import BoardGame, Event, EventAttendance, Vote
+from .timezone_utils import is_valid_timezone
 
 User = get_user_model()
 
@@ -240,35 +241,62 @@ def user_settings(request):
         return redirect('/login/')
 
     if request.method == 'POST':
-        form = SettingsEmailForm(request.POST)
+        form = SettingsForm(request.POST)
         if form.is_valid():
             new_email = form.cleaned_data['email']
+            new_tz = form.cleaned_data['timezone']
             user = request.user
 
-            if new_email == user.email:
-                return redirect('user_settings')
+            email_changed = new_email != user.email
+            tz_changed = new_tz != user.timezone
 
-            user.email = new_email
-            if new_email:
-                user.email_verified = False
+            if email_changed:
+                user.email = new_email
+                if new_email:
+                    user.email_verified = False
+                else:
+                    user.email_verified = False
+
+            if tz_changed:
+                user.timezone = new_tz
+                user.timezone_detected = False
+
+            if email_changed or tz_changed:
                 user.save()
-                signer = TimestampSigner()
-                token = signer.sign(user.pk)
-                verify_url = request.build_absolute_uri(f'/verify-email/{token}/')
-                send_mail(
-                    'Verify your email - Board Game Club',
-                    f'Click the link to verify your email: {verify_url}',
-                    settings.DEFAULT_FROM_EMAIL,
-                    [user.email],
-                )
-            else:
-                user.email_verified = False
-                user.save()
+                if email_changed and new_email:
+                    signer = TimestampSigner()
+                    token = signer.sign(user.pk)
+                    verify_url = request.build_absolute_uri(f'/verify-email/{token}/')
+                    send_mail(
+                        'Verify your email - Board Game Club',
+                        f'Click the link to verify your email: {verify_url}',
+                        settings.DEFAULT_FROM_EMAIL,
+                        [user.email],
+                    )
             return redirect('user_settings')
     else:
-        form = SettingsEmailForm(initial={'email': request.user.email})
+        form = SettingsForm(initial={
+            'email': request.user.email,
+            'timezone': request.user.timezone or 'UTC',
+        })
 
     return render(request, 'club/settings.html', {'form': form})
+
+
+def save_timezone(request):
+    if request.method != 'POST':
+        return redirect('dashboard')
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    if request.user.timezone_detected:
+        return redirect('dashboard')
+
+    tz_name = request.POST.get('timezone', '')
+    if is_valid_timezone(tz_name):
+        request.user.timezone = tz_name
+        request.user.timezone_detected = True
+        request.user.save(update_fields=['timezone', 'timezone_detected'])
+    return redirect(request.POST.get('next', 'dashboard'))
 
 
 def register(request):
@@ -432,6 +460,24 @@ def event_add(request):
     else:
         form = EventForm()
     return render(request, 'club/event_form.html', {'form': form, 'action': 'Create'})
+
+
+def event_edit(request, pk):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    if not request.user.is_organizer:
+        raise PermissionDenied
+    event = get_object_or_404(Event, pk=pk)
+    if request.method == 'POST':
+        form = EventForm(request.POST, instance=event)
+        if form.is_valid():
+            event = form.save(commit=False)
+            event.date = form.cleaned_data['date']
+            event.save()
+            return redirect('event_detail', pk=event.pk)
+    else:
+        form = EventForm(instance=event)
+    return render(request, 'club/event_form.html', {'form': form, 'action': 'Edit'})
 
 
 def event_vote(request, pk):
