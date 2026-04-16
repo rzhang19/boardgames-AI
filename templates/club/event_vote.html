@@ -5,6 +5,42 @@
 {% block content %}
 <h1>Vote for {{ event.title }}</h1>
 
+{% if voting_closed %}
+<div class="card" style="margin-bottom: 1rem;">
+    {% if mid_submit_closed %}
+    <p><strong>Voting closed while you were submitting your votes. Your previous votes have been preserved.</strong></p>
+    {% else %}
+    <p><strong>Voting is currently {% if event.is_currently_active %}paused{% else %}closed{% endif %}.</strong></p>
+    {% endif %}
+</div>
+
+{% if vote_data %}
+<p>Your current votes:</p>
+<table>
+    <thead>
+        <tr>
+            <th>Rank</th>
+            <th>Game</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for vd in vote_data %}
+        <tr>
+            <td>{{ vd.rank }}</td>
+            <td>{{ vd.game_name }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>You have not voted yet.</p>
+{% endif %}
+
+<div class="btn-group">
+    <a href="{% url 'event_detail' event.pk %}" class="btn btn-neutral">Back to Event</a>
+</div>
+
+{% else %}
 <p>Rank the games you want to play. Rank 1 = top choice. Leave blank to skip a row.</p>
 
 <form method="post">
@@ -25,4 +61,5 @@
         <a href="{% url 'event_detail' event.pk %}" class="btn btn-neutral">Back to Event</a>
     </div>
 </form>
+{% endif %}
 {% endblock %}

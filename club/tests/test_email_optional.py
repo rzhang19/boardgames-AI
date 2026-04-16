@@ -8,17 +8,7 @@ User = get_user_model()
 
 class RegistrationWithoutEmailTest(TestCase):
 
-    def test_registration_without_email_succeeds(self):
-        response = self.client.post(reverse('register'), {
-            'username': 'noemailuser',
-            'email': '',
-            'password1': 'Str0ngP@ss123',
-            'password2': 'Str0ngP@ss123',
-        })
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(User.objects.filter(username='noemailuser').exists())
-
-    def test_registration_without_email_auto_logins(self):
+    def test_registration_without_email(self):
         response = self.client.post(reverse('register'), {
             'username': 'noemailuser',
             'email': '',
@@ -27,20 +17,14 @@ class RegistrationWithoutEmailTest(TestCase):
         })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse('dashboard'))
-        response = self.client.get(reverse('dashboard'))
-        self.assertContains(response, 'noemailuser')
-
-    def test_registration_without_email_user_is_created(self):
-        self.client.post(reverse('register'), {
-            'username': 'noemailuser',
-            'email': '',
-            'password1': 'Str0ngP@ss123',
-            'password2': 'Str0ngP@ss123',
-        })
+        self.assertTrue(User.objects.filter(username='noemailuser').exists())
         user = User.objects.get(username='noemailuser')
         self.assertEqual(user.email, '')
         self.assertFalse(user.is_organizer)
         self.assertFalse(user.is_superuser)
+        self.assertFalse(user.email_verified)
+        response = self.client.get(reverse('dashboard'))
+        self.assertContains(response, 'noemailuser')
 
 
 class RegistrationWithEmailOptionalWarningTest(TestCase):

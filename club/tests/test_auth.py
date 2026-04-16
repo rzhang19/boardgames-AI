@@ -97,9 +97,6 @@ class LoginTest(TestCase):
         response = self.client.get(reverse('login'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Login')
-
-    def test_login_page_shows_email_or_username_label(self):
-        response = self.client.get(reverse('login'))
         self.assertContains(response, 'Email or Username')
 
     def test_login_with_username(self):

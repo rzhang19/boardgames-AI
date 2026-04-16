@@ -22,6 +22,7 @@ class VoteViewAccessTest(TestCase):
         )
         self.event = Event.objects.create(
             title='Vote Event', date='2026-05-01T18:00:00Z',
+            voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin
         )
         EventAttendance.objects.create(user=self.attendee, event=self.event)
@@ -55,6 +56,7 @@ class VoteSubmissionTest(TestCase):
         )
         self.event = Event.objects.create(
             title='Vote Event', date='2026-05-01T18:00:00Z',
+            voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin
         )
         EventAttendance.objects.create(user=self.attendee, event=self.event)
@@ -86,6 +88,7 @@ class VoteSubmissionTest(TestCase):
         })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Vote.objects.filter(user=self.attendee, event=self.event).count(), 0)
+        self.assertEqual(response.url, reverse('event_detail', kwargs={'pk': self.event.pk}))
 
     def test_submit_votes_replaces_existing_votes(self):
         Vote.objects.create(user=self.attendee, event=self.event,
@@ -106,16 +109,6 @@ class VoteSubmissionTest(TestCase):
         self.assertTrue(Vote.objects.filter(
             user=self.attendee, event=self.event, board_game=self.game2
         ).exists())
-
-    def test_vote_redirects_to_event_detail(self):
-        self.client.login(username='attendee', password='testpass123')
-        response = self.client.post(reverse('event_vote', kwargs={'pk': self.event.pk}), {
-            'form-TOTAL_FORMS': '0',
-            'form-INITIAL_FORMS': '0',
-            'form-MIN_NUM_FORMS': '0',
-            'form-MAX_NUM_FORMS': '1000',
-        })
-        self.assertEqual(response.url, reverse('event_detail', kwargs={'pk': self.event.pk}))
 
     def test_non_attendee_cannot_submit_votes(self):
         non_attendee = User.objects.create_user(username='outsider', password='testpass123')
@@ -140,6 +133,7 @@ class BordaCountTest(TestCase):
         )
         self.event = Event.objects.create(
             title='Borda Event', date='2026-05-01T18:00:00Z',
+            voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin
         )
         self.game1 = BoardGame.objects.create(name='Catan', owner=self.admin)
@@ -223,6 +217,7 @@ class EventResultsViewTest(TestCase):
         )
         self.event = Event.objects.create(
             title='Results Event', date='2026-05-01T18:00:00Z',
+            voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin
         )
         EventAttendance.objects.create(user=self.user, event=self.event)
@@ -258,6 +253,7 @@ class VoteVisibilityToggleTest(TestCase):
         )
         self.event = Event.objects.create(
             title='Toggle Event', date='2026-05-01T18:00:00Z',
+            voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin
         )
 
@@ -282,6 +278,7 @@ class VoteVisibilityToggleTest(TestCase):
             reverse('event_toggle_visibility', kwargs={'pk': self.event.pk})
         )
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('event_detail', kwargs={'pk': self.event.pk}))
         self.event.refresh_from_db()
         self.assertTrue(self.event.show_individual_votes)
 
@@ -313,10 +310,3 @@ class VoteVisibilityToggleTest(TestCase):
                             board_game=game, rank=1)
         response = self.client.get(reverse('event_results', kwargs={'pk': self.event.pk}))
         self.assertNotContains(response, 'regular')
-
-    def test_toggle_redirects_to_event_detail(self):
-        self.client.login(username='admin', password='testpass123')
-        response = self.client.post(
-            reverse('event_toggle_visibility', kwargs={'pk': self.event.pk})
-        )
-        self.assertEqual(response.url, reverse('event_detail', kwargs={'pk': self.event.pk}))

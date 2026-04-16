@@ -71,6 +71,29 @@
             </div>
         </div>
 
+        <div class="field-group">
+            <h2>Voting Deadline</h2>
+            <div class="form-grid">
+                <label for="id_voting_deadline_date">Deadline Date:</label>
+                <div class="input-cell">
+                    {{ form.voting_deadline_date }}
+                </div>
+                {% if form.voting_deadline_date.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.voting_deadline_date.errors }}</div>
+                {% endif %}
+
+                <label for="id_voting_deadline_time">Deadline Time:</label>
+                <div class="input-cell">
+                    {{ form.voting_deadline_time }}
+                </div>
+                {% if form.voting_deadline_time.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.voting_deadline_time.errors }}</div>
+                {% endif %}
+            </div>
+        </div>
+
         <div class="btn-group">
             <button type="submit" class="btn btn-primary">{{ action }} Event</button>
             <a href="{% url 'event_list' %}" class="btn btn-neutral">Cancel</a>

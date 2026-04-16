@@ -73,6 +73,14 @@ class EventForm(forms.ModelForm):
         required=False,
         widget=forms.TimeInput(attrs={'type': 'time'}),
     )
+    voting_deadline_date = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'date'}),
+    )
+    voting_deadline_time = forms.TimeField(
+        required=False,
+        widget=forms.TimeInput(attrs={'type': 'time'}),
+    )
 
     class Meta:
         model = Event
@@ -84,6 +92,10 @@ class EventForm(forms.ModelForm):
             self.fields['date'].initial = self.instance.date.date()
             if self.instance.date.time() != dt_time(0, 0):
                 self.fields['time'].initial = self.instance.date.time()
+            if self.instance.voting_deadline:
+                self.fields['voting_deadline_date'].initial = self.instance.voting_deadline.date()
+                if self.instance.voting_deadline.time() != dt_time(0, 0):
+                    self.fields['voting_deadline_time'].initial = self.instance.voting_deadline.time()
 
     def clean(self):
         cleaned_data = super().clean()
@@ -102,6 +114,30 @@ class EventForm(forms.ModelForm):
             if combined < timezone.now() and not is_same_datetime:
                 self.add_error('date', 'The event date cannot be in the past.')
             cleaned_data['date'] = combined
+
+        vd_date = cleaned_data.get('voting_deadline_date')
+        vd_time = cleaned_data.get('voting_deadline_time') or dt_time(0, 0)
+        if vd_date:
+            vd_combined = datetime.combine(vd_date, vd_time)
+            vd_combined = timezone.make_aware(vd_combined) if timezone.is_naive(vd_combined) else vd_combined
+            event_date = cleaned_data.get('date')
+            if event_date:
+                if vd_combined > event_date:
+                    self.add_error('voting_deadline_date', 'Voting deadline cannot be after the event start time.')
+            buffer = timezone.now() + timezone.timedelta(minutes=2)
+            original_deadline = getattr(self.instance, 'voting_deadline', None)
+            deadline_unchanged = (
+                original_deadline
+                and vd_combined.date() == original_deadline.date()
+                and vd_combined.hour == original_deadline.hour
+                and vd_combined.minute == original_deadline.minute
+            )
+            if vd_combined < buffer and not deadline_unchanged:
+                self.add_error('voting_deadline_date', 'Voting deadline must be at least 2 minutes from now.')
+            cleaned_data['voting_deadline'] = vd_combined
+        else:
+            cleaned_data['voting_deadline'] = None
+
         return cleaned_data
 
 

@@ -455,6 +455,7 @@ def event_add(request):
             event = form.save(commit=False)
             event.date = form.cleaned_data['date']
             event.created_by = request.user
+            event.voting_deadline = form.cleaned_data.get('voting_deadline') or event.date
             event.save()
             return redirect('event_detail', pk=event.pk)
     else:
@@ -468,11 +469,29 @@ def event_edit(request, pk):
     if not request.user.is_organizer:
         raise PermissionDenied
     event = get_object_or_404(Event, pk=pk)
+    old_date = event.date
+    old_deadline = event.voting_deadline
+    old_gap = old_date - old_deadline if old_deadline else None
+
     if request.method == 'POST':
         form = EventForm(request.POST, instance=event)
         if form.is_valid():
             event = form.save(commit=False)
             event.date = form.cleaned_data['date']
+            new_deadline = form.cleaned_data.get('voting_deadline')
+            date_changed = (
+                event.date.date() != old_date.date()
+                or event.date.hour != old_date.hour
+                or event.date.minute != old_date.minute
+            )
+
+            if new_deadline:
+                event.voting_deadline = new_deadline
+            elif date_changed and old_gap and old_deadline != old_date:
+                event.voting_deadline = event.date - old_gap
+            else:
+                event.voting_deadline = event.date
+
             event.save()
             return redirect('event_detail', pk=event.pk)
     else:
@@ -487,7 +506,39 @@ def event_vote(request, pk):
     if not EventAttendance.objects.filter(user=request.user, event=event).exists():
         raise PermissionDenied
 
+    event.sync_voting_status()
+    event.refresh_from_db()
+
     games = BoardGame.objects.all()
+
+    existing_votes = Vote.objects.filter(
+        user=request.user, event=event
+    ).select_related('board_game')
+    vote_data = []
+    for vote in existing_votes:
+        vote_data.append({'board_game': vote.board_game_id, 'rank': vote.rank, 'game_name': vote.board_game.name})
+
+    if not event.is_voting_open:
+        if request.method == 'POST':
+            return render(request, 'club/event_vote.html', {
+                'event': event,
+                'formset': None,
+                'games': games,
+                'vote_data': vote_data,
+                'voting_closed': True,
+                'mid_submit_closed': True,
+            })
+
+        VoteFormSet = formset_factory(VoteForm, extra=0)
+        formset = VoteFormSet(initial=vote_data)
+        return render(request, 'club/event_vote.html', {
+            'event': event,
+            'formset': formset,
+            'games': games,
+            'vote_data': vote_data,
+            'voting_closed': True,
+            'mid_submit_closed': False,
+        })
 
     if request.method == 'POST':
         Vote.objects.filter(user=request.user, event=event).delete()
@@ -505,13 +556,6 @@ def event_vote(request, pk):
                 )
         return redirect('event_detail', pk=event.pk)
 
-    existing_votes = Vote.objects.filter(
-        user=request.user, event=event
-    ).select_related('board_game')
-    vote_data = []
-    for vote in existing_votes:
-        vote_data.append({'board_game': vote.board_game_id, 'rank': vote.rank})
-
     VoteFormSet = formset_factory(VoteForm, extra=max(0, 3 - len(vote_data)))
     initial = vote_data if vote_data else []
     formset = VoteFormSet(initial=initial)
@@ -520,6 +564,8 @@ def event_vote(request, pk):
         'event': event,
         'formset': formset,
         'games': games,
+        'voting_closed': False,
+        'mid_submit_closed': False,
     })
 
 
@@ -568,19 +614,50 @@ def event_toggle_visibility(request, pk):
     return redirect('event_detail', pk=event.pk)
 
 
+def event_toggle_voting(request, pk):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    if not request.user.is_organizer:
+        raise PermissionDenied
+    event = get_object_or_404(Event, pk=pk)
+    event.sync_voting_status()
+    event.refresh_from_db()
+
+    if event.is_voting_open:
+        event.voting_open = False
+        event.save()
+    else:
+        if not event.is_active:
+            return redirect('event_detail', pk=event.pk)
+        if timezone.now() >= event.voting_deadline:
+            return redirect('event_detail', pk=event.pk)
+        event.voting_open = True
+        event.save()
+
+    return redirect('event_detail', pk=event.pk)
+
+
 def event_detail(request, pk):
     event = get_object_or_404(Event, pk=pk)
+    event.sync_voting_status()
+    event.refresh_from_db()
     attendees = EventAttendance.objects.filter(event=event).select_related('user')
     is_attending = False
     if request.user.is_authenticated:
         is_attending = EventAttendance.objects.filter(
             user=request.user, event=event
         ).exists()
+    can_resume = (
+        not event.voting_open
+        and event.is_currently_active
+        and timezone.now() < event.voting_deadline
+    )
     return render(request, 'club/event_detail.html', {
         'event': event,
         'attendees': attendees,
         'is_attending': is_attending,
         'time_midnight': dt_time(0, 0),
+        'can_resume': can_resume,
     })
 
 

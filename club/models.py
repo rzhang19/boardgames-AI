@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser, UserManager
 from django.db import models
+from django.utils import timezone
 
 
 class ClubUserManager(UserManager):
@@ -47,9 +48,34 @@ class Event(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.CASCADE)
     show_individual_votes = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    voting_open = models.BooleanField(default=True)
+    voting_deadline = models.DateTimeField()
 
     def __str__(self):
         return self.title
+
+    @property
+    def phase(self):
+        return 'upcoming' if self.date > timezone.now() else 'completed'
+
+    @property
+    def is_currently_active(self):
+        return self.is_active and self.date > timezone.now()
+
+    @property
+    def is_voting_open(self):
+        if not self.is_active:
+            return False
+        if not self.voting_open:
+            return False
+        if timezone.now() >= self.voting_deadline:
+            return False
+        return True
+
+    def sync_voting_status(self):
+        if self.voting_open and not self.is_voting_open:
+            self.voting_open = False
+            self.save(update_fields=['voting_open'])
 
 
 class EventAttendance(models.Model):

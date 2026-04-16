@@ -1,7 +1,7 @@
 import zoneinfo
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, RequestFactory
+from django.test import TestCase, SimpleTestCase, RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
@@ -36,7 +36,7 @@ class UserModelTimezoneTest(TestCase):
         self.assertTrue(user.timezone_detected)
 
 
-class TimezoneUtilsTest(TestCase):
+class TimezoneUtilsTest(SimpleTestCase):
 
     def test_get_timezone_choices_returns_list(self):
         choices = get_timezone_choices()

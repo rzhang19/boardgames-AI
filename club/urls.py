@@ -29,6 +29,7 @@ urlpatterns = [
     path('events/<int:pk>/vote/', views.event_vote, name='event_vote'),
     path('events/<int:pk>/results/', views.event_results, name='event_results'),
     path('events/<int:pk>/toggle-visibility/', views.event_toggle_visibility, name='event_toggle_visibility'),
+    path('events/<int:pk>/toggle-voting/', views.event_toggle_voting, name='event_toggle_voting'),
     path('manage-users/', views.manage_users, name='manage_users'),
     path('manage-users/confirm/', views.manage_users_confirm, name='manage_users_confirm'),
     path('manage-users/cancel/', views.manage_users_cancel, name='manage_users_cancel'),

@@ -84,6 +84,7 @@ class Command(BaseCommand):
             description='Weekly board game night! Bring snacks.',
             created_by=organizer,
             is_active=True,
+            voting_deadline=now + timedelta(days=7, hours=19),
         )
         self.stdout.write(f'  Created active event: {active_event.title}')
 
@@ -94,6 +95,7 @@ class Command(BaseCommand):
             description='Last week\'s event.',
             created_by=organizer,
             is_active=False,
+            voting_deadline=now - timedelta(days=7, hours=19),
         )
         self.stdout.write(f'  Created past event: {past_event.title}')
 

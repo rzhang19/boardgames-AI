@@ -58,6 +58,7 @@ class GameCreateViewTest(TestCase):
         self.assertEqual(game.owner, self.user)
         self.assertEqual(game.min_players, 2)
         self.assertEqual(game.max_players, 4)
+        self.assertEqual(response.url, reverse('game_detail', kwargs={'pk': game.pk}))
 
     def test_create_game_with_required_fields_only(self):
         self.client.login(username='creator', password='testpass123')
@@ -76,14 +77,6 @@ class GameCreateViewTest(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertFalse(BoardGame.objects.exists())
-
-    def test_created_game_redirects_to_detail(self):
-        self.client.login(username='creator', password='testpass123')
-        response = self.client.post(reverse('game_add'), {
-            'name': 'Azul',
-        })
-        game = BoardGame.objects.get(name='Azul')
-        self.assertEqual(response.url, reverse('game_detail', kwargs={'pk': game.pk}))
 
     def test_create_game_with_bgg_id(self):
         self.client.login(username='creator', password='testpass123')
@@ -191,6 +184,7 @@ class GameUpdateViewTest(TestCase):
         self.assertEqual(self.game.name, 'Catan: Seafarers')
         self.assertEqual(self.game.description, 'Expanded edition')
         self.assertEqual(self.game.max_players, 6)
+        self.assertEqual(self.game.owner, self.owner)
 
     def test_non_owner_cannot_update_game(self):
         self.client.login(username='other', password='testpass123')
@@ -200,14 +194,6 @@ class GameUpdateViewTest(TestCase):
         self.assertEqual(response.status_code, 403)
         self.game.refresh_from_db()
         self.assertEqual(self.game.name, 'Catan')
-
-    def test_update_preserves_owner(self):
-        self.client.login(username='owner', password='testpass123')
-        self.client.post(reverse('game_edit', kwargs={'pk': self.game.pk}), {
-            'name': 'Updated Catan',
-        })
-        self.game.refresh_from_db()
-        self.assertEqual(self.game.owner, self.owner)
 
 
 class GameDeleteViewTest(TestCase):
@@ -243,14 +229,10 @@ class GameDeleteViewTest(TestCase):
         response = self.client.post(reverse('game_delete', kwargs={'pk': self.game.pk}))
         self.assertEqual(response.status_code, 302)
         self.assertFalse(BoardGame.objects.filter(pk=self.game.pk).exists())
+        self.assertEqual(response.url, reverse('game_list'))
 
     def test_non_owner_cannot_delete_game(self):
         self.client.login(username='other', password='testpass123')
         response = self.client.post(reverse('game_delete', kwargs={'pk': self.game.pk}))
         self.assertEqual(response.status_code, 403)
         self.assertTrue(BoardGame.objects.filter(pk=self.game.pk).exists())
-
-    def test_delete_redirects_to_game_list(self):
-        self.client.login(username='owner', password='testpass123')
-        response = self.client.post(reverse('game_delete', kwargs={'pk': self.game.pk}))
-        self.assertEqual(response.url, reverse('game_list'))

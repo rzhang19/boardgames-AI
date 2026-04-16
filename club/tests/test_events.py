@@ -18,10 +18,12 @@ class EventListViewTest(TestCase):
         )
         self.event1 = Event.objects.create(
             title='Friday Night', date='2026-05-01T18:00:00Z',
+            voting_deadline='2026-05-01T18:00:00Z',
             location='Community Center', created_by=self.admin
         )
         self.event2 = Event.objects.create(
             title='Saturday Bash', date='2026-06-01T12:00:00Z',
+            voting_deadline='2026-06-01T12:00:00Z',
             created_by=self.admin
         )
 
@@ -30,10 +32,6 @@ class EventListViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Friday Night')
         self.assertContains(response, 'Saturday Bash')
-
-    def test_event_list_accessible_without_login(self):
-        response = self.client.get(reverse('event_list'))
-        self.assertEqual(response.status_code, 200)
 
 
 class EventCreateViewTest(TestCase):
@@ -76,6 +74,7 @@ class EventCreateViewTest(TestCase):
         self.assertEqual(event.location, 'The Den')
         self.assertEqual(event.date.hour, 18)
         self.assertEqual(event.date.minute, 0)
+        self.assertEqual(response.url, reverse('event_detail', kwargs={'pk': event.pk}))
 
     def test_create_event_with_date_only_defaults_time_to_midnight(self):
         self.client.login(username='admin', password='testpass123')
@@ -132,16 +131,6 @@ class EventCreateViewTest(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertFalse(Event.objects.filter(title='Sneaky Event').exists())
 
-    def test_created_event_redirects_to_detail(self):
-        self.client.login(username='admin', password='testpass123')
-        response = self.client.post(reverse('event_add'), {
-            'title': 'New Event',
-            'date': '2026-08-01',
-            'time': '18:00',
-        })
-        event = Event.objects.get(title='New Event')
-        self.assertEqual(response.url, reverse('event_detail', kwargs={'pk': event.pk}))
-
     def test_cannot_create_event_with_past_date(self):
         self.client.login(username='admin', password='testpass123')
         past = (timezone.now() - timedelta(days=1)).strftime('%Y-%m-%d')
@@ -151,14 +140,6 @@ class EventCreateViewTest(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Event.objects.filter(title='Past Event').exists())
-
-    def test_cannot_create_event_with_past_date_shows_error(self):
-        self.client.login(username='admin', password='testpass123')
-        past = (timezone.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-        response = self.client.post(reverse('event_add'), {
-            'title': 'Past Event',
-            'date': past,
-        })
         self.assertContains(response, 'past')
 
     def test_can_create_event_with_future_date(self):
@@ -171,24 +152,15 @@ class EventCreateViewTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Event.objects.filter(title='Future Event').exists())
 
-    def test_create_form_has_separate_date_and_time_inputs(self):
+    def test_create_event_form_html(self):
         self.client.login(username='admin', password='testpass123')
         response = self.client.get(reverse('event_add'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'type="date"')
         self.assertContains(response, 'type="time"')
-
-    def test_event_form_has_field_groups(self):
-        self.client.login(username='admin', password='testpass123')
-        response = self.client.get(reverse('event_add'))
         self.assertContains(response, 'Event Details')
         self.assertContains(response, 'Date &amp; Time')
         self.assertContains(response, 'Location')
-
-    def test_required_fields_have_red_asterisk(self):
-        self.client.login(username='admin', password='testpass123')
-        response = self.client.get(reverse('event_add'))
-        self.assertEqual(response.status_code, 200)
         html = response.content.decode()
         asterisk_count = html.count('<span class="required-asterisk">')
         self.assertEqual(asterisk_count, 2)
@@ -212,6 +184,7 @@ class EventDetailViewTest(TestCase):
         )
         self.event = Event.objects.create(
             title='Test Event', date='2026-05-01T18:00:00Z',
+            voting_deadline='2026-05-01T18:00:00Z',
             location='Hall', description='A test event',
             created_by=self.admin
         )
@@ -222,10 +195,6 @@ class EventDetailViewTest(TestCase):
         self.assertContains(response, 'Test Event')
         self.assertContains(response, 'Hall')
         self.assertContains(response, 'A test event')
-
-    def test_event_detail_accessible_without_login(self):
-        response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
-        self.assertEqual(response.status_code, 200)
 
     def test_event_detail_nonexistent_returns_404(self):
         response = self.client.get(reverse('event_detail', kwargs={'pk': 9999}))
@@ -255,6 +224,7 @@ class EventRSVPTest(TestCase):
         )
         self.event = Event.objects.create(
             title='RSVP Event', date='2026-05-01T18:00:00Z',
+            voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin
         )
 
@@ -276,17 +246,6 @@ class EventRSVPTest(TestCase):
         self.client.login(username='attendee', password='testpass123')
         response = self.client.post(reverse('event_rsvp', kwargs={'pk': self.event.pk}))
         self.assertEqual(response.status_code, 302)
-        self.assertFalse(
-            EventAttendance.objects.filter(user=self.user, event=self.event).exists()
-        )
-
-    def test_rsvp_toggles_correctly(self):
-        self.client.login(username='attendee', password='testpass123')
-        self.client.post(reverse('event_rsvp', kwargs={'pk': self.event.pk}))
-        self.assertTrue(
-            EventAttendance.objects.filter(user=self.user, event=self.event).exists()
-        )
-        self.client.post(reverse('event_rsvp', kwargs={'pk': self.event.pk}))
         self.assertFalse(
             EventAttendance.objects.filter(user=self.user, event=self.event).exists()
         )
@@ -322,6 +281,7 @@ class EventEditViewTest(TestCase):
         self.event = Event.objects.create(
             title='Original Title',
             date=timezone.now() + timedelta(days=7),
+            voting_deadline=timezone.now() + timedelta(days=7),
             location='Original Location',
             description='Original Description',
             created_by=self.organizer,
@@ -352,16 +312,12 @@ class EventEditViewTest(TestCase):
         response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
         self.assertEqual(response.status_code, 200)
 
-    def test_edit_page_shows_pre_populated_form(self):
+    def test_edit_page_shows_pre_populated_form_and_edit_action(self):
         self.client.login(username='organizer', password='testpass123')
         response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
         self.assertContains(response, 'Original Title')
         self.assertContains(response, 'Original Location')
         self.assertContains(response, 'Original Description')
-
-    def test_edit_page_uses_edit_action(self):
-        self.client.login(username='organizer', password='testpass123')
-        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
         self.assertContains(response, 'Edit Event')
         self.assertContains(response, 'Edit Event</button>')
 
@@ -422,31 +378,11 @@ class EventEditViewTest(TestCase):
         self.event.refresh_from_db()
         self.assertEqual(self.event.title, 'Original Title')
 
-    def test_can_edit_past_event_keeping_same_date(self):
-        past_event = Event.objects.create(
-            title='Past Event',
-            date=timezone.now() - timedelta(days=1),
-            location='Somewhere',
-            created_by=self.organizer,
-        )
-        self.client.login(username='organizer', password='testpass123')
-        date_str = past_event.date.strftime('%Y-%m-%d')
-        time_str = past_event.date.strftime('%H:%M')
-        response = self.client.post(reverse('event_edit', kwargs={'pk': past_event.pk}), {
-            'title': 'Updated Past Event',
-            'date': date_str,
-            'time': time_str,
-            'location': 'Somewhere',
-            'description': '',
-        })
-        self.assertEqual(response.status_code, 302)
-        past_event.refresh_from_db()
-        self.assertEqual(past_event.title, 'Updated Past Event')
-
-    def test_edit_past_event_with_other_field_changes(self):
+    def test_edit_past_event_with_field_changes(self):
         past_event = Event.objects.create(
             title='Old Past Event',
             date=timezone.now() - timedelta(days=2),
+            voting_deadline=timezone.now() - timedelta(days=2),
             location='Old Place',
             description='Old Desc',
             created_by=self.organizer,
@@ -518,6 +454,7 @@ class EventDetailEditButtonTest(TestCase):
         self.event = Event.objects.create(
             title='Test Event',
             date=timezone.now() + timedelta(days=7),
+            voting_deadline=timezone.now() + timedelta(days=7),
             created_by=self.organizer,
         )
 

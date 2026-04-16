@@ -10,17 +10,6 @@ User = get_user_model()
 
 class SettingsPageAccessTest(TestCase):
 
-    def test_settings_page_loads_for_logged_in_user(self):
-        User.objects.create_user(username='testuser', password='testpass123')
-        self.client.login(username='testuser', password='testpass123')
-        response = self.client.get(reverse('user_settings'))
-        self.assertEqual(response.status_code, 200)
-
-    def test_settings_page_redirects_for_anonymous(self):
-        response = self.client.get(reverse('user_settings'))
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('/login/', response.url)
-
     def test_settings_page_shows_current_email(self):
         User.objects.create_user(
             username='testuser', password='testpass123',
@@ -28,7 +17,13 @@ class SettingsPageAccessTest(TestCase):
         )
         self.client.login(username='testuser', password='testpass123')
         response = self.client.get(reverse('user_settings'))
+        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'current@example.com')
+
+    def test_settings_page_redirects_for_anonymous(self):
+        response = self.client.get(reverse('user_settings'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
 
 
 class SettingsGearIconTest(TestCase):

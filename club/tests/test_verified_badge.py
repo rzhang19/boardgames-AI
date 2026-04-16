@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from club.models import BoardGame, Event
+from club.models import BoardGame, Event, EventAttendance, Vote
 
 User = get_user_model()
 
@@ -30,55 +30,34 @@ class VerifiedBadgeDashboardTest(TestCase):
         self.assertNotContains(response, 'verified-badge')
 
 
-class VerifiedBadgeGameListTest(TestCase):
+class VerifiedBadgeGamePagesTest(TestCase):
 
-    def setUp(self):
-        self.verified_owner = User.objects.create_user(
-            username='verifiedowner', password='testpass123',
-            email='verified@example.com', email_verified=True
-        )
-        self.unverified_owner = User.objects.create_user(
-            username='unverifiedowner', password='testpass123',
-            email='unverified@example.com', email_verified=False
-        )
-
-    def test_verified_game_owner_shows_checkmark(self):
-        BoardGame.objects.create(name='Catan', owner=self.verified_owner)
-        self.client.login(username='verifiedowner', password='testpass123')
-        response = self.client.get(reverse('game_list'))
-        self.assertContains(response, 'verified-badge')
-
-    def test_unverified_game_owner_no_checkmark(self):
-        BoardGame.objects.create(name='Risk', owner=self.unverified_owner)
-        self.client.login(username='unverifiedowner', password='testpass123')
-        response = self.client.get(reverse('game_list'))
-        self.assertNotContains(response, 'verified-badge')
-
-
-class VerifiedBadgeGameDetailTest(TestCase):
-
-    def test_verified_owner_shows_checkmark_on_game_detail(self):
+    def test_verified_owner_shows_checkmark_on_game_pages(self):
         owner = User.objects.create_user(
             username='verifiedowner', password='testpass123',
             email='verified@example.com', email_verified=True
         )
         game = BoardGame.objects.create(name='Catan', owner=owner)
         self.client.login(username='verifiedowner', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertContains(response, 'verified-badge')
         response = self.client.get(reverse('game_detail', kwargs={'pk': game.pk}))
         self.assertContains(response, 'verified-badge')
 
-    def test_unverified_owner_no_checkmark_on_game_detail(self):
+    def test_unverified_owner_no_checkmark_on_game_pages(self):
         owner = User.objects.create_user(
             username='unverifiedowner', password='testpass123',
             email='unverified@example.com', email_verified=False
         )
         game = BoardGame.objects.create(name='Risk', owner=owner)
         self.client.login(username='unverifiedowner', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertNotContains(response, 'verified-badge')
         response = self.client.get(reverse('game_detail', kwargs={'pk': game.pk}))
         self.assertNotContains(response, 'verified-badge')
 
 
-class VerifiedBadgeEventListTest(TestCase):
+class VerifiedBadgeEventPagesTest(TestCase):
 
     def test_verified_creator_shows_checkmark_in_event_list(self):
         creator = User.objects.create_user(
@@ -87,6 +66,7 @@ class VerifiedBadgeEventListTest(TestCase):
         )
         Event.objects.create(
             title='Game Night', date='2026-06-01T18:00:00Z',
+            voting_deadline='2026-06-01T18:00:00Z',
             created_by=creator
         )
         self.client.login(username='verifiedcreator', password='testpass123')
@@ -100,92 +80,89 @@ class VerifiedBadgeEventListTest(TestCase):
         )
         Event.objects.create(
             title='Game Night', date='2026-06-01T18:00:00Z',
+            voting_deadline='2026-06-01T18:00:00Z',
             created_by=creator
         )
         self.client.login(username='unverifiedcreator', password='testpass123')
         response = self.client.get(reverse('event_list'))
         self.assertNotContains(response, 'verified-badge')
 
-
-class VerifiedBadgeEventDetailTest(TestCase):
-
-    def setUp(self):
-        self.verified_user = User.objects.create_user(
+    def test_verified_creator_and_attendee_badge_on_event_detail(self):
+        verified_user = User.objects.create_user(
             username='verifieduser', password='testpass123',
             email='verified@example.com', email_verified=True
         )
-        self.unverified_user = User.objects.create_user(
-            username='unverifieduser', password='testpass123',
-            email='unverified@example.com', email_verified=False
-        )
-        self.event = Event.objects.create(
+        event = Event.objects.create(
             title='Game Night', date='2026-06-01T18:00:00Z',
-            created_by=self.verified_user
+            voting_deadline='2026-06-01T18:00:00Z',
+            created_by=verified_user
         )
-
-    def test_verified_creator_shows_checkmark(self):
         self.client.login(username='verifieduser', password='testpass123')
-        response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_detail', kwargs={'pk': event.pk}))
         self.assertContains(response, 'verified-badge')
-
-    def test_verified_attendee_shows_checkmark(self):
-        from club.models import EventAttendance
-        EventAttendance.objects.create(user=self.verified_user, event=self.event)
-        self.client.login(username='verifieduser', password='testpass123')
-        response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
+        EventAttendance.objects.create(user=verified_user, event=event)
+        response = self.client.get(reverse('event_detail', kwargs={'pk': event.pk}))
         self.assertContains(response, 'verified-badge')
 
     def test_unverified_attendee_no_checkmark(self):
-        from club.models import EventAttendance
+        unverified_user = User.objects.create_user(
+            username='unverifieduser', password='testpass123',
+            email='unverified@example.com', email_verified=False
+        )
         event = Event.objects.create(
             title='Game Night', date='2026-06-01T18:00:00Z',
-            created_by=self.unverified_user
+            voting_deadline='2026-06-01T18:00:00Z',
+            created_by=unverified_user
         )
-        EventAttendance.objects.create(user=self.unverified_user, event=event)
+        EventAttendance.objects.create(user=unverified_user, event=event)
         self.client.login(username='unverifieduser', password='testpass123')
         response = self.client.get(reverse('event_detail', kwargs={'pk': event.pk}))
         self.assertNotContains(response, 'verified-badge')
 
-
-class VerifiedBadgeEventResultsTest(TestCase):
-
-    def setUp(self):
-        self.verified_user = User.objects.create_user(
+    def test_verified_voter_shows_checkmark_in_individual_votes(self):
+        verified_user = User.objects.create_user(
             username='verifiedvoter', password='testpass123',
             email='verified@example.com', email_verified=True
         )
-        self.unverified_user = User.objects.create_user(
-            username='unverifiedvoter', password='testpass123',
-            email='unverified@example.com', email_verified=False
-        )
-        self.event = Event.objects.create(
+        event = Event.objects.create(
             title='Game Night', date='2026-06-01T18:00:00Z',
-            created_by=self.verified_user, show_individual_votes=True
+            voting_deadline='2026-06-01T18:00:00Z',
+            created_by=verified_user, show_individual_votes=True
         )
-        self.game = BoardGame.objects.create(name='Catan', owner=self.verified_user)
-
-    def test_verified_voter_shows_checkmark_in_individual_votes(self):
-        from club.models import EventAttendance, Vote
-        EventAttendance.objects.create(user=self.verified_user, event=self.event)
+        game = BoardGame.objects.create(name='Catan', owner=verified_user)
+        EventAttendance.objects.create(user=verified_user, event=event)
         Vote.objects.create(
-            user=self.verified_user, event=self.event,
-            board_game=self.game, rank=1
+            user=verified_user, event=event,
+            board_game=game, rank=1
         )
-        response = self.client.get(reverse('event_results', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_results', kwargs={'pk': event.pk}))
         self.assertContains(response, 'verified-badge')
 
     def test_unverified_voter_no_checkmark_in_individual_votes(self):
-        from club.models import EventAttendance, Vote
-        EventAttendance.objects.create(user=self.unverified_user, event=self.event)
-        Vote.objects.create(
-            user=self.unverified_user, event=self.event,
-            board_game=self.game, rank=1
+        unverified_user = User.objects.create_user(
+            username='unverifiedvoter', password='testpass123',
+            email='unverified@example.com', email_verified=False
         )
-        response = self.client.get(reverse('event_results', kwargs={'pk': self.event.pk}))
-        self.assertNotContains(response, 'verified-badge')
-
-
-class VerifiedBadgeManageUsersTest(TestCase):
+        verified_creator = User.objects.create_user(
+            username='verifiedcreator', password='testpass123',
+            email='verifiedc@example.com', email_verified=True
+        )
+        event = Event.objects.create(
+            title='Game Night', date='2026-06-01T18:00:00Z',
+            voting_deadline='2026-06-01T18:00:00Z',
+            created_by=verified_creator, show_individual_votes=True
+        )
+        game = BoardGame.objects.create(name='Catan', owner=verified_creator)
+        EventAttendance.objects.create(user=unverified_user, event=event)
+        Vote.objects.create(
+            user=unverified_user, event=event,
+            board_game=game, rank=1
+        )
+        response = self.client.get(reverse('event_results', kwargs={'pk': event.pk}))
+        html = response.content.decode()
+        voter_section_start = html.find('unverifiedvoter')
+        voter_section = html[voter_section_start:voter_section_start + 200]
+        self.assertNotIn('verified-badge', voter_section)
 
     def test_verified_user_shows_checkmark_in_manage_users(self):
         admin = User.objects.create_user(

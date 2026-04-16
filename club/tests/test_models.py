@@ -103,6 +103,7 @@ class EventModelTest(TestCase):
         event = Event.objects.create(
             title='Friday Game Night',
             date=event_date,
+            voting_deadline=event_date,
             location='Community Center',
             description='Weekly game night',
             created_by=self.admin,
@@ -119,6 +120,7 @@ class EventModelTest(TestCase):
         event = Event.objects.create(
             title='Quick Event',
             date=event_date,
+            voting_deadline=event_date,
             created_by=self.admin,
         )
         self.assertEqual(event.location, '')
@@ -128,6 +130,7 @@ class EventModelTest(TestCase):
         event = Event.objects.create(
             title='Board Game Bash',
             date='2026-05-01T18:00:00Z',
+            voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin,
         )
         self.assertEqual(str(event), 'Board Game Bash')
@@ -136,6 +139,7 @@ class EventModelTest(TestCase):
         event = Event.objects.create(
             title='Test Event',
             date='2026-05-01T18:00:00Z',
+            voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin,
         )
         self.assertFalse(event.show_individual_votes)
@@ -144,6 +148,7 @@ class EventModelTest(TestCase):
         event = Event.objects.create(
             title='Test Event',
             date='2026-05-01T18:00:00Z',
+            voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin,
         )
         self.assertTrue(event.is_active)
@@ -164,6 +169,7 @@ class EventAttendanceModelTest(TestCase):
         self.event = Event.objects.create(
             title='Test Event',
             date='2026-05-01T18:00:00Z',
+            voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin,
         )
 
@@ -191,6 +197,7 @@ class EventAttendanceModelTest(TestCase):
         event2 = Event.objects.create(
             title='Second Event',
             date='2026-06-01T18:00:00Z',
+            voting_deadline='2026-06-01T18:00:00Z',
             created_by=self.admin,
         )
         EventAttendance.objects.create(
@@ -230,11 +237,13 @@ class VoteModelTest(TestCase):
         self.event = Event.objects.create(
             title='Vote Event',
             date='2026-05-01T18:00:00Z',
+            voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin,
         )
         self.event2 = Event.objects.create(
             title='Other Event',
             date='2026-06-01T18:00:00Z',
+            voting_deadline='2026-06-01T18:00:00Z',
             created_by=self.admin,
         )
         self.game1 = BoardGame.objects.create(

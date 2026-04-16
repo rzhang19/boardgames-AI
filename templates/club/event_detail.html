@@ -19,6 +19,14 @@
 
     <p><strong>Created by:</strong> {{ event.created_by.username }}{% verified_badge event.created_by %}</p>
 
+    {% if event.is_voting_open %}
+    <p><span class="badge badge-success">Voting Open</span></p>
+    {% elif event.is_currently_active %}
+    <p><span class="badge badge-warning">Voting Paused</span></p>
+    {% else %}
+    <p><span class="badge badge-neutral">Voting Closed</span></p>
+    {% endif %}
+
     {% if user.is_authenticated %}
     <form method="post" action="{% url 'event_rsvp' event.pk %}">
         {% csrf_token %}
@@ -31,13 +39,23 @@
     {% endif %}
 
     <div class="btn-group">
-        {% if user.is_authenticated and is_attending %}
+        {% if user.is_authenticated and is_attending and event.is_voting_open %}
         <a href="{% url 'event_vote' event.pk %}" class="btn btn-primary btn-sm">Vote for Games</a>
         {% endif %}
 
         <a href="{% url 'event_results' event.pk %}" class="btn btn-outline btn-sm">View Results</a>
 
         {% if user.is_organizer %}
+        {% if event.is_currently_active %}
+        <form method="post" action="{% url 'event_toggle_voting' event.pk %}" style="display:inline;">
+            {% csrf_token %}
+            {% if event.is_voting_open %}
+            <button type="submit" class="btn btn-warning btn-sm">End Voting</button>
+            {% elif can_resume %}
+            <button type="submit" class="btn btn-success btn-sm">Resume Voting</button>
+            {% endif %}
+        </form>
+        {% endif %}
         <form method="post" action="{% url 'event_toggle_visibility' event.pk %}" style="display:inline;">
             {% csrf_token %}
             <button type="submit" class="btn btn-neutral btn-sm">
