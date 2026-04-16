@@ -27,6 +27,12 @@ class GameListViewTest(TestCase):
         self.assertContains(response, 'Catan')
         self.assertContains(response, 'Chess')
 
+    def test_game_list_displays_complexity(self):
+        self.client.login(username='gameowner', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Complexity')
+
     def test_game_list_requires_login(self):
         response = self.client.get(reverse('game_list'))
         self.assertEqual(response.status_code, 302)
@@ -52,6 +58,7 @@ class GameCreateViewTest(TestCase):
             'description': 'Cooperative disease game',
             'min_players': 2,
             'max_players': 4,
+            'complexity': 'medium',
         })
         self.assertEqual(response.status_code, 302)
         game = BoardGame.objects.get(name='Pandemic')
@@ -64,6 +71,7 @@ class GameCreateViewTest(TestCase):
         self.client.login(username='creator', password='testpass123')
         response = self.client.post(reverse('game_add'), {
             'name': 'Ticket to Ride',
+            'complexity': 'light',
         })
         self.assertEqual(response.status_code, 302)
         game = BoardGame.objects.get(name='Ticket to Ride')
@@ -86,6 +94,7 @@ class GameCreateViewTest(TestCase):
             'min_players': 3,
             'max_players': 4,
             'bgg_id': 13,
+            'complexity': 'medium',
         })
         self.assertEqual(response.status_code, 302)
         game = BoardGame.objects.get(name='Catan')
@@ -95,10 +104,29 @@ class GameCreateViewTest(TestCase):
         self.client.login(username='creator', password='testpass123')
         response = self.client.post(reverse('game_add'), {
             'name': 'Chess',
+            'complexity': 'unknown',
         })
         self.assertEqual(response.status_code, 302)
         game = BoardGame.objects.get(name='Chess')
         self.assertIsNone(game.bgg_id)
+
+    def test_create_game_with_manual_complexity(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('game_add'), {
+            'name': 'Pandemic',
+            'complexity': 'medium',
+        })
+        self.assertEqual(response.status_code, 302)
+        game = BoardGame.objects.get(name='Pandemic')
+        self.assertEqual(game.complexity, 'medium')
+
+    def test_create_game_without_complexity_fails(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('game_add'), {
+            'name': 'No Complexity Game',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(BoardGame.objects.filter(name='No Complexity Game').exists())
 
 
 class GameDetailViewTest(TestCase):
@@ -142,6 +170,13 @@ class GameDetailViewTest(TestCase):
         response = self.client.get(reverse('game_detail', kwargs={'pk': self.game.pk}))
         self.assertNotContains(response, reverse('game_edit', kwargs={'pk': self.game.pk}))
 
+    def test_game_detail_displays_complexity(self):
+        self.game.complexity = 'medium'
+        self.game.save()
+        self.client.login(username='owner', password='testpass123')
+        response = self.client.get(reverse('game_detail', kwargs={'pk': self.game.pk}))
+        self.assertContains(response, 'Medium')
+
 
 class GameUpdateViewTest(TestCase):
 
@@ -178,6 +213,7 @@ class GameUpdateViewTest(TestCase):
             'description': 'Expanded edition',
             'min_players': 3,
             'max_players': 6,
+            'complexity': 'medium',
         })
         self.assertEqual(response.status_code, 302)
         self.game.refresh_from_db()
@@ -194,6 +230,16 @@ class GameUpdateViewTest(TestCase):
         self.assertEqual(response.status_code, 403)
         self.game.refresh_from_db()
         self.assertEqual(self.game.name, 'Catan')
+
+    def test_owner_can_update_complexity(self):
+        self.client.login(username='owner', password='testpass123')
+        response = self.client.post(reverse('game_edit', kwargs={'pk': self.game.pk}), {
+            'name': 'Catan',
+            'complexity': 'medium',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.complexity, 'medium')
 
 
 class GameDeleteViewTest(TestCase):

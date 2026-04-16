@@ -4,9 +4,11 @@
 - create tests based on expected behavior, with "Given, When, Then" situations, and a test per GWT
 - after creating the code, run the tests and ensure all tests pass before continuing
 - if any tests fail, stop the generation so I can review
+- for any files that are .gitignore or may be different in Production than in local, make sure to explicitly state any new lines or variable declarations that need to be added to that file in production.
 
 ### DON'T
 - do not add any heavy dependencies without approval
+- do not modify (add/edit/remove) any files outside of this directory
 
 ### Permissions
 Allowed without prompting:
@@ -26,3 +28,7 @@ Ask first before acting:
 ### When working on new features (ExtraFeatures.txt or Jiras)
 - Always work on one new feature at a time. If explicitly stated, work on each number one at a time. Ask if one number has multiple subpoints, if to work on them separately or together.
 - When complete, at the end of tests completing, mark the line as DONE, as stated in the file instructions (usually near the top of the file)
+
+### Regarding tests:
+- Upon working on a feature, always check if there are existing tests that can be reused instead of creating duplicate tests.
+- For end to end system tests, always check if we can incorporate tests into an existing system test instead of creating a net new test that would use previous setup or transactions.

@@ -18,6 +18,7 @@
         <tr>
             <th>Name</th>
             <th>Players</th>
+            <th>Complexity</th>
             <th>Owner</th>
         </tr>
     </thead>
@@ -35,6 +36,13 @@
                     {{ game.min_players }}-{{ game.max_players }}
                 {% elif game.min_players %}
                     {{ game.min_players }}+
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>
+                {% if game.complexity %}
+                <span class="complexity-badge complexity-{{ game.complexity }}">{{ game.get_complexity_display }}</span>
                 {% else %}
                     -
                 {% endif %}

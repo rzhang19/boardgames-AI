@@ -1,8 +1,9 @@
 import json
+from decimal import Decimal
 from unittest.mock import patch, MagicMock
 from django.test import TestCase
 
-from club.bgg import search_bgg, fetch_bgg_game
+from club.bgg import search_bgg, fetch_bgg_game, fetch_bgg_weight, weight_to_complexity
 
 
 class SearchBggTest(TestCase):
@@ -202,3 +203,166 @@ class FetchBggGameTest(TestCase):
         call_args = mock_urlopen.call_args[0][0]
         self.assertIn('objectid=42', call_args.full_url)
         self.assertIn('objecttype=thing', call_args.full_url)
+
+
+class FetchBggWeightTest(TestCase):
+
+    BGG_XML_RESPONSE = '''<?xml version="1.0" encoding="utf-8"?>
+<items termsofuse="https://boardgamegeek.com/xmlapi/termsofuse">
+  <item type="boardgame" id="13">
+    <statistics>
+      <ratings>
+        <averageweight value="2.28"/>
+      </ratings>
+    </statistics>
+  </item>
+</items>'''
+
+    BGG_XML_NO_STATS = '''<?xml version="1.0" encoding="utf-8"?>
+<items termsofuse="https://boardgamegeek.com/xmlapi/termsofuse">
+  <item type="boardgame" id="13">
+  </item>
+</items>'''
+
+    BGG_XML_EMPTY_WEIGHT = '''<?xml version="1.0" encoding="utf-8"?>
+<items termsofuse="https://boardgamegeek.com/xmlapi/termsofuse">
+  <item type="boardgame" id="13">
+    <statistics>
+      <ratings>
+        <averageweight value="0"/>
+      </ratings>
+    </statistics>
+  </item>
+</items>'''
+
+    @patch('club.bgg.urlopen')
+    def test_fetch_weight_returns_decimal(self, mock_urlopen):
+        """Given a valid BGG ID with stats, when calling fetch_bgg_weight, then a Decimal weight is returned"""
+        mock_response = MagicMock()
+        mock_response.read.return_value = self.BGG_XML_RESPONSE.encode()
+        mock_response.__enter__ = lambda s: mock_response
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        result = fetch_bgg_weight(13)
+
+        self.assertEqual(result, Decimal('2.28'))
+
+    @patch('club.bgg.urlopen')
+    def test_fetch_weight_calls_xml_api(self, mock_urlopen):
+        """Given a BGG ID, when calling fetch_bgg_weight, then the XML API v2 with stats=1 is called"""
+        mock_response = MagicMock()
+        mock_response.read.return_value = self.BGG_XML_RESPONSE.encode()
+        mock_response.__enter__ = lambda s: mock_response
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        fetch_bgg_weight(13)
+
+        call_args = mock_urlopen.call_args[0][0]
+        self.assertIn('xmlapi2/thing', call_args.full_url)
+        self.assertIn('id=13', call_args.full_url)
+        self.assertIn('stats=1', call_args.full_url)
+
+    @patch('club.bgg.urlopen')
+    def test_fetch_weight_returns_none_on_api_error(self, mock_urlopen):
+        """Given an API error, when calling fetch_bgg_weight, then None is returned"""
+        mock_urlopen.side_effect = Exception('Network error')
+
+        result = fetch_bgg_weight(13)
+
+        self.assertIsNone(result)
+
+    @patch('club.bgg.urlopen')
+    def test_fetch_weight_returns_none_when_no_stats(self, mock_urlopen):
+        """Given a BGG response without statistics, when calling fetch_bgg_weight, then None is returned"""
+        mock_response = MagicMock()
+        mock_response.read.return_value = self.BGG_XML_NO_STATS.encode()
+        mock_response.__enter__ = lambda s: mock_response
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        result = fetch_bgg_weight(13)
+
+        self.assertIsNone(result)
+
+    @patch('club.bgg.urlopen')
+    def test_fetch_weight_returns_none_when_zero_weight(self, mock_urlopen):
+        """Given a BGG response with 0 weight (unrated), when calling fetch_bgg_weight, then None is returned"""
+        mock_response = MagicMock()
+        mock_response.read.return_value = self.BGG_XML_EMPTY_WEIGHT.encode()
+        mock_response.__enter__ = lambda s: mock_response
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        result = fetch_bgg_weight(13)
+
+        self.assertIsNone(result)
+
+    @patch('club.bgg.urlopen')
+    def test_fetch_weight_returns_none_on_malformed_xml(self, mock_urlopen):
+        """Given malformed XML, when calling fetch_bgg_weight, then None is returned"""
+        mock_response = MagicMock()
+        mock_response.read.return_value = b'<not valid xml'
+        mock_response.__enter__ = lambda s: mock_response
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        result = fetch_bgg_weight(13)
+
+        self.assertIsNone(result)
+
+
+class WeightToComplexityTest(TestCase):
+
+    def test_weight_below_2_is_light(self):
+        """Given weight 1.5, when mapping to complexity, then 'light' is returned"""
+        self.assertEqual(weight_to_complexity(Decimal('1.5')), 'light')
+
+    def test_weight_exactly_1_is_light(self):
+        """Given weight 1.0, when mapping to complexity, then 'light' is returned"""
+        self.assertEqual(weight_to_complexity(Decimal('1.0')), 'light')
+
+    def test_weight_exactly_2_is_medium(self):
+        """Given weight 2.0, when mapping to complexity, then 'medium' is returned"""
+        self.assertEqual(weight_to_complexity(Decimal('2.0')), 'medium')
+
+    def test_weight_2_point_28_is_medium(self):
+        """Given weight 2.28, when mapping to complexity, then 'medium' is returned"""
+        self.assertEqual(weight_to_complexity(Decimal('2.28')), 'medium')
+
+    def test_weight_exactly_3_is_medium_heavy(self):
+        """Given weight 3.0, when mapping to complexity, then 'medium_heavy' is returned"""
+        self.assertEqual(weight_to_complexity(Decimal('3.0')), 'medium_heavy')
+
+    def test_weight_3_point_5_is_medium_heavy(self):
+        """Given weight 3.5, when mapping to complexity, then 'medium_heavy' is returned"""
+        self.assertEqual(weight_to_complexity(Decimal('3.5')), 'medium_heavy')
+
+    def test_weight_exactly_4_is_heavy(self):
+        """Given weight 4.0, when mapping to complexity, then 'heavy' is returned"""
+        self.assertEqual(weight_to_complexity(Decimal('4.0')), 'heavy')
+
+    def test_weight_4_point_5_is_heavy(self):
+        """Given weight 4.5, when mapping to complexity, then 'heavy' is returned"""
+        self.assertEqual(weight_to_complexity(Decimal('4.5')), 'heavy')
+
+    def test_weight_exactly_5_is_heavy(self):
+        """Given weight 5.0, when mapping to complexity, then 'heavy' is returned"""
+        self.assertEqual(weight_to_complexity(Decimal('5.0')), 'heavy')
+
+    def test_weight_none_returns_none(self):
+        """Given None weight, when mapping to complexity, then None is returned"""
+        self.assertIsNone(weight_to_complexity(None))
+
+    def test_weight_1_point_99_is_light(self):
+        """Given weight 1.99, when mapping to complexity, then 'light' is returned"""
+        self.assertEqual(weight_to_complexity(Decimal('1.99')), 'light')
+
+    def test_weight_2_point_99_is_medium(self):
+        """Given weight 2.99, when mapping to complexity, then 'medium' is returned"""
+        self.assertEqual(weight_to_complexity(Decimal('2.99')), 'medium')
+
+    def test_weight_3_point_99_is_medium_heavy(self):
+        """Given weight 3.99, when mapping to complexity, then 'medium_heavy' is returned"""
+        self.assertEqual(weight_to_complexity(Decimal('3.99')), 'medium_heavy')

@@ -89,6 +89,69 @@ class BoardGameModelTest(TestCase):
         self.assertIsNone(game.bgg_id)
         self.assertIsNone(game.bgg_last_synced)
 
+    def test_board_game_complexity_defaults_to_null(self):
+        game = BoardGame.objects.create(
+            name='Chess',
+            owner=self.user,
+        )
+        self.assertIsNone(game.complexity)
+
+    def test_board_game_with_complexity_light(self):
+        game = BoardGame.objects.create(
+            name='Uno',
+            owner=self.user,
+            complexity='light',
+        )
+        self.assertEqual(game.complexity, 'light')
+
+    def test_board_game_with_complexity_medium(self):
+        game = BoardGame.objects.create(
+            name='Catan',
+            owner=self.user,
+            complexity='medium',
+        )
+        self.assertEqual(game.complexity, 'medium')
+
+    def test_board_game_with_complexity_medium_heavy(self):
+        game = BoardGame.objects.create(
+            name='Terraforming Mars',
+            owner=self.user,
+            complexity='medium_heavy',
+        )
+        self.assertEqual(game.complexity, 'medium_heavy')
+
+    def test_board_game_with_complexity_heavy(self):
+        game = BoardGame.objects.create(
+            name='Gloomhaven',
+            owner=self.user,
+            complexity='heavy',
+        )
+        self.assertEqual(game.complexity, 'heavy')
+
+    def test_board_game_with_complexity_unknown(self):
+        game = BoardGame.objects.create(
+            name='Mystery Game',
+            owner=self.user,
+            complexity='unknown',
+        )
+        self.assertEqual(game.complexity, 'unknown')
+
+    def test_board_game_bgg_weight_defaults_to_null(self):
+        game = BoardGame.objects.create(
+            name='Chess',
+            owner=self.user,
+        )
+        self.assertIsNone(game.bgg_weight)
+
+    def test_board_game_with_bgg_weight(self):
+        from decimal import Decimal
+        game = BoardGame.objects.create(
+            name='Catan',
+            owner=self.user,
+            bgg_weight=Decimal('2.28'),
+        )
+        self.assertEqual(game.bgg_weight, Decimal('2.28'))
+
 
 class EventModelTest(TestCase):
 

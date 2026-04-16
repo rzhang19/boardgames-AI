@@ -11,7 +11,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from .bgg import fetch_bgg_game, search_bgg
+from .bgg import fetch_bgg_game, fetch_bgg_weight, search_bgg, weight_to_complexity
 from .borda import calculate_borda_scores
 from .forms import (
     BetaAccessForm, BoardGameForm, EventForm, SetPasswordForm, SettingsForm,
@@ -360,6 +360,10 @@ def bgg_import(request, bgg_id):
     data = fetch_bgg_game(bgg_id)
     if data is None:
         return JsonResponse({'error': 'Game not found on BoardGameGeek'})
+    weight = fetch_bgg_weight(bgg_id)
+    if weight is not None:
+        data['bgg_weight'] = str(weight)
+        data['suggested_complexity'] = weight_to_complexity(weight)
     return JsonResponse(data)
 
 
@@ -386,6 +390,11 @@ def game_add(request):
                     game.bgg_link = bgg_data['bgg_link']
                     game.image_url = bgg_data['image_url'] or ''
                     game.bgg_last_synced = timezone.now()
+                weight = fetch_bgg_weight(bgg_id)
+                if weight is not None:
+                    game.bgg_weight = weight
+                    if not game.complexity:
+                        game.complexity = weight_to_complexity(weight)
             game.save()
             return redirect('game_detail', pk=game.pk)
     else:
@@ -417,6 +426,9 @@ def game_edit(request, pk):
                     game.bgg_link = bgg_data['bgg_link']
                     game.image_url = bgg_data['image_url'] or ''
                     game.bgg_last_synced = timezone.now()
+                weight = fetch_bgg_weight(bgg_id)
+                if weight is not None:
+                    game.bgg_weight = weight
             form.save()
             return redirect('game_detail', pk=game.pk)
     else:

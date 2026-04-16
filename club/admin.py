@@ -9,8 +9,8 @@ admin.site.register(User, UserAdmin)
 
 @admin.register(BoardGame)
 class BoardGameAdmin(admin.ModelAdmin):
-    list_display = ('name', 'owner', 'min_players', 'max_players', 'created_at')
-    list_filter = ('owner',)
+    list_display = ('name', 'owner', 'complexity', 'bgg_weight', 'min_players', 'max_players', 'created_at')
+    list_filter = ('owner', 'complexity')
     search_fields = ('name',)
 
 

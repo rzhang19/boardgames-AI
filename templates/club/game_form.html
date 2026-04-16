@@ -20,6 +20,7 @@
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
+        <div id="bgg-complexity-suggestion" class="bgg-suggestion" style="display:none; color: #666; font-size: 0.9em; margin-top: -10px;"></div>
         <div class="btn-group">
             <button type="submit" class="btn btn-primary">{{ action }} Game</button>
             <a href="{% url 'game_list' %}" class="btn btn-neutral">Cancel</a>
@@ -39,6 +40,8 @@
     var descField = document.getElementById('id_description');
     var minField = document.getElementById('id_min_players');
     var maxField = document.getElementById('id_max_players');
+    var complexityField = document.getElementById('id_complexity');
+    var bggSuggestionDiv = document.getElementById('bgg-complexity-suggestion');
 
     function getCookie(name) {
         var cookieValue = null;
@@ -122,6 +125,13 @@
                     imagePreview.innerHTML = '<img src="' + data.image_url + '" alt="' + (data.name || '') + '">';
                     imagePreview.style.display = 'block';
                 }
+                if (complexityField && data.suggested_complexity) {
+                    complexityField.value = data.suggested_complexity;
+                    if (bggSuggestionDiv) {
+                        bggSuggestionDiv.textContent = 'BGG suggests: ' + data.suggested_complexity.replace('_', ' ');
+                        bggSuggestionDiv.style.display = 'block';
+                    }
+                }
                 resultsDiv.style.display = 'none';
                 searchInput.value = '';
                 clearBtn.style.display = 'inline-block';
@@ -135,6 +145,7 @@
         if (bggIdField) bggIdField.value = '';
         imagePreview.innerHTML = '';
         imagePreview.style.display = 'none';
+        if (bggSuggestionDiv) bggSuggestionDiv.style.display = 'none';
         clearBtn.style.display = 'none';
     });
 })();

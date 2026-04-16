@@ -27,6 +27,16 @@
     </p>
     {% endif %}
 
+    {% if game.complexity %}
+    <p><strong>Complexity:</strong>
+        <span class="complexity-badge complexity-{{ game.complexity }}">{{ game.get_complexity_display }}</span>
+    </p>
+    {% endif %}
+
+    {% if game.bgg_weight %}
+    <p><strong>BGG Weight:</strong> {{ game.bgg_weight }}</p>
+    {% endif %}
+
     {% if game.bgg_link %}
     <a href="{{ game.bgg_link }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm bgg-link">View on BoardGameGeek</a>
     {% endif %}

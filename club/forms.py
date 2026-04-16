@@ -59,10 +59,14 @@ class EmailOrUsernameLoginForm(AuthenticationForm):
 
 class BoardGameForm(forms.ModelForm):
     bgg_id = forms.IntegerField(required=False, widget=forms.HiddenInput)
+    complexity = forms.ChoiceField(
+        choices=[('', '---')] + BoardGame.COMPLEXITY_CHOICES,
+        required=True,
+    )
 
     class Meta:
         model = BoardGame
-        fields = ['name', 'description', 'min_players', 'max_players', 'bgg_id']
+        fields = ['name', 'description', 'min_players', 'max_players', 'complexity', 'bgg_id']
 
 
 class EventForm(forms.ModelForm):

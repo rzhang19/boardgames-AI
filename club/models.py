@@ -25,6 +25,14 @@ class User(AbstractUser):
 
 
 class BoardGame(models.Model):
+    COMPLEXITY_CHOICES = [
+        ('light', 'Light'),
+        ('medium', 'Medium'),
+        ('medium_heavy', 'Medium Heavy'),
+        ('heavy', 'Heavy'),
+        ('unknown', 'Unknown'),
+    ]
+
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -35,6 +43,15 @@ class BoardGame(models.Model):
     bgg_link = models.URLField(blank=True)
     image_url = models.URLField(blank=True)
     bgg_last_synced = models.DateTimeField(null=True, blank=True)
+    complexity = models.CharField(
+        max_length=15,
+        choices=COMPLEXITY_CHOICES,
+        null=True, blank=True,
+    )
+    bgg_weight = models.DecimalField(
+        max_digits=3, decimal_places=2,
+        null=True, blank=True,
+    )
 
     def __str__(self):
         return self.name

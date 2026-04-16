@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from unittest.mock import patch
 from django.test import TestCase
 from django.contrib.auth import get_user_model
@@ -97,6 +98,26 @@ class BggImportViewTest(TestCase):
         self.assertEqual(data['name'], 'Catan')
         self.assertEqual(data['min_players'], 3)
 
+    @patch('club.views.fetch_bgg_weight')
+    @patch('club.views.fetch_bgg_game')
+    def test_bgg_import_returns_weight_and_complexity(self, mock_fetch, mock_weight):
+        """Given a valid BGG ID, when importing, then JSON includes bgg_weight and suggested complexity"""
+        mock_fetch.return_value = {
+            'bgg_id': 13,
+            'name': 'Catan',
+            'description': 'Resource management',
+            'min_players': 3,
+            'max_players': 4,
+            'bgg_link': 'https://boardgamegeek.com/boardgame/13/catan',
+            'image_url': 'https://cf.geekdo-images.com/pic123.png',
+        }
+        mock_weight.return_value = Decimal('2.28')
+        self.client.login(username='importer', password='testpass123')
+        response = self.client.get(reverse('bgg_import', kwargs={'bgg_id': 13}))
+        data = json.loads(response.content)
+        self.assertEqual(data['bgg_weight'], '2.28')
+        self.assertEqual(data['suggested_complexity'], 'medium')
+
     @patch('club.views.fetch_bgg_game')
     def test_bgg_import_returns_error_on_failure(self, mock_fetch):
         """Given an invalid BGG ID, when importing, then JSON error is returned"""
@@ -134,6 +155,7 @@ class GameAddWithBggTest(TestCase):
             'min_players': 3,
             'max_players': 4,
             'bgg_id': 13,
+            'complexity': 'medium',
         })
         self.assertEqual(response.status_code, 302)
         game = BoardGame.objects.get(name='Catan')
@@ -149,6 +171,7 @@ class GameAddWithBggTest(TestCase):
         self.client.login(username='creator', password='testpass123')
         response = self.client.post(reverse('game_add'), {
             'name': 'Chess',
+            'complexity': 'unknown',
         })
         self.assertEqual(response.status_code, 302)
         game = BoardGame.objects.get(name='Chess')
@@ -164,11 +187,65 @@ class GameAddWithBggTest(TestCase):
         response = self.client.post(reverse('game_add'), {
             'name': 'Catan',
             'bgg_id': 13,
+            'complexity': 'medium',
         })
         self.assertEqual(response.status_code, 302)
         game = BoardGame.objects.get(name='Catan')
         self.assertEqual(game.bgg_id, 13)
         self.assertEqual(game.bgg_link, '')
+
+    @patch('club.views.fetch_bgg_weight')
+    @patch('club.views.fetch_bgg_game')
+    def test_create_game_with_bgg_id_auto_fills_complexity(self, mock_fetch, mock_weight):
+        """Given a bgg_id with weight data, when posting, then complexity is auto-filled from BGG"""
+        mock_fetch.return_value = {
+            'bgg_id': 13,
+            'name': 'Catan',
+            'description': 'Resource management',
+            'min_players': 3,
+            'max_players': 4,
+            'bgg_link': 'https://boardgamegeek.com/boardgame/13/catan',
+            'image_url': 'https://cf.geekdo-images.com/pic123.png',
+        }
+        mock_weight.return_value = Decimal('2.28')
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('game_add'), {
+            'name': 'Catan',
+            'description': 'Resource management',
+            'min_players': 3,
+            'max_players': 4,
+            'bgg_id': 13,
+            'complexity': 'medium',
+        })
+        self.assertEqual(response.status_code, 302)
+        game = BoardGame.objects.get(name='Catan')
+        self.assertEqual(game.bgg_weight, Decimal('2.28'))
+        self.assertEqual(game.complexity, 'medium')
+
+    @patch('club.views.fetch_bgg_weight')
+    @patch('club.views.fetch_bgg_game')
+    def test_create_game_with_bgg_weight_failure_still_saves(self, mock_fetch, mock_weight):
+        """Given a bgg_id where weight fetch fails, when posting, then game is still created"""
+        mock_fetch.return_value = {
+            'bgg_id': 13,
+            'name': 'Catan',
+            'description': 'Resource management',
+            'min_players': 3,
+            'max_players': 4,
+            'bgg_link': 'https://boardgamegeek.com/boardgame/13/catan',
+            'image_url': 'https://cf.geekdo-images.com/pic123.png',
+        }
+        mock_weight.return_value = None
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('game_add'), {
+            'name': 'Catan',
+            'bgg_id': 13,
+            'complexity': 'medium',
+        })
+        self.assertEqual(response.status_code, 302)
+        game = BoardGame.objects.get(name='Catan')
+        self.assertIsNone(game.bgg_weight)
+        self.assertEqual(game.complexity, 'medium')
 
 
 class GameEditWithBggTest(TestCase):
@@ -200,6 +277,7 @@ class GameEditWithBggTest(TestCase):
             'min_players': 3,
             'max_players': 4,
             'bgg_id': 13,
+            'complexity': 'medium',
         })
         self.assertEqual(response.status_code, 302)
         self.game.refresh_from_db()
@@ -247,3 +325,15 @@ class GameDetailWithBggTest(TestCase):
         response = self.client.get(reverse('game_detail', kwargs={'pk': game.pk}))
         self.assertNotContains(response, 'View on BoardGameGeek')
         self.assertNotContains(response, 'boardgamegeek.com')
+
+    def test_game_detail_shows_bgg_weight(self):
+        """Given a game with bgg_weight, when viewing detail, then weight value is shown"""
+        game = BoardGame.objects.create(
+            name='Catan', owner=self.user,
+            bgg_id=13,
+            bgg_weight=Decimal('2.28'),
+            complexity='medium',
+        )
+        self.client.login(username='viewer', password='testpass123')
+        response = self.client.get(reverse('game_detail', kwargs={'pk': game.pk}))
+        self.assertContains(response, '2.28')
