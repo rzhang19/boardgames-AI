@@ -168,6 +168,12 @@ def user_delete(request, pk):
     if user.is_superuser or user.pk == request.user.pk:
         raise PermissionDenied
     if request.method == 'POST':
+        confirm_username = request.POST.get('confirm_username', '').strip()
+        if confirm_username != user.username:
+            return render(request, 'club/manage_users_delete.html', {
+                'target_user': user,
+                'error': True,
+            })
         user.delete()
         return redirect('manage_users')
     return render(request, 'club/manage_users_delete.html', {'target_user': user})

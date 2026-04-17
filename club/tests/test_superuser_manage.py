@@ -338,25 +338,53 @@ class UserDeleteTest(TestCase):
         response = self.client.get(reverse('user_delete', kwargs={'pk': self.target.pk}))
         self.assertEqual(response.status_code, 200)
 
-    def test_site_admin_can_delete_user(self):
-        response = self.client.post(reverse('user_delete', kwargs={'pk': self.target.pk}))
+    def test_delete_page_shows_username_confirmation_prompt(self):
+        response = self.client.get(reverse('user_delete', kwargs={'pk': self.target.pk}))
+        self.assertContains(response, "type the user's username to confirm")
+        self.assertContains(response, '<code>target</code>', html=True)
+
+    def test_site_admin_can_delete_user_with_correct_username(self):
+        response = self.client.post(reverse('user_delete', kwargs={'pk': self.target.pk}), {
+            'confirm_username': 'target',
+        })
         self.assertEqual(response.status_code, 302)
         self.assertFalse(User.objects.filter(pk=self.target.pk).exists())
 
+    def test_delete_fails_with_wrong_username(self):
+        response = self.client.post(reverse('user_delete', kwargs={'pk': self.target.pk}), {
+            'confirm_username': 'wrongname',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(User.objects.filter(pk=self.target.pk).exists())
+        self.assertContains(response, 'Username did not match')
+
+    def test_delete_fails_with_blank_username(self):
+        response = self.client.post(reverse('user_delete', kwargs={'pk': self.target.pk}), {
+            'confirm_username': '',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(User.objects.filter(pk=self.target.pk).exists())
+
     def test_site_admin_cannot_delete_self(self):
-        response = self.client.post(reverse('user_delete', kwargs={'pk': self.site_admin.pk}))
+        response = self.client.post(reverse('user_delete', kwargs={'pk': self.site_admin.pk}), {
+            'confirm_username': 'siteadmin',
+        })
         self.assertEqual(response.status_code, 403)
 
     def test_site_admin_cannot_delete_superuser(self):
         superuser = User.objects.create_superuser(
             username='superuser', password='testpass123'
         )
-        response = self.client.post(reverse('user_delete', kwargs={'pk': superuser.pk}))
+        response = self.client.post(reverse('user_delete', kwargs={'pk': superuser.pk}), {
+            'confirm_username': 'superuser',
+        })
         self.assertEqual(response.status_code, 403)
 
     def test_regular_user_cannot_delete(self):
         self.client.login(username='target', password='testpass123')
-        response = self.client.post(reverse('user_delete', kwargs={'pk': self.site_admin.pk}))
+        response = self.client.post(reverse('user_delete', kwargs={'pk': self.site_admin.pk}), {
+            'confirm_username': 'siteadmin',
+        })
         self.assertEqual(response.status_code, 403)
 
 

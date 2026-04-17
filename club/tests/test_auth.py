@@ -328,3 +328,136 @@ class EmailVerificationLoginBlockTest(TestCase):
         })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse('dashboard'))
+
+
+class UsernameValidationTest(TestCase):
+
+    def test_register_with_letters_numbers_underscore_dash(self):
+        response = self.client.post(reverse('register'), {
+            'username': 'my-user_123',
+            'email': 'valid@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(User.objects.filter(username='my-user_123').exists())
+
+    def test_register_with_username_containing_period(self):
+        response = self.client.post(reverse('register'), {
+            'username': 'user.name',
+            'email': 'period@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(User.objects.filter(username='user.name').exists())
+
+    def test_register_with_username_containing_at_sign_fails(self):
+        response = self.client.post(reverse('register'), {
+            'username': 'user@name',
+            'email': 'atsign@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username='user@name').exists())
+
+    def test_register_with_username_containing_plus_fails(self):
+        response = self.client.post(reverse('register'), {
+            'username': 'user+name',
+            'email': 'plus@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username='user+name').exists())
+
+    def test_register_with_username_starting_with_dash_fails(self):
+        response = self.client.post(reverse('register'), {
+            'username': '-user',
+            'email': 'dash@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username='-user').exists())
+
+    def test_register_with_username_starting_with_period_fails(self):
+        response = self.client.post(reverse('register'), {
+            'username': '.user',
+            'email': 'period@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username='.user').exists())
+
+    def test_register_with_username_starting_with_underscore_fails(self):
+        response = self.client.post(reverse('register'), {
+            'username': '_user',
+            'email': 'underscore@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username='_user').exists())
+
+    def test_register_with_username_ending_with_dash_fails(self):
+        response = self.client.post(reverse('register'), {
+            'username': 'user-',
+            'email': 'dash@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username='user-').exists())
+
+    def test_register_with_username_ending_with_period_fails(self):
+        response = self.client.post(reverse('register'), {
+            'username': 'user.',
+            'email': 'period@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username='user.').exists())
+
+    def test_register_with_username_ending_with_underscore_fails(self):
+        response = self.client.post(reverse('register'), {
+            'username': 'user_',
+            'email': 'underscore@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username='user_').exists())
+
+    def test_register_with_username_containing_spaces_fails(self):
+        response = self.client.post(reverse('register'), {
+            'username': 'user name',
+            'email': 'space@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username='user name').exists())
+
+    def test_register_with_three_char_username_fails(self):
+        response = self.client.post(reverse('register'), {
+            'username': 'abc',
+            'email': 'short@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username='abc').exists())
+
+    def test_register_with_exactly_four_char_username_succeeds(self):
+        response = self.client.post(reverse('register'), {
+            'username': 'abcd',
+            'email': 'four@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(User.objects.filter(username='abcd').exists())

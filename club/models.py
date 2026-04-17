@@ -1,4 +1,5 @@
 from django.contrib.auth.models import AbstractUser, UserManager
+from django.core.validators import RegexValidator
 from django.db import models
 from django.utils import timezone
 
@@ -13,6 +14,20 @@ class ClubUserManager(UserManager):
 
 class User(AbstractUser):
     objects = ClubUserManager()
+
+    username = models.CharField(
+        max_length=150,
+        unique=True,
+        validators=[
+            RegexValidator(
+                regex=r'^[a-zA-Z][a-zA-Z0-9_.\-]{2,}[a-zA-Z0-9]\Z',
+                message='Username must be at least 4 characters and contain only letters, numbers, underscores, periods, and dashes. It must start with a letter and end with a letter or number.',
+            ),
+        ],
+        error_messages={
+            'unique': 'A user with that username already exists.',
+        },
+    )
 
     is_organizer = models.BooleanField(default=False)
     is_site_admin = models.BooleanField(default=False)

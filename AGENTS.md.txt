@@ -28,6 +28,7 @@ Ask first before acting:
 ### When working on new features (ExtraFeatures.txt or Jiras)
 - Always work on one new feature at a time. If explicitly stated, work on each number one at a time. Ask if one number has multiple subpoints, if to work on them separately or together.
 - When complete, at the end of tests completing, mark the line as DONE, as stated in the file instructions (usually near the top of the file)
+- Wehn complete, when summarizing any changes, list any changes that need to be made to files solely in the production environment, e.g. .env or .env.staging files. Since these files' data are private, any changes made in this environment may not reflect in production.
 
 ### Regarding tests:
 - Upon working on a feature, always check if there are existing tests that can be reused instead of creating duplicate tests.
