@@ -53,9 +53,6 @@
         {% for game in games %}
         <tr>
             <td>
-                {% if game.image_url %}
-                <img src="{{ game.image_url }}" alt="{{ game.name }}" class="bgg-thumbnail">
-                {% endif %}
                 <a href="{% url 'game_detail' game.pk %}">{{ game.name }}</a>
             </td>
             <td>

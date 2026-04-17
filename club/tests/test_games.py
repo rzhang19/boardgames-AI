@@ -17,7 +17,8 @@ class GameListViewTest(TestCase):
             username='otherplayer', password='testpass123'
         )
         self.game1 = BoardGame.objects.create(
-            name='Catan', owner=self.user, min_players=3, max_players=4
+            name='Catan', owner=self.user, min_players=3, max_players=4,
+            image_url='https://cf.geekdo-images.com/pic123.png',
         )
         self.game2 = BoardGame.objects.create(
             name='Chess', owner=self.user
@@ -33,6 +34,7 @@ class GameListViewTest(TestCase):
         self.assertContains(response, 'Catan')
         self.assertContains(response, 'Chess')
         self.assertContains(response, 'Risk')
+        self.assertNotContains(response, 'bgg-thumbnail')
 
     def test_game_list_displays_complexity(self):
         self.client.login(username='gameowner', password='testpass123')
