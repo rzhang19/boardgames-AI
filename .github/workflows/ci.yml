@@ -34,5 +34,8 @@ jobs:
           git config --global credential.helper store
           echo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
 
+      - name: Configure git safe directory
+        run: git config --global --add safe.directory /opt/boardgames
+
       - name: Deploy to production
         run: cd ${{ vars.PROJECT_DIR || '/opt/boardgames' }} && bash scripts/deploy.sh production
