@@ -6,20 +6,47 @@
 {% block content %}
 <h1>Board Games</h1>
 
-{% if user.is_authenticated %}
+<div class="sub-tabs">
+    <a href="{% url 'game_list' %}?tab=all" class="sub-tab {% if active_tab == 'all' %}active{% endif %}">All Games</a>
+    <a href="{% url 'game_list' %}?tab=my" class="sub-tab {% if active_tab == 'my' %}active{% endif %}">My Games</a>
+</div>
+
 <div class="action-bar">
     <a href="{% url 'game_add' %}" class="btn btn-primary">Add a Game</a>
 </div>
-{% endif %}
+
+<form method="get" class="filter-bar">
+    <input type="hidden" name="tab" value="{{ active_tab }}">
+    <div class="filter-group">
+        <label for="filter-owner">Owner</label>
+        <select id="filter-owner" name="owner" multiple class="filter-owner-select">
+            <option value="myself" {% if 'myself' in owner_filter %}selected{% endif %}>Myself</option>
+            {% for username in all_owners %}
+            <option value="{{ username }}" {% if username in owner_filter %}selected{% endif %}>{{ username }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="filter-group">
+        <label for="filter-players">Players</label>
+        <input type="number" id="filter-players" name="players" value="{{ players_filter }}" placeholder="e.g. 4" class="filter-players-input">
+    </div>
+    <div class="filter-actions">
+        <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+        <a href="{% url 'game_list' %}?tab={{ active_tab }}" class="btn btn-neutral btn-sm">Clear</a>
+    </div>
+</form>
 
 {% if games %}
 <table>
     <thead>
         <tr>
-            <th>Name</th>
-            <th>Players</th>
+            <th><a href="{% url 'game_list' %}?tab={{ active_tab }}{% if owner_filter %}{% for o in owner_filter %}&owner={{ o }}{% endfor %}{% endif %}{% if players_filter %}&players={{ players_filter }}{% endif %}&sort={% if current_sort == 'name_asc' %}name_desc{% else %}name_asc{% endif %}">Name{% if current_sort == 'name_asc' %} &#9650;{% elif current_sort == 'name_desc' %} &#9660;{% endif %}</a></th>
+            <th>
+                <a href="{% url 'game_list' %}?tab={{ active_tab }}{% if owner_filter %}{% for o in owner_filter %}&owner={{ o }}{% endfor %}{% endif %}{% if players_filter %}&players={{ players_filter }}{% endif %}&sort={% if current_sort == 'min_players_asc' %}min_players_desc{% else %}min_players_asc{% endif %}">Min{% if current_sort == 'min_players_asc' %} &#9650;{% elif current_sort == 'min_players_desc' %} &#9660;{% endif %}</a> /
+                <a href="{% url 'game_list' %}?tab={{ active_tab }}{% if owner_filter %}{% for o in owner_filter %}&owner={{ o }}{% endfor %}{% endif %}{% if players_filter %}&players={{ players_filter }}{% endif %}&sort={% if current_sort == 'max_players_asc' %}max_players_desc{% else %}max_players_asc{% endif %}">Max{% if current_sort == 'max_players_asc' %} &#9650;{% elif current_sort == 'max_players_desc' %} &#9660;{% endif %}</a>
+            </th>
             <th>Complexity</th>
-            <th>Owner</th>
+            <th><a href="{% url 'game_list' %}?tab={{ active_tab }}{% if owner_filter %}{% for o in owner_filter %}&owner={{ o }}{% endfor %}{% endif %}{% if players_filter %}&players={{ players_filter }}{% endif %}&sort={% if current_sort == 'owner_asc' %}owner_desc{% else %}owner_asc{% endif %}">Owner{% if current_sort == 'owner_asc' %} &#9650;{% elif current_sort == 'owner_desc' %} &#9660;{% endif %}</a></th>
         </tr>
     </thead>
     <tbody>
@@ -54,7 +81,12 @@
 </table>
 {% else %}
 <div class="empty-state">
+    {% if active_tab == 'my' %}
+    <p>You currently own no games.</p>
+    <a href="{% url 'game_add' %}" class="btn btn-primary">Click here to add a game</a>
+    {% else %}
     <p>No games have been added yet.</p>
+    {% endif %}
 </div>
 {% endif %}
 {% endblock %}

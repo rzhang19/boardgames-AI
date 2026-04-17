@@ -43,6 +43,10 @@ class EventCreateViewTest(TestCase):
         self.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
+        self.site_admin = User.objects.create_user(
+            username='siteadmin', password='testpass123',
+            is_site_admin=True, is_organizer=False,
+        )
 
     def test_create_page_requires_login(self):
         response = self.client.get(reverse('event_add'))
@@ -175,6 +179,25 @@ class EventCreateViewTest(TestCase):
         description_section = html[html.find('id="id_description"') - 200:html.find('id="id_description"') + 50]
         self.assertNotIn('required-asterisk', description_section)
 
+    def test_site_admin_without_organizer_can_access_create_page(self):
+        self.client.login(username='siteadmin', password='testpass123')
+        response = self.client.get(reverse('event_add'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_site_admin_without_organizer_can_create_event(self):
+        self.client.login(username='siteadmin', password='testpass123')
+        response = self.client.post(reverse('event_add'), {
+            'title': 'Admin Event',
+            'date': '2026-09-01',
+            'time': '18:00',
+            'location': 'Admin HQ',
+            'description': 'Created by site admin',
+        })
+        self.assertEqual(response.status_code, 302)
+        event = Event.objects.get(title='Admin Event')
+        self.assertEqual(event.created_by, self.site_admin)
+        self.assertEqual(event.location, 'Admin HQ')
+
 
 class EventDetailViewTest(TestCase):
 
@@ -276,6 +299,10 @@ class EventEditViewTest(TestCase):
         self.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123',
             is_site_admin=True, is_organizer=True,
+        )
+        self.site_admin_only = User.objects.create_user(
+            username='siteadminonly', password='testpass123',
+            is_site_admin=True, is_organizer=False,
         )
         self.future_date = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
         self.event = Event.objects.create(
@@ -441,6 +468,24 @@ class EventEditViewTest(TestCase):
         asterisk_count = html.count('<span class="required-asterisk">')
         self.assertEqual(asterisk_count, 2)
 
+    def test_site_admin_without_organizer_can_access_edit_page(self):
+        self.client.login(username='siteadminonly', password='testpass123')
+        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+        self.assertEqual(response.status_code, 200)
+
+    def test_site_admin_without_organizer_can_edit_event_via_post(self):
+        self.client.login(username='siteadminonly', password='testpass123')
+        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+            'title': 'Admin Edited Title',
+            'date': self.future_date,
+            'time': '',
+            'location': 'Original Location',
+            'description': 'Original Description',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.title, 'Admin Edited Title')
+
 
 class EventDetailEditButtonTest(TestCase):
 
@@ -450,6 +495,10 @@ class EventDetailEditButtonTest(TestCase):
         )
         self.regular = User.objects.create_user(
             username='regular', password='testpass123'
+        )
+        self.site_admin_only = User.objects.create_user(
+            username='siteadminonly', password='testpass123',
+            is_site_admin=True, is_organizer=False,
         )
         self.event = Event.objects.create(
             title='Test Event',
@@ -472,3 +521,9 @@ class EventDetailEditButtonTest(TestCase):
     def test_anonymous_user_does_not_see_edit_button(self):
         response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
         self.assertNotContains(response, 'Edit Event')
+
+    def test_site_admin_without_organizer_sees_edit_button_on_event_detail(self):
+        self.client.login(username='siteadminonly', password='testpass123')
+        response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
+        self.assertContains(response, reverse('event_edit', kwargs={'pk': self.event.pk}))
+        self.assertContains(response, 'Edit Event')

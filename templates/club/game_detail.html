@@ -42,7 +42,7 @@
     {% endif %}
 
     <div class="btn-group">
-        {% if user == game.owner %}
+        {% if user == game.owner or user.is_superuser %}
         <a href="{% url 'game_edit' game.pk %}" class="btn btn-primary btn-sm">Edit</a>
         <a href="{% url 'game_delete' game.pk %}" class="btn btn-danger btn-sm">Delete</a>
         {% endif %}

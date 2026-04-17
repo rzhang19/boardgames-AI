@@ -13,11 +13,17 @@ class GameListViewTest(TestCase):
         self.user = User.objects.create_user(
             username='gameowner', password='testpass123'
         )
+        self.other_user = User.objects.create_user(
+            username='otherplayer', password='testpass123'
+        )
         self.game1 = BoardGame.objects.create(
             name='Catan', owner=self.user, min_players=3, max_players=4
         )
         self.game2 = BoardGame.objects.create(
             name='Chess', owner=self.user
+        )
+        self.game3 = BoardGame.objects.create(
+            name='Risk', owner=self.other_user, min_players=2, max_players=6
         )
 
     def test_game_list_displays_all_games(self):
@@ -26,6 +32,7 @@ class GameListViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Catan')
         self.assertContains(response, 'Chess')
+        self.assertContains(response, 'Risk')
 
     def test_game_list_displays_complexity(self):
         self.client.login(username='gameowner', password='testpass123')
@@ -37,6 +44,191 @@ class GameListViewTest(TestCase):
         response = self.client.get(reverse('game_list'))
         self.assertEqual(response.status_code, 302)
         self.assertIn('/login/', response.url)
+
+    def test_my_tab_shows_only_current_user_games(self):
+        self.client.login(username='gameowner', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'tab': 'my'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Catan')
+        self.assertContains(response, 'Chess')
+        self.assertNotContains(response, 'Risk')
+
+    def test_my_tab_empty_state_shows_add_game_button(self):
+        User.objects.create_user(username='nogames', password='testpass123')
+        self.client.login(username='nogames', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'tab': 'my'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'You currently own no games.')
+        self.assertContains(response, 'Click here to add a game')
+
+
+class GameListFilterTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='gameowner', password='testpass123'
+        )
+        self.other_user = User.objects.create_user(
+            username='otherplayer', password='testpass123'
+        )
+        self.third_user = User.objects.create_user(
+            username='thirdplayer', password='testpass123'
+        )
+        self.game1 = BoardGame.objects.create(
+            name='Catan', owner=self.user, min_players=3, max_players=4
+        )
+        self.game2 = BoardGame.objects.create(
+            name='Risk', owner=self.other_user, min_players=2, max_players=6
+        )
+        self.game3 = BoardGame.objects.create(
+            name='Go', owner=self.third_user
+        )
+
+    def test_filter_by_myself_shows_only_own_games(self):
+        self.client.login(username='gameowner', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'owner': 'myself'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Catan')
+        self.assertNotContains(response, 'Risk')
+        self.assertNotContains(response, 'Go')
+
+    def test_filter_by_other_user_shows_their_games(self):
+        self.client.login(username='gameowner', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'owner': 'otherplayer'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Risk')
+        self.assertNotContains(response, 'Catan')
+        self.assertNotContains(response, 'Go')
+
+    def test_filter_by_multiple_owners(self):
+        self.client.login(username='gameowner', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'owner': ['gameowner', 'otherplayer']})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Catan')
+        self.assertContains(response, 'Risk')
+        self.assertNotContains(response, 'Go')
+
+
+class GameListPlayerFilterTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='gameowner', password='testpass123'
+        )
+        self.game1 = BoardGame.objects.create(
+            name='Catan', owner=self.user, min_players=3, max_players=4
+        )
+        self.game2 = BoardGame.objects.create(
+            name='Risk', owner=self.user, min_players=2, max_players=6
+        )
+        self.game3 = BoardGame.objects.create(
+            name='Chess', owner=self.user
+        )
+
+    def test_filter_by_player_count_shows_matching_games(self):
+        self.client.login(username='gameowner', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'players': '4'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Catan')
+        self.assertContains(response, 'Risk')
+        self.assertNotContains(response, 'Chess')
+
+    def test_filter_excludes_games_with_null_players(self):
+        self.client.login(username='gameowner', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'players': '3'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Catan')
+        self.assertNotContains(response, 'Chess')
+
+    def test_invalid_player_count_is_ignored(self):
+        self.client.login(username='gameowner', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'players': 'abc'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Catan')
+        self.assertContains(response, 'Risk')
+        self.assertContains(response, 'Chess')
+
+
+class GameListSortTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='alice', password='testpass123'
+        )
+        self.other_user = User.objects.create_user(
+            username='bob', password='testpass123'
+        )
+        self.game1 = BoardGame.objects.create(
+            name='Catan', owner=self.user, min_players=3, max_players=4
+        )
+        self.game2 = BoardGame.objects.create(
+            name='Azul', owner=self.other_user, min_players=2, max_players=4
+        )
+        self.game3 = BoardGame.objects.create(
+            name='Risk', owner=self.user, min_players=2, max_players=6
+        )
+
+    def test_sort_by_name_ascending(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'sort': 'name_asc'})
+        self.assertEqual(response.status_code, 200)
+        names = [g.name for g in response.context['games']]
+        self.assertEqual(names, sorted(names))
+
+    def test_sort_by_name_descending(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'sort': 'name_desc'})
+        self.assertEqual(response.status_code, 200)
+        names = [g.name for g in response.context['games']]
+        self.assertEqual(names, sorted(names, reverse=True))
+
+    def test_sort_by_min_players_ascending(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'sort': 'min_players_asc'})
+        self.assertEqual(response.status_code, 200)
+        games = list(response.context['games'])
+        min_players = [g.min_players or 0 for g in games]
+        self.assertEqual(min_players, sorted(min_players))
+
+    def test_sort_by_min_players_descending(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'sort': 'min_players_desc'})
+        self.assertEqual(response.status_code, 200)
+        games = list(response.context['games'])
+        min_players = [g.min_players or 0 for g in games]
+        self.assertEqual(min_players, sorted(min_players, reverse=True))
+
+    def test_sort_by_max_players_ascending(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'sort': 'max_players_asc'})
+        self.assertEqual(response.status_code, 200)
+        games = list(response.context['games'])
+        max_players = [g.max_players or 0 for g in games]
+        self.assertEqual(max_players, sorted(max_players))
+
+    def test_sort_by_max_players_descending(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'sort': 'max_players_desc'})
+        self.assertEqual(response.status_code, 200)
+        games = list(response.context['games'])
+        max_players = [g.max_players or 0 for g in games]
+        self.assertEqual(max_players, sorted(max_players, reverse=True))
+
+    def test_sort_by_owner_ascending(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'sort': 'owner_asc'})
+        self.assertEqual(response.status_code, 200)
+        games = list(response.context['games'])
+        owners = [g.owner.username for g in games]
+        self.assertEqual(owners, sorted(owners))
+
+    def test_sort_by_owner_descending(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'sort': 'owner_desc'})
+        self.assertEqual(response.status_code, 200)
+        games = list(response.context['games'])
+        owners = [g.owner.username for g in games]
+        self.assertEqual(owners, sorted(owners, reverse=True))
 
 
 class GameCreateViewTest(TestCase):
@@ -177,6 +369,15 @@ class GameDetailViewTest(TestCase):
         response = self.client.get(reverse('game_detail', kwargs={'pk': self.game.pk}))
         self.assertContains(response, 'Medium')
 
+    def test_superuser_sees_edit_and_delete_links_on_others_game(self):
+        superuser = User.objects.create_superuser(
+            username='admin', password='adminpass123'
+        )
+        self.client.login(username='admin', password='adminpass123')
+        response = self.client.get(reverse('game_detail', kwargs={'pk': self.game.pk}))
+        self.assertContains(response, reverse('game_edit', kwargs={'pk': self.game.pk}))
+        self.assertContains(response, reverse('game_delete', kwargs={'pk': self.game.pk}))
+
 
 class GameUpdateViewTest(TestCase):
 
@@ -241,6 +442,41 @@ class GameUpdateViewTest(TestCase):
         self.game.refresh_from_db()
         self.assertEqual(self.game.complexity, 'medium')
 
+    def test_superuser_can_access_edit_page_for_others_game(self):
+        superuser = User.objects.create_superuser(
+            username='admin', password='adminpass123'
+        )
+        self.client.login(username='admin', password='adminpass123')
+        response = self.client.get(reverse('game_edit', kwargs={'pk': self.game.pk}))
+        self.assertEqual(response.status_code, 200)
+
+    def test_superuser_can_edit_others_game(self):
+        superuser = User.objects.create_superuser(
+            username='admin', password='adminpass123'
+        )
+        self.client.login(username='admin', password='adminpass123')
+        response = self.client.post(reverse('game_edit', kwargs={'pk': self.game.pk}), {
+            'name': 'Catan: Super Edition',
+            'description': 'Admin edited',
+            'min_players': 3,
+            'max_players': 5,
+            'complexity': 'heavy',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.name, 'Catan: Super Edition')
+        self.assertEqual(self.game.description, 'Admin edited')
+
+    def test_superuser_edit_of_own_game_skips_confirmation(self):
+        superuser = User.objects.create_superuser(
+            username='admin', password='adminpass123'
+        )
+        own_game = BoardGame.objects.create(name='Admin Game', owner=superuser)
+        self.client.login(username='admin', password='adminpass123')
+        response = self.client.get(reverse('game_edit', kwargs={'pk': own_game.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Edit Game')
+
 
 class GameDeleteViewTest(TestCase):
 
@@ -282,3 +518,28 @@ class GameDeleteViewTest(TestCase):
         response = self.client.post(reverse('game_delete', kwargs={'pk': self.game.pk}))
         self.assertEqual(response.status_code, 403)
         self.assertTrue(BoardGame.objects.filter(pk=self.game.pk).exists())
+
+    def test_superuser_can_access_delete_page_for_others_game(self):
+        User.objects.create_superuser(
+            username='admin', password='adminpass123'
+        )
+        self.client.login(username='admin', password='adminpass123')
+        response = self.client.get(reverse('game_delete', kwargs={'pk': self.game.pk}))
+        self.assertEqual(response.status_code, 200)
+
+    def test_superuser_can_delete_others_game(self):
+        User.objects.create_superuser(
+            username='admin', password='adminpass123'
+        )
+        self.client.login(username='admin', password='adminpass123')
+        response = self.client.post(reverse('game_delete', kwargs={'pk': self.game.pk}))
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(BoardGame.objects.filter(pk=self.game.pk).exists())
+
+    def test_superuser_delete_page_shows_owner_warning(self):
+        User.objects.create_superuser(
+            username='admin', password='adminpass123'
+        )
+        self.client.login(username='admin', password='adminpass123')
+        response = self.client.get(reverse('game_delete', kwargs={'pk': self.game.pk}))
+        self.assertContains(response, 'owner')

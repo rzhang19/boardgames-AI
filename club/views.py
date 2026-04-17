@@ -6,6 +6,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import PermissionDenied
 from django.core.mail import send_mail
 from django.core.signing import TimestampSigner
+from django.db.models import Q
 from django.forms import formset_factory, modelformset_factory
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -370,8 +371,59 @@ def bgg_import(request, bgg_id):
 def game_list(request):
     if not request.user.is_authenticated:
         return redirect('/login/')
+
     games = BoardGame.objects.select_related('owner').all()
-    return render(request, 'club/game_list.html', {'games': games})
+    active_tab = request.GET.get('tab', 'all')
+
+    if active_tab == 'my':
+        games = games.filter(owner=request.user)
+
+    owner_filter = request.GET.getlist('owner')
+    if owner_filter:
+        resolved_owners = []
+        for o in owner_filter:
+            if o == 'myself':
+                resolved_owners.append(request.user.username)
+            else:
+                resolved_owners.append(o)
+        if resolved_owners:
+            games = games.filter(owner__username__in=resolved_owners)
+
+    players_param = request.GET.get('players', '')
+    if players_param:
+        try:
+            player_count = int(players_param)
+            games = games.filter(
+                Q(min_players__isnull=False, max_players__isnull=False,
+                  min_players__lte=player_count, max_players__gte=player_count)
+            )
+        except (ValueError, TypeError):
+            pass
+
+    sort_param = request.GET.get('sort', 'name_asc')
+    sort_map = {
+        'name_asc': 'name',
+        'name_desc': '-name',
+        'min_players_asc': 'min_players',
+        'min_players_desc': '-min_players',
+        'max_players_asc': 'max_players',
+        'max_players_desc': '-max_players',
+        'owner_asc': 'owner__username',
+        'owner_desc': '-owner__username',
+    }
+    order_by = sort_map.get(sort_param, 'name')
+    games = games.order_by(order_by)
+
+    all_owners = User.objects.exclude(pk=request.user.pk).values_list('username', flat=True)
+
+    return render(request, 'club/game_list.html', {
+        'games': games,
+        'active_tab': active_tab,
+        'all_owners': all_owners,
+        'current_sort': sort_param,
+        'owner_filter': owner_filter,
+        'players_filter': players_param,
+    })
 
 
 def game_add(request):
@@ -413,7 +465,10 @@ def game_edit(request, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
     game = get_object_or_404(BoardGame, pk=pk)
-    if game.owner != request.user:
+    is_superuser_editing_others = (
+        request.user.is_superuser and game.owner != request.user
+    )
+    if game.owner != request.user and not is_superuser_editing_others:
         raise PermissionDenied
     if request.method == 'POST':
         form = BoardGameForm(request.POST, instance=game)
@@ -433,19 +488,27 @@ def game_edit(request, pk):
             return redirect('game_detail', pk=game.pk)
     else:
         form = BoardGameForm(instance=game)
-    return render(request, 'club/game_form.html', {'form': form, 'action': 'Edit'})
+    return render(request, 'club/game_form.html', {
+        'form': form,
+        'action': 'Edit',
+        'is_superuser_editing_others': is_superuser_editing_others,
+        'game': game,
+    })
 
 
 def game_delete(request, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
     game = get_object_or_404(BoardGame, pk=pk)
-    if game.owner != request.user:
+    if game.owner != request.user and not request.user.is_superuser:
         raise PermissionDenied
     if request.method == 'POST':
         game.delete()
         return redirect('game_list')
-    return render(request, 'club/game_confirm_delete.html', {'game': game})
+    return render(request, 'club/game_confirm_delete.html', {
+        'game': game,
+        'is_superuser_deleting_others': request.user.is_superuser and game.owner != request.user,
+    })
 
 
 def event_list(request):
@@ -459,7 +522,7 @@ def event_list(request):
 def event_add(request):
     if not request.user.is_authenticated:
         return redirect('/login/')
-    if not request.user.is_organizer:
+    if not (request.user.is_organizer or request.user.is_site_admin):
         raise PermissionDenied
     if request.method == 'POST':
         form = EventForm(request.POST)
@@ -478,7 +541,7 @@ def event_add(request):
 def event_edit(request, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
-    if not request.user.is_organizer:
+    if not (request.user.is_organizer or request.user.is_site_admin):
         raise PermissionDenied
     event = get_object_or_404(Event, pk=pk)
     old_date = event.date
@@ -618,7 +681,7 @@ def event_results(request, pk):
 def event_toggle_visibility(request, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
-    if not request.user.is_organizer:
+    if not (request.user.is_organizer or request.user.is_site_admin):
         raise PermissionDenied
     event = get_object_or_404(Event, pk=pk)
     event.show_individual_votes = not event.show_individual_votes
@@ -629,7 +692,7 @@ def event_toggle_visibility(request, pk):
 def event_toggle_voting(request, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
-    if not request.user.is_organizer:
+    if not (request.user.is_organizer or request.user.is_site_admin):
         raise PermissionDenied
     event = get_object_or_404(Event, pk=pk)
     event.sync_voting_status()

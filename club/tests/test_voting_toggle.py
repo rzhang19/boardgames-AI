@@ -225,6 +225,10 @@ class ToggleVotingViewTest(TestCase):
         self.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
+        self.site_admin_only = User.objects.create_user(
+            username='siteadminonly', password='testpass123',
+            is_site_admin=True, is_organizer=False,
+        )
         self.event = Event.objects.create(
             title='Toggle Event',
             date=timezone.now() + timedelta(days=7),
@@ -315,6 +319,15 @@ class ToggleVotingViewTest(TestCase):
         )
         past_event.refresh_from_db()
         self.assertFalse(past_event.voting_open)
+
+    def test_site_admin_without_organizer_can_toggle_voting(self):
+        self.client.login(username='siteadminonly', password='testpass123')
+        response = self.client.post(
+            reverse('event_toggle_voting', kwargs={'pk': self.event.pk})
+        )
+        self.assertEqual(response.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertFalse(self.event.voting_open)
 
 
 class VoteViewWhenVotingClosedTest(TestCase):

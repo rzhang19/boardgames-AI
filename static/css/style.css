@@ -686,3 +686,85 @@ li {
 .bgg-suggestion {
     margin-bottom: 12px;
 }
+
+.sub-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--border);
+}
+
+.sub-tab {
+    padding: 10px 24px;
+    font-size: 0.938rem;
+    font-weight: 600;
+    color: var(--text-light);
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.sub-tab:hover {
+    color: var(--primary);
+    text-decoration: none;
+    border-bottom-color: var(--primary);
+}
+
+.sub-tab.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+
+.filter-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.filter-bar .filter-group {
+    margin-bottom: 0;
+}
+
+.filter-bar label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.813rem;
+    color: var(--text-light);
+    margin-bottom: 4px;
+}
+
+.filter-owner-select {
+    min-width: 180px;
+    min-height: 36px;
+    padding: 6px 10px;
+    font-size: 0.875rem;
+}
+
+.filter-players-input {
+    width: 100px !important;
+    padding: 6px 10px;
+    font-size: 0.875rem;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    margin-bottom: 0;
+}
+
+thead th a {
+    color: #fff;
+    text-decoration: none;
+}
+
+thead th a:hover {
+    text-decoration: underline;
+}
