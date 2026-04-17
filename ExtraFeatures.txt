@@ -23,15 +23,15 @@ AGENT: if any of these lines are marked with a "(DONE)" in between the number an
 14. (DONE) Add an end voting (and resume voting) button to events (in the future only), only by organizer level or higher (admins and superusers).
 15. (DONE) Allow admin to set minimum time between end voting and event time start. End voting permanently ends at this time, and resume voting cannot be done after this.
 16. (DONE) For users, separate out all games from all users and games for the logged in user.
-16a. Do this separation by including filters for all columns of the table:
-16aa. Allow filter of the owner column, by selecting a specific user or multiple users. Include a default "Myself" option as the option that appears first which will be the currently logged in user, and exclude that user from the rest of the list.
-16ab. Allow filter of the players (count) column, by allowing a user to input a single, specific integer value, and allowing any game that allows that many players (between min and max players, inclusive) to be shown.
-16b. Allow sorting of the columns on the table:
-16ba. Sort by name, ascending or descending.
-16bb. Sort by players, either minimum players ascending or descending, and maximum players ascending or descending.
-16bc. Sort by user name
-16c. Add a new "My Games" tab between the "Games" and "Events" tabs on the banner, that shows only the games of the current user. This tab should be visible only when logged in as a user.
-16ca. The My Games page should show, if the user currently has no owned games in the system: "You currently own no games." in text, with a button below: "Click here to add a game" and format this button like the other buttons on the site. This button should lead to the "Add Game" page that was also accessible from the "Games" list button.
+16a. (DONE) Do this separation by including filters for all columns of the table:
+16aa. (DONE) Allow filter of the owner column, by selecting a specific user or multiple users. Include a default "Myself" option as the option that appears first which will be the currently logged in user, and exclude that user from the rest of the list.
+16ab. (DONE) Allow filter of the players (count) column, by allowing a user to input a single, specific integer value, and allowing any game that allows that many players (between min and max players, inclusive) to be shown.
+16b. (DONE) Allow sorting of the columns on the table:
+16ba. (DONE) Sort by name, ascending or descending.
+16bb. (DONE) Sort by players, either minimum players ascending or descending, and maximum players ascending or descending.
+16bc. (DONE) Sort by user name
+16c. (DONE) Add a new "My Games" tab between the "Games" and "Events" tabs on the banner, that shows only the games of the current user. This tab should be visible only when logged in as a user.
+16ca. (DONE) The My Games page should show, if the user currently has no owned games in the system: "You currently own no games." in text, with a button below: "Click here to add a game" and format this button like the other buttons on the site. This button should lead to the "Add Game" page that was also accessible from the "Games" list button.
 16d. Allow editing and deleting games of the current user by the current user. Also allow editing anyone's game for the superuser, with a confirmation page.
 17. (DONE) Add a complexity category when adding/editing a game. Details to be confirmed later, DO NOT ADD THIS FEATURE YET, it needs to be flushed out.
 18. When adding or editing a game, and using the BGG API feature:
