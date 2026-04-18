@@ -56,6 +56,9 @@ docker compose build "$SERVICE"
 echo "Running migrations..."
 docker compose run --rm "$SERVICE" python manage.py migrate --noinput
 
+echo "Seeding default verified icons..."
+docker compose run --rm "$SERVICE" python manage.py seed_verified_icons
+
 echo "Starting ${SERVICE}..."
 docker compose up -d --no-deps --force-recreate "$SERVICE"
 

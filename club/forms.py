@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.utils import timezone
 
-from .models import BoardGame, Event, Vote
+from .models import BoardGame, Event, VerifiedIcon, Vote
 from .timezone_utils import get_timezone_choices, is_valid_timezone
 
 User = get_user_model()
@@ -158,12 +158,30 @@ class SettingsForm(forms.Form):
         choices=get_timezone_choices,
         initial='UTC',
     )
+    verified_icon = forms.IntegerField(required=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['verified_icon'].widget = forms.Select(
+            choices=[('', 'Default (checkmark)')] + [
+                (icon.pk, icon.name) for icon in VerifiedIcon.objects.all().order_by('name')
+            ],
+        )
 
     def clean_timezone(self):
         tz = self.cleaned_data['timezone']
         if not is_valid_timezone(tz):
             raise forms.ValidationError('Invalid timezone.')
         return tz
+
+    def clean_verified_icon(self):
+        pk = self.cleaned_data.get('verified_icon')
+        if not pk:
+            return None
+        try:
+            return VerifiedIcon.objects.get(pk=pk)
+        except VerifiedIcon.DoesNotExist:
+            raise forms.ValidationError('Invalid icon selection.')
 
 
 class BetaAccessForm(forms.Form):

@@ -18,7 +18,7 @@ from .forms import (
     BetaAccessForm, BoardGameForm, EventForm, SetPasswordForm, SettingsForm,
     UserAddForm, UserManageForm, RegistrationForm, VoteForm,
 )
-from .models import BoardGame, Event, EventAttendance, Vote
+from .models import BoardGame, Event, EventAttendance, VerifiedIcon, Vote
 from .timezone_utils import is_valid_timezone
 
 User = get_user_model()
@@ -252,10 +252,14 @@ def user_settings(request):
         if form.is_valid():
             new_email = form.cleaned_data['email']
             new_tz = form.cleaned_data['timezone']
+            new_icon = form.cleaned_data.get('verified_icon')
             user = request.user
 
             email_changed = new_email != user.email
             tz_changed = new_tz != user.timezone
+            old_icon_id = user.verified_icon_id
+            new_icon_id = new_icon.pk if new_icon else None
+            icon_changed = old_icon_id != new_icon_id
 
             if email_changed:
                 user.email = new_email
@@ -268,7 +272,10 @@ def user_settings(request):
                 user.timezone = new_tz
                 user.timezone_detected = False
 
-            if email_changed or tz_changed:
+            if user.email_verified:
+                user.verified_icon = new_icon
+
+            if email_changed or tz_changed or icon_changed:
                 user.save()
                 if email_changed and new_email:
                     signer = TimestampSigner()
@@ -285,9 +292,13 @@ def user_settings(request):
         form = SettingsForm(initial={
             'email': request.user.email,
             'timezone': request.user.timezone or 'UTC',
+            'verified_icon': request.user.verified_icon_id or '',
         })
 
-    return render(request, 'club/settings.html', {'form': form})
+    return render(request, 'club/settings.html', {
+        'form': form,
+        'verified_icons': VerifiedIcon.objects.all().order_by('name'),
+    })
 
 
 def save_timezone(request):

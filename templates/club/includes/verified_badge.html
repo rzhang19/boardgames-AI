@@ -1,1 +1,1 @@
-{% if email_verified %}<span class="verified-badge" title="Verified account">&#10003;</span>{% endif %}
+{% if email_verified %}<span class="verified-badge" title="Verified User">{% if verified_icon %}<img src="{{ verified_icon.image.url }}" alt="{{ verified_icon.name }}" class="verified-badge-icon">{% else %}&#10003;{% endif %}</span>{% endif %}

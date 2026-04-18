@@ -1,10 +1,16 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import User, BoardGame, Event, EventAttendance, Vote
+from .models import User, BoardGame, Event, EventAttendance, VerifiedIcon, Vote
 
 
 admin.site.register(User, UserAdmin)
+
+
+@admin.register(VerifiedIcon)
+class VerifiedIconAdmin(admin.ModelAdmin):
+    list_display = ('name', 'created_at')
+    search_fields = ('name',)
 
 
 @admin.register(BoardGame)

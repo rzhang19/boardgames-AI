@@ -569,6 +569,82 @@ li {
     font-weight: 700;
 }
 
+.verified-badge-icon {
+    width: 1em;
+    height: 1em;
+    vertical-align: middle;
+    margin-left: 1px;
+}
+
+.icon-picker-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.icon-picker-option {
+    cursor: pointer;
+    text-align: center;
+}
+
+.icon-picker-option input[type="radio"] {
+    display: none;
+}
+
+.icon-picker-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 12px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    transition: all 0.15s ease;
+    min-width: 70px;
+}
+
+.icon-picker-option input[type="radio"]:checked + .icon-picker-item {
+    border-color: var(--primary);
+    background: var(--primary-bg, #eef2ff);
+}
+
+.icon-picker-preview {
+    width: 28px;
+    height: 28px;
+    margin-bottom: 4px;
+    color: var(--primary);
+}
+
+.default-checkmark {
+    font-size: 1.4em;
+    line-height: 28px;
+    font-weight: 700;
+}
+
+.icon-picker-name {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.icon-picker-disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.verified-icon-picker.disabled .icon-picker-grid {
+    opacity: 0.5;
+}
+
+@media (max-width: 600px) {
+    .icon-picker-grid {
+        gap: 8px;
+    }
+    .icon-picker-item {
+        padding: 6px 8px;
+        min-width: 60px;
+    }
+}
+
 .form-field {
     margin-bottom: 16px;
 }

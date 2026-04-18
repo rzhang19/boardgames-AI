@@ -12,6 +12,15 @@ class ClubUserManager(UserManager):
         return super().create_superuser(username, email, password, **extra_fields)
 
 
+class VerifiedIcon(models.Model):
+    name = models.CharField(max_length=100)
+    image = models.FileField(upload_to='verified_icons/')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+
 class User(AbstractUser):
     objects = ClubUserManager()
 
@@ -34,6 +43,10 @@ class User(AbstractUser):
     email_verified = models.BooleanField(default=False)
     timezone = models.CharField(max_length=63, default='UTC')
     timezone_detected = models.BooleanField(default=False)
+    verified_icon = models.ForeignKey(
+        VerifiedIcon, on_delete=models.SET_NULL,
+        null=True, blank=True,
+    )
 
     def __str__(self):
         return self.username

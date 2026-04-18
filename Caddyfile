@@ -1,8 +1,16 @@
 {$DOMAIN} {
+	handle /media/* {
+		root * /app
+		file_server
+	}
 	reverse_proxy web:8000
 }
 
 {$STAGING_DOMAIN} {
+	handle /media/* {
+		root * /app
+		file_server
+	}
 	basicauth * {
 		{$BASIC_AUTH_USER} {$BASIC_AUTH_PASSWORD_HASH}
 	}
