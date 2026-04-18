@@ -12,9 +12,8 @@
         <div class="field-group">
             <h2>Event Details</h2>
             <div class="form-grid">
-                <label for="id_title">Title:</label>
+                <label for="id_title">Title:<span class="required-asterisk">*</span></label>
                 <div class="input-cell">
-                    <span class="required-asterisk">*</span>
                     {{ form.title }}
                 </div>
                 {% if form.title.errors %}
@@ -36,9 +35,8 @@
         <div class="field-group">
             <h2>Date &amp; Time</h2>
             <div class="form-grid">
-                <label for="id_date">Date:</label>
+                <label for="id_date">Date:<span class="required-asterisk">*</span></label>
                 <div class="input-cell">
-                    <span class="required-asterisk">*</span>
                     {{ form.date }}
                 </div>
                 {% if form.date.errors %}
