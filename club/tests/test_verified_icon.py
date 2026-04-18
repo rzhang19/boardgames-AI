@@ -252,3 +252,136 @@ class VerifiedBadgeCustomIconRenderingTest(TestCase):
         self.client.login(username='admin', password='testpass123')
         response = self.client.get(reverse('manage_users'))
         self.assertContains(response, 'verified-badge')
+
+
+class IconManagementAccessTest(TestCase):
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='admin', password='testpass123',
+            is_site_admin=True, email_verified=True,
+        )
+        self.regular = User.objects.create_user(
+            username='regular', password='testpass123',
+            email_verified=True,
+        )
+        self.client.login(username='admin', password='testpass123')
+
+    def test_admin_sees_icon_management_section(self):
+        response = self.client.get(reverse('user_settings'))
+        self.assertContains(response, 'manage-verified-icons')
+
+    def test_regular_user_does_not_see_icon_management_section(self):
+        self.client.login(username='regular', password='testpass123')
+        response = self.client.get(reverse('user_settings'))
+        self.assertNotContains(response, 'manage-verified-icons')
+
+    def test_admin_sees_existing_icons_in_management(self):
+        VerifiedIcon.objects.create(name='Dice', image=_create_svg('dice.svg'))
+        response = self.client.get(reverse('user_settings'))
+        self.assertContains(response, 'Dice')
+        self.assertContains(response, 'delete-icon')
+
+
+class IconManagementAddTest(TestCase):
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='admin', password='testpass123',
+            is_site_admin=True, email_verified=True,
+        )
+        self.client.login(username='admin', password='testpass123')
+
+    def test_add_icon_success(self):
+        response = self.client.post(reverse('add_verified_icon'), {
+            'name': 'Trophy',
+            'image': _create_svg('trophy.svg'),
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(VerifiedIcon.objects.filter(name='Trophy').exists())
+
+    def test_add_icon_without_name_fails(self):
+        response = self.client.post(reverse('add_verified_icon'), {
+            'name': '',
+            'image': _create_svg('trophy.svg'),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(VerifiedIcon.objects.exists())
+
+    def test_add_icon_without_image_fails(self):
+        response = self.client.post(reverse('add_verified_icon'), {
+            'name': 'Trophy',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(VerifiedIcon.objects.exists())
+
+    def test_add_icon_duplicate_name_fails(self):
+        VerifiedIcon.objects.create(name='Dice', image=_create_svg('dice.svg'))
+        response = self.client.post(reverse('add_verified_icon'), {
+            'name': 'Dice',
+            'image': _create_svg('dice2.svg'),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(VerifiedIcon.objects.count(), 1)
+
+    def test_regular_user_cannot_add_icon(self):
+        regular = User.objects.create_user(
+            username='regular', password='testpass123',
+            email_verified=True,
+        )
+        self.client.login(username='regular', password='testpass123')
+        response = self.client.post(reverse('add_verified_icon'), {
+            'name': 'Trophy',
+            'image': _create_svg('trophy.svg'),
+        })
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(VerifiedIcon.objects.exists())
+
+
+class IconManagementDeleteTest(TestCase):
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='admin', password='testpass123',
+            is_site_admin=True, email_verified=True,
+        )
+        self.icon = VerifiedIcon.objects.create(
+            name='Dice', image=_create_svg('dice.svg'),
+        )
+        self.client.login(username='admin', password='testpass123')
+
+    def test_delete_unused_icon_success(self):
+        response = self.client.post(
+            reverse('delete_verified_icon', kwargs={'pk': self.icon.pk})
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(VerifiedIcon.objects.filter(pk=self.icon.pk).exists())
+
+    def test_delete_icon_in_use_fails(self):
+        User.objects.create_user(
+            username='iconuser', password='testpass123',
+            email_verified=True, verified_icon=self.icon,
+        )
+        response = self.client.post(
+            reverse('delete_verified_icon', kwargs={'pk': self.icon.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(VerifiedIcon.objects.filter(pk=self.icon.pk).exists())
+
+    def test_delete_nonexistent_icon_404(self):
+        response = self.client.post(
+            reverse('delete_verified_icon', kwargs={'pk': 99999})
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_regular_user_cannot_delete_icon(self):
+        regular = User.objects.create_user(
+            username='regular', password='testpass123',
+            email_verified=True,
+        )
+        self.client.login(username='regular', password='testpass123')
+        response = self.client.post(
+            reverse('delete_verified_icon', kwargs={'pk': self.icon.pk})
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(VerifiedIcon.objects.filter(pk=self.icon.pk).exists())

@@ -188,3 +188,15 @@ class BetaAccessForm(forms.Form):
     access_code = forms.CharField(
         widget=forms.PasswordInput(attrs={'autofocus': True}),
     )
+
+
+class VerifiedIconForm(forms.ModelForm):
+    class Meta:
+        model = VerifiedIcon
+        fields = ['name', 'image']
+
+    def clean_name(self):
+        name = self.cleaned_data.get('name')
+        if name and VerifiedIcon.objects.filter(name=name).exists():
+            raise forms.ValidationError('An icon with this name already exists.')
+        return name

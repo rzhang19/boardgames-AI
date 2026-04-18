@@ -16,7 +16,7 @@ from .bgg import fetch_bgg_game, fetch_bgg_weight, search_bgg, weight_to_complex
 from .borda import calculate_borda_scores
 from .forms import (
     BetaAccessForm, BoardGameForm, EventForm, SetPasswordForm, SettingsForm,
-    UserAddForm, UserManageForm, RegistrationForm, VoteForm,
+    UserAddForm, UserManageForm, RegistrationForm, VerifiedIconForm, VoteForm,
 )
 from .models import BoardGame, Event, EventAttendance, VerifiedIcon, Vote
 from .timezone_utils import is_valid_timezone
@@ -298,6 +298,7 @@ def user_settings(request):
     return render(request, 'club/settings.html', {
         'form': form,
         'verified_icons': VerifiedIcon.objects.all().order_by('name'),
+        'icon_manage_form': VerifiedIconForm(),
     })
 
 
@@ -765,3 +766,54 @@ def event_rsvp(request, pk):
     else:
         EventAttendance.objects.create(user=request.user, event=event)
     return redirect('event_detail', pk=event.pk)
+
+
+def _admin_required(request):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    if not (request.user.is_superuser or request.user.is_site_admin):
+        raise PermissionDenied
+    return None
+
+
+def add_verified_icon(request):
+    redirect_resp = _admin_required(request)
+    if redirect_resp:
+        return redirect_resp
+    if request.method == 'POST':
+        form = VerifiedIconForm(request.POST, request.FILES)
+        if form.is_valid():
+            form.save()
+            return redirect('user_settings')
+        return render(request, 'club/settings.html', {
+            'form': SettingsForm(initial={
+                'email': request.user.email,
+                'timezone': request.user.timezone or 'UTC',
+                'verified_icon': request.user.verified_icon_id or '',
+            }),
+            'verified_icons': VerifiedIcon.objects.all().order_by('name'),
+            'icon_manage_form': form,
+        })
+    return redirect('user_settings')
+
+
+def delete_verified_icon(request, pk):
+    redirect_resp = _admin_required(request)
+    if redirect_resp:
+        return redirect_resp
+    icon = get_object_or_404(VerifiedIcon, pk=pk)
+    if request.method == 'POST':
+        user_count = User.objects.filter(verified_icon=icon).count()
+        if user_count > 0:
+            return render(request, 'club/settings.html', {
+                'form': SettingsForm(initial={
+                    'email': request.user.email,
+                    'timezone': request.user.timezone or 'UTC',
+                    'verified_icon': request.user.verified_icon_id or '',
+                }),
+                'verified_icons': VerifiedIcon.objects.all().order_by('name'),
+                'icon_delete_error': f'Cannot delete "{icon.name}" — {user_count} user{"s" if user_count != 1 else ""} {"are" if user_count != 1 else "is"} using this icon.',
+                'icon_manage_form': VerifiedIconForm(),
+            })
+        icon.delete()
+    return redirect('user_settings')
