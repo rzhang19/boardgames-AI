@@ -658,38 +658,37 @@ li {
     margin-bottom: 16px;
 }
 
-.icon-manage-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
+.icon-manage-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 2px 16px;
     margin-bottom: 20px;
 }
 
 .icon-manage-item {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    padding: 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    position: relative;
-    min-width: 80px;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
 }
 
 .icon-manage-preview {
-    width: 36px;
-    height: 36px;
-    margin-bottom: 6px;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
 }
 
 .icon-manage-name {
-    font-size: 0.8rem;
-    color: var(--text-light);
-    margin-bottom: 6px;
+    font-size: 0.875rem;
+    flex-grow: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .icon-delete-form {
-    display: inline;
+    flex-shrink: 0;
 }
 
 .icon-delete-form .btn-sm {
@@ -726,9 +725,6 @@ li {
 }
 
 @media (max-width: 600px) {
-    .icon-manage-grid {
-        gap: 8px;
-    }
     .icon-upload-form .form-row {
         flex-direction: column;
         align-items: stretch;
