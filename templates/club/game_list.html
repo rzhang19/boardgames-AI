@@ -71,7 +71,7 @@
                     -
                 {% endif %}
             </td>
-            <td data-label="Owner">{{ game.owner.username }}{% verified_badge game.owner %}</td>
+            <td data-label="Owner"><a href="{% url 'public_profile' game.owner.username %}">{{ game.owner.username }}</a>{% verified_badge game.owner %}</td>
         </tr>
         {% endfor %}
     </tbody>

@@ -22,6 +22,7 @@ from .forms import (
 from .models import BoardGame, Event, EventAttendance, Notification, VerifiedIcon, Vote
 from .notifications import generate_missing_complexity_notifications
 from .timezone_utils import is_valid_timezone
+from .utils import resize_profile_picture
 
 User = get_user_model()
 
@@ -252,16 +253,48 @@ def dashboard(request):
     return render(request, 'club/dashboard.html')
 
 
+def public_profile(request, username):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    profile_user = get_object_or_404(User, username=username)
+    is_own = request.user == profile_user
+
+    context = {
+        'profile_user': profile_user,
+        'is_own': is_own,
+    }
+
+    if is_own or profile_user.show_games:
+        context['games'] = BoardGame.objects.filter(
+            owner=profile_user,
+        ).select_related('owner')
+
+    if is_own or profile_user.show_events:
+        attendances = EventAttendance.objects.filter(
+            user=profile_user,
+        ).select_related('event', 'event__created_by')
+        context['attendances'] = attendances
+
+    context['show_date_joined'] = is_own or profile_user.show_date_joined
+
+    return render(request, 'club/profile.html', context)
+
+
 def user_settings(request):
     if not request.user.is_authenticated:
         return redirect('/login/')
 
     if request.method == 'POST':
-        form = SettingsForm(request.POST)
+        form = SettingsForm(request.POST, request.FILES)
         if form.is_valid():
             new_email = form.cleaned_data['email']
             new_tz = form.cleaned_data['timezone']
             new_icon = form.cleaned_data.get('verified_icon')
+            new_bio = form.cleaned_data.get('bio', '')
+            new_picture = form.cleaned_data.get('profile_picture')
+            new_show_games = form.cleaned_data.get('show_games', True)
+            new_show_events = form.cleaned_data.get('show_events', True)
+            new_show_date_joined = form.cleaned_data.get('show_date_joined', True)
             user = request.user
 
             email_changed = new_email != user.email
@@ -269,6 +302,12 @@ def user_settings(request):
             old_icon_id = user.verified_icon_id
             new_icon_id = new_icon.pk if new_icon else None
             icon_changed = old_icon_id != new_icon_id
+            bio_changed = new_bio != user.bio
+            privacy_changed = (
+                new_show_games != user.show_games
+                or new_show_events != user.show_events
+                or new_show_date_joined != user.show_date_joined
+            )
 
             if email_changed:
                 user.email = new_email
@@ -284,7 +323,22 @@ def user_settings(request):
             if user.email_verified:
                 user.verified_icon = new_icon
 
-            if email_changed or tz_changed or icon_changed:
+            if bio_changed:
+                user.bio = new_bio
+
+            if new_picture:
+                buffer = resize_profile_picture(new_picture)
+                user.profile_picture.save(
+                    f'{user.username}_profile.jpg',
+                    buffer,
+                    save=False,
+                )
+
+            user.show_games = new_show_games
+            user.show_events = new_show_events
+            user.show_date_joined = new_show_date_joined
+
+            if email_changed or tz_changed or icon_changed or bio_changed or new_picture or privacy_changed:
                 user.save()
                 if email_changed and new_email:
                     signer = TimestampSigner()
@@ -302,6 +356,10 @@ def user_settings(request):
             'email': request.user.email,
             'timezone': request.user.timezone or 'UTC',
             'verified_icon': request.user.verified_icon_id or '',
+            'bio': request.user.bio or '',
+            'show_games': request.user.show_games,
+            'show_events': request.user.show_events,
+            'show_date_joined': request.user.show_date_joined,
         })
 
     return render(request, 'club/settings.html', {

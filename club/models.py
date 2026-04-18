@@ -47,6 +47,13 @@ class User(AbstractUser):
         VerifiedIcon, on_delete=models.SET_NULL,
         null=True, blank=True,
     )
+    profile_picture = models.ImageField(
+        upload_to='profile_pictures/', blank=True,
+    )
+    bio = models.TextField(blank=True, max_length=500)
+    show_games = models.BooleanField(default=True)
+    show_events = models.BooleanField(default=True)
+    show_date_joined = models.BooleanField(default=True)
 
     def __str__(self):
         return self.username

@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from .models import BoardGame, Event, VerifiedIcon, Vote
 from .timezone_utils import get_timezone_choices, is_valid_timezone
+from .utils import MAX_FILE_SIZE, validate_image_size
 
 User = get_user_model()
 
@@ -159,6 +160,14 @@ class SettingsForm(forms.Form):
         initial='UTC',
     )
     verified_icon = forms.IntegerField(required=False)
+    bio = forms.CharField(
+        max_length=500, required=False,
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+    profile_picture = forms.ImageField(required=False)
+    show_games = forms.BooleanField(required=False)
+    show_events = forms.BooleanField(required=False)
+    show_date_joined = forms.BooleanField(required=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -182,6 +191,12 @@ class SettingsForm(forms.Form):
             return VerifiedIcon.objects.get(pk=pk)
         except VerifiedIcon.DoesNotExist:
             raise forms.ValidationError('Invalid icon selection.')
+
+    def clean_profile_picture(self):
+        file = self.cleaned_data.get('profile_picture')
+        if file and not validate_image_size(file):
+            raise forms.ValidationError('Image must be smaller than 2MB.')
+        return file
 
 
 class BetaAccessForm(forms.Form):

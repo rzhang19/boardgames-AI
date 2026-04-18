@@ -41,4 +41,5 @@ urlpatterns = [
     path('notifications/<int:pk>/read/', views.notification_mark_read, name='notification_mark_read'),
     path('notifications/read-all/', views.notification_mark_all_read, name='notification_mark_all_read'),
     path('notifications/delete-selected/', views.notification_delete_selected, name='notification_delete_selected'),
+    path('profile/<str:username>/', views.public_profile, name='public_profile'),
 ]

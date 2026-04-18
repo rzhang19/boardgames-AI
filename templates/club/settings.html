@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% load club_tags %}
 
 {% block title %}Settings{% endblock %}
@@ -9,7 +10,7 @@
 
     <div class="card">
         <h2>Account</h2>
-        <p><strong>Username:</strong> {{ user.username }}{% verified_badge user %}</p>
+        <p><strong>Username:</strong> <a href="{% url 'public_profile' user.username %}">{{ user.username }}</a>{% verified_badge user %}</p>
         <p><strong>Status:</strong>
             {% if user.email_verified %}
                 <span class="badge badge-admin">Verified</span>
@@ -19,8 +20,29 @@
         </p>
     </div>
 
-    <form method="post">
+    <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
+        <div class="card">
+            <h2>Profile</h2>
+            <div>
+                <label for="id_profile_picture">Profile Picture:</label>
+                <div class="profile-picture-preview" id="profile-picture-preview">
+                    {% if user.profile_picture %}
+                    <img src="{{ user.profile_picture.url }}" alt="Current picture" class="profile-picture-thumb">
+                    {% else %}
+                    <img src="{% static 'img/blank_profile.png' %}" alt="Default picture" class="profile-picture-thumb">
+                    {% endif %}
+                </div>
+                <input type="file" name="profile_picture" id="id_profile_picture" accept="image/*">
+                <p class="helptext">Max 2MB. Image will be cropped to a square.</p>
+            </div>
+            <div>
+                <label for="id_bio">Bio:</label>
+                <textarea name="bio" id="id_bio" rows="3" maxlength="500">{{ form.bio.value|default:'' }}</textarea>
+                <p class="helptext">A short description about yourself (max 500 characters).</p>
+            </div>
+        </div>
+
         <div class="card">
             <h2>Email</h2>
             {% if messages %}
@@ -90,6 +112,25 @@
             {% endif %}
         </div>
 
+        <div class="card">
+            <h2>Privacy</h2>
+            <p class="helptext">Control what other users can see on your public profile. Username, profile picture, and bio are always visible.</p>
+            <div class="privacy-toggles">
+                <label class="privacy-toggle">
+                    <input type="checkbox" name="show_games" {% if form.show_games.value %}checked{% endif %}>
+                    <span>Show my games</span>
+                </label>
+                <label class="privacy-toggle">
+                    <input type="checkbox" name="show_events" {% if form.show_events.value %}checked{% endif %}>
+                    <span>Show events I'm attending</span>
+                </label>
+                <label class="privacy-toggle">
+                    <input type="checkbox" name="show_date_joined" {% if form.show_date_joined.value %}checked{% endif %}>
+                    <span>Show join date</span>
+                </label>
+            </div>
+        </div>
+
         <button type="submit" class="btn btn-primary">Save Settings</button>
     </form>
 
@@ -135,4 +176,92 @@
     </div>
     {% endif %}
 </div>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
+<script>
+(function() {
+    var input = document.getElementById('id_profile_picture');
+    var cropper = null;
+    var modal = null;
+
+    if (!input) return;
+
+    input.addEventListener('change', function(e) {
+        var file = e.target.files[0];
+        if (!file) return;
+
+        if (file.size > 2 * 1024 * 1024) {
+            alert('Image must be smaller than 2MB.');
+            input.value = '';
+            return;
+        }
+
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.className = 'crop-modal-overlay';
+                modal.innerHTML =
+                    '<div class="crop-modal">' +
+                    '  <h3>Crop Profile Picture</h3>' +
+                    '  <div class="crop-container"><img id="crop-image" src=""></div>' +
+                    '  <div class="crop-actions">' +
+                    '    <button type="button" id="crop-confirm" class="btn btn-primary">Crop & Save</button>' +
+                    '    <button type="button" id="crop-cancel" class="btn btn-neutral">Cancel</button>' +
+                    '  </div>' +
+                    '</div>';
+                document.body.appendChild(modal);
+
+                document.getElementById('crop-cancel').addEventListener('click', function() {
+                    closeCropModal();
+                    input.value = '';
+                });
+
+                document.getElementById('crop-confirm').addEventListener('click', function() {
+                    if (!cropper) return;
+                    var canvas = cropper.getCroppedCanvas({
+                        width: 300,
+                        height: 300,
+                    });
+                    canvas.toBlob(function(blob) {
+                        var dt = new DataTransfer();
+                        dt.items.add(new File([blob], file.name, { type: 'image/jpeg' }));
+                        input.files = dt.files;
+
+                        var preview = document.getElementById('profile-picture-preview');
+                        var url = URL.createObjectURL(blob);
+                        preview.innerHTML = '<img src="' + url + '" alt="Preview" class="profile-picture-thumb">';
+                        closeCropModal();
+                    }, 'image/jpeg', 0.85);
+                });
+            }
+
+            var img = document.getElementById('crop-image');
+            img.src = ev.target.result;
+            modal.style.display = 'flex';
+
+            if (cropper) {
+                cropper.destroy();
+            }
+            cropper = new Cropper(img, {
+                aspectRatio: 1,
+                viewMode: 1,
+                dragMode: 'move',
+                autoCropArea: 1,
+                responsive: true,
+            });
+        };
+        reader.readAsDataURL(file);
+    });
+
+    function closeCropModal() {
+        if (modal) modal.style.display = 'none';
+        if (cropper) {
+            cropper.destroy();
+            cropper = null;
+        }
+    }
+})();
+</script>
 {% endblock %}

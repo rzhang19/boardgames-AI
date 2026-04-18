@@ -43,7 +43,7 @@
 <h2>Individual Votes</h2>
 {% for voter, votes in individual_votes.items %}
 <div class="card">
-    <h3>{{ voter.username }}{% verified_badge voter %}</h3>
+    <h3><a href="{% url 'public_profile' voter.username %}">{{ voter.username }}</a>{% verified_badge voter %}</h3>
     <ul>
         {% for vote in votes %}
         <li>#{{ vote.rank }}: {{ vote.board_game.name }}</li>

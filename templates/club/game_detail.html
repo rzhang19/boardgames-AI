@@ -11,7 +11,7 @@
 
     <h1>{{ game.name }}</h1>
 
-    <p><strong>Owner:</strong> {{ game.owner.username }}{% verified_badge game.owner %}</p>
+    <p><strong>Owner:</strong> <a href="{% url 'public_profile' game.owner.username %}">{{ game.owner.username }}</a>{% verified_badge game.owner %}</p>
 
     {% if game.description %}
     <p><strong>Description:</strong> {{ game.description }}</p>

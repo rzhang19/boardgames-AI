@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% load static %}
+{% load club_tags %}
+
+{% block title %}{{ profile_user.username }}'s Profile{% endblock %}
+
+{% block content %}
+<div class="profile-header">
+    <div class="profile-avatar">
+        {% if profile_user.profile_picture %}
+        <img src="{{ profile_user.profile_picture.url }}" alt="{{ profile_user.username }}" class="profile-avatar-img">
+        {% else %}
+        <img src="{% static 'img/blank_profile.png' %}" alt="{{ profile_user.username }}" class="profile-avatar-img">
+        {% endif %}
+    </div>
+    <div class="profile-info">
+        <h1>{{ profile_user.username }}{% verified_badge profile_user %}</h1>
+        {% if profile_user.bio %}
+        <p class="profile-bio">{{ profile_user.bio }}</p>
+        {% endif %}
+        {% if is_own %}
+        <a href="{% url 'user_settings' %}" class="btn btn-primary btn-sm">Edit Profile</a>
+        {% endif %}
+    </div>
+</div>
+
+{% if games %}
+<div class="card">
+    <h2>Games ({{ games|length }})</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Players</th>
+                <th>Complexity</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for game in games %}
+            <tr>
+                <td data-label="Name"><a href="{% url 'game_detail' game.pk %}">{{ game.name }}</a></td>
+                <td data-label="Players">
+                    {% if game.min_players and game.max_players %}
+                        {{ game.min_players }}-{{ game.max_players }}
+                    {% elif game.min_players %}
+                        {{ game.min_players }}+
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td data-label="Complexity">
+                    {% if game.complexity %}
+                    <span class="complexity-badge complexity-{{ game.complexity }}">{{ game.get_complexity_display }}</span>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% elif games is not None %}
+<div class="card">
+    <h2>Games</h2>
+    {% if is_own %}
+    <p>You currently own no games.</p>
+    {% else %}
+    <p>{{ profile_user.username }} has no games.</p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if attendances %}
+<div class="card">
+    <h2>Events ({{ attendances|length }})</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for att in attendances %}
+            <tr>
+                <td data-label="Title"><a href="{% url 'event_detail' att.event.pk %}">{{ att.event.title }}</a></td>
+                <td data-label="Date">{{ att.event.date|date:"N j, Y" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% elif attendances is not None %}
+<div class="card">
+    <h2>Events</h2>
+    {% if is_own %}
+    <p>You are not attending any events.</p>
+    {% else %}
+    <p>{{ profile_user.username }} is not attending any events.</p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if show_date_joined %}
+<div class="card">
+    <p><strong>Joined:</strong> {{ profile_user.date_joined|date:"N j, Y" }}</p>
+</div>
+{% endif %}
+{% endblock %}
