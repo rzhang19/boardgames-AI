@@ -436,3 +436,143 @@ class UserSetPasswordTest(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Set Your Password')
+
+
+class AdminOrganizerEnforcementTest(TestCase):
+    """Tests for server-side enforcement that site admin implies organizer,
+    and that the Site Admin column is visible to site admins."""
+
+    def setUp(self):
+        self.superuser = User.objects.create_superuser(
+            username='superuser', password='testpass123'
+        )
+        self.site_admin = User.objects.create_user(
+            username='siteadmin', password='testpass123',
+            is_site_admin=True, is_organizer=True,
+        )
+        self.organizer = User.objects.create_user(
+            username='organizer', password='testpass123', is_organizer=True
+        )
+        self.regular = User.objects.create_user(
+            username='regular', password='testpass123'
+        )
+
+    def test_confirm_site_admin_forces_organizer(self):
+        """Given a regular user promoted to site admin without organizer checked,
+        When confirm is called,
+        Then is_organizer is forced to True."""
+        self.client.login(username='superuser', password='testpass123')
+        session = self.client.session
+        session['pending_role_changes'] = {
+            str(self.regular.pk): {'is_site_admin': True, 'is_organizer': False},
+        }
+        session.save()
+
+        self.client.post(reverse('manage_users_confirm'))
+        self.regular.refresh_from_db()
+        self.assertTrue(self.regular.is_site_admin)
+        self.assertTrue(self.regular.is_organizer)
+
+    def test_confirm_promoting_organizer_to_site_admin_keeps_organizer(self):
+        """Given an organizer promoted to site admin,
+        When confirm is called,
+        Then is_organizer stays True."""
+        self.client.login(username='superuser', password='testpass123')
+        session = self.client.session
+        session['pending_role_changes'] = {
+            str(self.organizer.pk): {'is_site_admin': True, 'is_organizer': True},
+        }
+        session.save()
+
+        self.client.post(reverse('manage_users_confirm'))
+        self.organizer.refresh_from_db()
+        self.assertTrue(self.organizer.is_site_admin)
+        self.assertTrue(self.organizer.is_organizer)
+
+    def test_superuser_demoting_site_admin_to_organizer(self):
+        """Given a site admin,
+        When superuser unchecks site admin but keeps organizer,
+        Then user becomes an organizer only."""
+        self.client.login(username='superuser', password='testpass123')
+        session = self.client.session
+        session['pending_role_changes'] = {
+            str(self.site_admin.pk): {'is_site_admin': False, 'is_organizer': True},
+        }
+        session.save()
+
+        self.client.post(reverse('manage_users_confirm'))
+        self.site_admin.refresh_from_db()
+        self.assertFalse(self.site_admin.is_site_admin)
+        self.assertTrue(self.site_admin.is_organizer)
+
+    def test_superuser_demoting_site_admin_to_regular(self):
+        """Given a site admin,
+        When superuser unchecks both site admin and organizer,
+        Then user becomes a regular user."""
+        self.client.login(username='superuser', password='testpass123')
+        session = self.client.session
+        session['pending_role_changes'] = {
+            str(self.site_admin.pk): {'is_site_admin': False, 'is_organizer': False},
+        }
+        session.save()
+
+        self.client.post(reverse('manage_users_confirm'))
+        self.site_admin.refresh_from_db()
+        self.assertFalse(self.site_admin.is_site_admin)
+        self.assertFalse(self.site_admin.is_organizer)
+
+    def test_preview_enforces_admin_implies_organizer(self):
+        """Given form data promoting a regular user to site admin with organizer checked,
+        When preview is shown,
+        Then the user appears in both promote lists."""
+        self.client.login(username='superuser', password='testpass123')
+        data = _build_formset_data(
+            [self.regular],
+            {self.regular.pk: {'is_organizer': True, 'is_site_admin': True}},
+        )
+        response = self.client.post(reverse('manage_users'), data)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Promote to Organizer')
+        self.assertContains(response, 'Promote to Site Admin')
+
+    def test_preview_no_false_changes_from_disabled_checkbox(self):
+        """Given a site admin row where the disabled organizer checkbox was not submitted,
+        When preview is calculated,
+        Then no changes are detected (enforcement corrects the missing value)."""
+        self.client.login(username='superuser', password='testpass123')
+        data = {
+            'form-TOTAL_FORMS': '1',
+            'form-INITIAL_FORMS': '1',
+            'form-MIN_NUM_FORMS': '0',
+            'form-MAX_NUM_FORMS': '1000',
+            'form-0-id': str(self.site_admin.pk),
+            'form-0-is_site_admin': 'on',
+        }
+        response = self.client.post(reverse('manage_users'), data)
+        self.assertContains(response, 'No changes')
+
+    def test_site_admin_sees_site_admin_column(self):
+        """Given a site admin viewing manage users,
+        Then the Site Admin column header is visible."""
+        self.client.login(username='siteadmin', password='testpass123')
+        response = self.client.get(reverse('manage_users'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Site Admin')
+
+    def test_site_admin_can_promote_to_site_admin_via_preview_and_confirm(self):
+        """Given a site admin promoting a regular user to site admin,
+        When the full flow completes,
+        Then the regular user becomes a site admin with organizer."""
+        self.client.login(username='siteadmin', password='testpass123')
+        data = _build_formset_data(
+            [self.regular],
+            {self.regular.pk: {'is_organizer': True, 'is_site_admin': True}},
+        )
+        response = self.client.post(reverse('manage_users'), data)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'regular')
+
+        self.client.post(reverse('manage_users_confirm'))
+        self.regular.refresh_from_db()
+        self.assertTrue(self.regular.is_site_admin)
+        self.assertTrue(self.regular.is_organizer)

@@ -76,21 +76,22 @@ def manage_users(request):
                         'is_site_admin': form.cleaned_data.get('is_site_admin', False),
                     }
 
-            if not changes:
-                formset = UserFormSet(queryset=queryset)
-                return render(request, 'club/manage_users.html', {
-                    'formset': formset,
-                    'no_changes': True,
-                    'is_superuser': request.user.is_superuser,
-                })
+            for uid in changes:
+                if changes[uid].get('is_site_admin'):
+                    changes[uid]['is_organizer'] = True
 
             promote_organizer_ids = []
             demote_organizer_ids = []
             promote_site_admin_ids = []
             demote_site_admin_ids = []
+            actual_changes = {}
 
             for uid, role_changes in changes.items():
                 user = User.objects.get(pk=uid)
+                if (user.is_organizer == role_changes['is_organizer']
+                        and user.is_site_admin == role_changes['is_site_admin']):
+                    continue
+                actual_changes[uid] = role_changes
                 if user.is_organizer != role_changes['is_organizer']:
                     if role_changes['is_organizer']:
                         promote_organizer_ids.append(uid)
@@ -102,7 +103,15 @@ def manage_users(request):
                     else:
                         demote_site_admin_ids.append(uid)
 
-            request.session['pending_role_changes'] = changes
+            if not actual_changes:
+                formset = UserFormSet(queryset=queryset)
+                return render(request, 'club/manage_users.html', {
+                    'formset': formset,
+                    'no_changes': True,
+                    'is_superuser': request.user.is_superuser,
+                })
+
+            request.session['pending_role_changes'] = actual_changes
 
             return render(request, 'club/manage_users_confirm.html', {
                 'promote_organizer_users': User.objects.filter(pk__in=promote_organizer_ids),
@@ -137,6 +146,8 @@ def manage_users_confirm(request):
         }
 
     for user_id, role_changes in changes.items():
+        if role_changes.get('is_site_admin'):
+            role_changes['is_organizer'] = True
         User.objects.filter(pk=user_id).update(**role_changes)
 
     return redirect('manage_users')

@@ -22,7 +22,7 @@
             <tr>
                 <th>Username</th>
                 <th>Organizer</th>
-                {% if is_superuser %}
+                {% if user.is_superuser or user.is_site_admin %}
                 <th>Site Admin</th>
                 {% endif %}
                 <th>Actions</th>
@@ -33,7 +33,7 @@
             <tr>
                 <td data-label="Username">{{ form.id }}<a href="{% url 'public_profile' form.instance.username %}">{{ form.instance.username }}</a>{% verified_badge form.instance %}</td>
                 <td data-label="Organizer">{{ form.is_organizer }}</td>
-                {% if is_superuser %}
+                {% if user.is_superuser or user.is_site_admin %}
                 <td data-label="Site Admin">{{ form.is_site_admin }}</td>
                 {% endif %}
                 <td data-label="Actions">
@@ -50,4 +50,35 @@
         <button type="submit" name="cancel" value="true" class="btn btn-neutral">Cancel</button>
     </div>
 </form>
+
+<style>
+    input[type="checkbox"].admin-locked {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+</style>
+
+<script>
+(function() {
+    document.querySelectorAll('input[name$="-is_site_admin"]').forEach(function(adminCb) {
+        var prefix = adminCb.name.replace('-is_site_admin', '');
+        var organizerCb = document.querySelector('input[name="' + prefix + '-is_organizer"]');
+        if (!organizerCb) return;
+
+        function updateOrganizer() {
+            if (adminCb.checked) {
+                organizerCb.checked = true;
+                organizerCb.disabled = true;
+                organizerCb.classList.add('admin-locked');
+            } else {
+                organizerCb.disabled = false;
+                organizerCb.classList.remove('admin-locked');
+            }
+        }
+
+        adminCb.addEventListener('change', updateOrganizer);
+        updateOrganizer();
+    });
+})();
+</script>
 {% endblock %}
