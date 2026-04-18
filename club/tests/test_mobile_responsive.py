@@ -32,6 +32,16 @@ class CSSMobileResponsiveTest(TestCase):
         self.assertIn('.nav-links', css)
         self.assertIn('.nav-open', css)
 
+    def test_css_file_contains_nav_actions_styles(self):
+        css_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            '..', 'static', 'css', 'style.css'
+        )
+        css_path = os.path.normpath(css_path)
+        with open(css_path, 'r') as f:
+            css = f.read()
+        self.assertIn('.nav-actions', css)
+
     def test_css_file_contains_card_based_table_styles(self):
         css_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -81,6 +91,12 @@ class BaseTemplateMobileTest(TestCase):
         template = get_template('base.html')
         source = template.template.source
         self.assertIn('nav-open', source)
+
+    def test_base_template_has_nav_actions_container(self):
+        from django.template.loader import get_template
+        template = get_template('base.html')
+        source = template.template.source
+        self.assertIn('nav-actions', source)
 
 
 class GameListDataLabelsTest(TestCase):

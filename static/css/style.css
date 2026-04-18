@@ -61,13 +61,18 @@ nav a:hover {
 }
 
 nav .nav-settings {
-    margin-left: auto;
     font-size: 1.3rem;
     margin-right: 8px;
 }
 
 nav .nav-settings:hover {
     text-decoration: none;
+}
+
+nav .nav-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
 }
 
 nav form {
@@ -885,34 +890,15 @@ thead th a:hover {
         display: flex;
     }
 
-    .nav-links a,
-    .nav-links form {
-        width: 100%;
-    }
-
     .nav-links a {
-        padding: 10px 16px;
-        border-radius: 0;
-    }
-
-    .nav-links form {
-        padding: 0;
-    }
-
-    .nav-links form button {
         width: 100%;
-        text-align: left;
         padding: 10px 16px;
         border-radius: 0;
-        border: none;
-        font-size: 0.938rem;
     }
 
-    nav .nav-settings {
-        margin-left: 0;
-        margin-right: 0;
-        font-size: 1.3rem;
-        text-align: left;
+    nav .nav-actions {
+        margin-left: auto;
+        order: 5;
     }
 
     main {

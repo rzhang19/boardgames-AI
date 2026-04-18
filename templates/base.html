@@ -20,16 +20,20 @@
                 {% if user.is_superuser or user.is_site_admin %}
                 <a href="{% url 'manage_users' %}">Manage Users</a>
                 {% endif %}
-                <a href="{% url 'user_settings' %}" class="nav-settings">&#9881;</a>
-                <form method="post" action="{% url 'logout' %}" style="display:inline;">
-                    {% csrf_token %}
-                    <button type="submit">Logout</button>
-                </form>
             {% else %}
                 <a href="{% url 'login' %}">Login</a>
                 <a href="{% url 'register' %}">Register</a>
             {% endif %}
         </div>
+        {% if user.is_authenticated %}
+        <div class="nav-actions">
+            <a href="{% url 'user_settings' %}" class="nav-settings">&#9881;</a>
+            <form method="post" action="{% url 'logout' %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit">Logout</button>
+            </form>
+        </div>
+        {% endif %}
     </nav>
     <main>
         {% block content %}{% endblock %}
