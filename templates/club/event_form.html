@@ -96,6 +96,56 @@
             <button type="submit" class="btn btn-primary">{{ action }} Event</button>
             <a href="{% url 'event_list' %}" class="btn btn-neutral">Cancel</a>
         </div>
+        {{ form.voting_deadline_offset_minutes }}
     </form>
 </div>
+
+<script>
+(function() {
+    var dateField = document.getElementById('id_date');
+    var timeField = document.getElementById('id_time');
+    var dlDateField = document.getElementById('id_voting_deadline_date');
+    var dlTimeField = document.getElementById('id_voting_deadline_time');
+    var offsetField = document.getElementById('id_voting_deadline_offset_minutes');
+    if (!dateField || !offsetField) return;
+
+    var offsetMinutes = parseInt(offsetField.value, 10) || 0;
+
+    function getEventDate() {
+        var d = dateField.value;
+        var t = timeField.value || '00:00';
+        if (!d) return null;
+        return new Date(d + 'T' + t);
+    }
+
+    function applyOffset() {
+        var ev = getEventDate();
+        if (!ev || isNaN(ev.getTime())) return;
+        var dl = new Date(ev.getTime() - offsetMinutes * 60000);
+        if (dlDateField) dlDateField.value = dl.toISOString().slice(0, 10);
+        if (dlTimeField) dlTimeField.value = dl.toISOString().slice(11, 16);
+    }
+
+    function recalcOffset() {
+        var ev = getEventDate();
+        if (!ev || isNaN(ev.getTime())) return;
+        var dld = dlDateField ? dlDateField.value : '';
+        var dlt = dlTimeField ? dlTimeField.value : '00:00';
+        if (!dld) return;
+        var dl = new Date(dld + 'T' + dlt);
+        if (isNaN(dl.getTime())) return;
+        offsetMinutes = Math.round((ev.getTime() - dl.getTime()) / 60000);
+        if (offsetField) offsetField.value = offsetMinutes;
+    }
+
+    dateField.addEventListener('change', applyOffset);
+    if (timeField) timeField.addEventListener('change', applyOffset);
+    if (dlDateField) dlDateField.addEventListener('change', recalcOffset);
+    if (dlTimeField) dlTimeField.addEventListener('change', recalcOffset);
+
+    if (!dlDateField.value && !dlTimeField.value) {
+        applyOffset();
+    }
+})();
+</script>
 {% endblock %}

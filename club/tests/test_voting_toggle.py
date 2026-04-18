@@ -643,6 +643,7 @@ class VotingDeadlineValidationTest(TestCase):
             date=event_date,
             created_by=self.organizer,
             voting_deadline=event_date - timedelta(hours=2),
+            voting_deadline_offset_minutes=120,
         )
         new_date = timezone.now() + timedelta(days=14, hours=19)
         self.client.login(username='organizer', password='testpass123')
@@ -654,6 +655,7 @@ class VotingDeadlineValidationTest(TestCase):
                 'time': new_date.strftime('%H:%M'),
                 'location': '',
                 'description': '',
+                'voting_deadline_offset_minutes': '120',
             }
         )
         self.assertEqual(response.status_code, 302)
@@ -693,6 +695,7 @@ class VotingDeadlineValidationTest(TestCase):
             date=event_date,
             created_by=self.organizer,
             voting_deadline=event_date - timedelta(hours=2),
+            voting_deadline_offset_minutes=120,
         )
         new_date = timezone.now() + timedelta(days=14, hours=20)
         self.client.login(username='organizer', password='testpass123')
@@ -704,6 +707,7 @@ class VotingDeadlineValidationTest(TestCase):
                 'time': new_date.strftime('%H:%M'),
                 'location': '',
                 'description': '',
+                'voting_deadline_offset_minutes': '120',
             }
         )
         self.assertEqual(response.status_code, 302)

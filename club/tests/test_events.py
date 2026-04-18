@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
-from club.models import Event, EventAttendance
+from club.models import Event, EventAttendance, SiteSettings
 
 User = get_user_model()
 
@@ -197,6 +197,47 @@ class EventCreateViewTest(TestCase):
         event = Event.objects.get(title='Admin Event')
         self.assertEqual(event.created_by, self.site_admin)
         self.assertEqual(event.location, 'Admin HQ')
+
+    def test_create_event_uses_global_offset_for_voting_deadline(self):
+        site_settings = SiteSettings.load()
+        site_settings.default_voting_offset_minutes = 60
+        site_settings.save()
+        self.client.login(username='admin', password='testpass123')
+        response = self.client.post(reverse('event_add'), {
+            'title': 'Offset Event',
+            'date': '2026-07-01',
+            'time': '18:00',
+            'voting_deadline_offset_minutes': '60',
+        })
+        self.assertEqual(response.status_code, 302)
+        event = Event.objects.get(title='Offset Event')
+        self.assertEqual(event.voting_deadline_offset_minutes, 60)
+        expected_deadline = event.date - timedelta(minutes=60)
+        self.assertEqual(event.voting_deadline, expected_deadline)
+
+    def test_create_event_with_zero_offset_sets_deadline_to_event_time(self):
+        self.client.login(username='admin', password='testpass123')
+        response = self.client.post(reverse('event_add'), {
+            'title': 'Zero Offset',
+            'date': '2026-07-01',
+            'time': '18:00',
+            'voting_deadline_offset_minutes': '0',
+        })
+        self.assertEqual(response.status_code, 302)
+        event = Event.objects.get(title='Zero Offset')
+        self.assertEqual(event.voting_deadline_offset_minutes, 0)
+        self.assertEqual(event.voting_deadline, event.date)
+
+    def test_create_event_default_offset_is_zero_when_no_global_setting(self):
+        self.client.login(username='admin', password='testpass123')
+        response = self.client.post(reverse('event_add'), {
+            'title': 'Default Offset',
+            'date': '2026-07-01',
+            'time': '18:00',
+        })
+        self.assertEqual(response.status_code, 302)
+        event = Event.objects.get(title='Default Offset')
+        self.assertEqual(event.voting_deadline_offset_minutes, 0)
 
 
 class EventDetailViewTest(TestCase):
@@ -485,6 +526,64 @@ class EventEditViewTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.event.refresh_from_db()
         self.assertEqual(self.event.title, 'Admin Edited Title')
+
+    def test_edit_event_preserves_per_event_offset(self):
+        self.event.voting_deadline_offset_minutes = 30
+        self.event.save()
+        new_date = (timezone.now() + timedelta(days=14)).strftime('%Y-%m-%d')
+        self.client.login(username='organizer', password='testpass123')
+        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+            'title': 'Original Title',
+            'date': new_date,
+            'time': '19:30',
+            'location': 'Original Location',
+            'description': 'Original Description',
+            'voting_deadline_offset_minutes': '30',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.voting_deadline_offset_minutes, 30)
+        expected_deadline = self.event.date - timedelta(minutes=30)
+        self.assertEqual(self.event.voting_deadline, expected_deadline)
+
+    def test_edit_event_offset_change_updates_deadline(self):
+        self.event.voting_deadline_offset_minutes = 0
+        self.event.save()
+        self.client.login(username='organizer', password='testpass123')
+        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+            'title': 'Original Title',
+            'date': self.future_date,
+            'time': '18:00',
+            'location': 'Original Location',
+            'description': 'Original Description',
+            'voting_deadline_offset_minutes': '60',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.voting_deadline_offset_minutes, 60)
+        expected_deadline = self.event.date - timedelta(minutes=60)
+        self.assertEqual(self.event.voting_deadline, expected_deadline)
+
+    def test_edit_event_does_not_use_global_offset(self):
+        site_settings = SiteSettings.load()
+        site_settings.default_voting_offset_minutes = 120
+        site_settings.save()
+        self.event.voting_deadline_offset_minutes = 30
+        self.event.save()
+        self.client.login(username='organizer', password='testpass123')
+        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+            'title': 'Original Title',
+            'date': self.future_date,
+            'time': '18:00',
+            'location': 'Original Location',
+            'description': 'Original Description',
+            'voting_deadline_offset_minutes': '30',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.voting_deadline_offset_minutes, 30)
+        expected_deadline = self.event.date - timedelta(minutes=30)
+        self.assertEqual(self.event.voting_deadline, expected_deadline)
 
 
 class EventDetailEditButtonTest(TestCase):

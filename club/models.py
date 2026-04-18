@@ -21,6 +21,21 @@ class VerifiedIcon(models.Model):
         return self.name
 
 
+class SiteSettings(models.Model):
+    default_voting_offset_minutes = models.IntegerField(default=0)
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        pass
+
+    @classmethod
+    def load(cls):
+        return cls.objects.get_or_create(pk=1, defaults={'default_voting_offset_minutes': 0})[0]
+
+
 class User(AbstractUser):
     objects = ClubUserManager()
 
@@ -103,6 +118,7 @@ class Event(models.Model):
     is_active = models.BooleanField(default=True)
     voting_open = models.BooleanField(default=True)
     voting_deadline = models.DateTimeField()
+    voting_deadline_offset_minutes = models.IntegerField(default=0)
 
     def __str__(self):
         return self.title

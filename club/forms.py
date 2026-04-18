@@ -104,6 +104,10 @@ class EventForm(forms.ModelForm):
         required=False,
         widget=forms.TimeInput(attrs={'type': 'time'}),
     )
+    voting_deadline_offset_minutes = forms.IntegerField(
+        required=False,
+        widget=forms.HiddenInput,
+    )
 
     class Meta:
         model = Event

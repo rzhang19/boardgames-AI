@@ -175,6 +175,29 @@
         </form>
     </div>
     {% endif %}
+
+    {% if user.is_organizer or user.is_site_admin %}
+    <div class="card">
+        <h2>Group Settings</h2>
+
+        <div class="field-group">
+            <label>Default Voting Deadline Offset:</label>
+            <div class="offset-inputs">
+                <select name="default_voting_offset_hours" id="id_offset_hours">
+                    {% for h in offset_hour_choices %}
+                    <option value="{{ h }}" {% if h == current_offset_hours %}selected{% endif %}>{{ h }} hr</option>
+                    {% endfor %}
+                </select>
+                <select name="default_voting_offset_minutes_field" id="id_offset_minutes">
+                    {% for m in offset_minute_choices %}
+                    <option value="{{ m }}" {% if m == current_offset_minutes %}selected{% endif %}>{{ m }} min</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <p class="helptext">The default time before the event that voting closes. 0 hr 0 min = same time as event. New events will use this offset automatically.</p>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">

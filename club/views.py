@@ -19,7 +19,7 @@ from .forms import (
     BetaAccessForm, BoardGameForm, EventForm, SetPasswordForm, SettingsForm,
     UserAddForm, UserManageForm, RegistrationForm, VerifiedIconForm, VoteForm,
 )
-from .models import BoardGame, Event, EventAttendance, Notification, VerifiedIcon, Vote
+from .models import BoardGame, Event, EventAttendance, Notification, SiteSettings, VerifiedIcon, Vote
 from .notifications import generate_missing_complexity_notifications
 from .timezone_utils import is_valid_timezone
 from .utils import resize_profile_picture
@@ -394,6 +394,19 @@ def user_settings(request):
                         settings.DEFAULT_FROM_EMAIL,
                         [user.email],
                     )
+
+            if request.user.is_organizer or request.user.is_site_admin:
+                offset_hours = request.POST.get('default_voting_offset_hours', '0')
+                offset_mins = request.POST.get('default_voting_offset_minutes_field', '0')
+                try:
+                    total_minutes = int(offset_hours) * 60 + int(offset_mins)
+                except (ValueError, TypeError):
+                    total_minutes = 0
+                site_settings = SiteSettings.load()
+                if site_settings.default_voting_offset_minutes != total_minutes:
+                    site_settings.default_voting_offset_minutes = total_minutes
+                    site_settings.save()
+
             return redirect('user_settings')
     else:
         form = SettingsForm(initial={
@@ -406,10 +419,20 @@ def user_settings(request):
             'show_date_joined': request.user.show_date_joined,
         })
 
+    site_settings = SiteSettings.load()
+    current_total = site_settings.default_voting_offset_minutes
+    offset_hours = current_total // 60
+    offset_mins = current_total % 60
+
     return render(request, 'club/settings.html', {
         'form': form,
         'verified_icons': VerifiedIcon.objects.all().order_by('name'),
         'icon_manage_form': VerifiedIconForm(),
+        'site_settings': site_settings,
+        'offset_hour_choices': list(range(0, 25)),
+        'offset_minute_choices': list(range(0, 60, 5)),
+        'current_offset_hours': offset_hours,
+        'current_offset_minutes': offset_mins,
     })
 
 
@@ -666,12 +689,24 @@ def event_add(request):
             event = form.save(commit=False)
             event.date = form.cleaned_data['date']
             event.created_by = request.user
-            event.voting_deadline = form.cleaned_data.get('voting_deadline') or event.date
+            offset = form.cleaned_data.get('voting_deadline_offset_minutes') or 0
+            event.voting_deadline_offset_minutes = offset
+            custom_deadline = form.cleaned_data.get('voting_deadline')
+            if custom_deadline:
+                event.voting_deadline = custom_deadline
+            else:
+                event.voting_deadline = event.date - timezone.timedelta(minutes=offset)
             event.save()
             return redirect('event_detail', pk=event.pk)
     else:
-        form = EventForm()
-    return render(request, 'club/event_form.html', {'form': form, 'action': 'Create'})
+        form = EventForm(initial={
+            'voting_deadline_offset_minutes': SiteSettings.load().default_voting_offset_minutes,
+        })
+    return render(request, 'club/event_form.html', {
+        'form': form,
+        'action': 'Create',
+        'voting_offset': SiteSettings.load().default_voting_offset_minutes,
+    })
 
 
 def event_edit(request, pk):
@@ -680,34 +715,30 @@ def event_edit(request, pk):
     if not (request.user.is_organizer or request.user.is_site_admin):
         raise PermissionDenied
     event = get_object_or_404(Event, pk=pk)
-    old_date = event.date
-    old_deadline = event.voting_deadline
-    old_gap = old_date - old_deadline if old_deadline else None
 
     if request.method == 'POST':
         form = EventForm(request.POST, instance=event)
         if form.is_valid():
             event = form.save(commit=False)
             event.date = form.cleaned_data['date']
-            new_deadline = form.cleaned_data.get('voting_deadline')
-            date_changed = (
-                event.date.date() != old_date.date()
-                or event.date.hour != old_date.hour
-                or event.date.minute != old_date.minute
-            )
-
-            if new_deadline:
-                event.voting_deadline = new_deadline
-            elif date_changed and old_gap and old_deadline != old_date:
-                event.voting_deadline = event.date - old_gap
+            offset = form.cleaned_data.get('voting_deadline_offset_minutes') or 0
+            event.voting_deadline_offset_minutes = offset
+            custom_deadline = form.cleaned_data.get('voting_deadline')
+            if custom_deadline:
+                event.voting_deadline = custom_deadline
             else:
-                event.voting_deadline = event.date
-
+                event.voting_deadline = event.date - timezone.timedelta(minutes=offset)
             event.save()
             return redirect('event_detail', pk=event.pk)
     else:
-        form = EventForm(instance=event)
-    return render(request, 'club/event_form.html', {'form': form, 'action': 'Edit'})
+        form = EventForm(instance=event, initial={
+            'voting_deadline_offset_minutes': event.voting_deadline_offset_minutes,
+        })
+    return render(request, 'club/event_form.html', {
+        'form': form,
+        'action': 'Edit',
+        'voting_offset': event.voting_deadline_offset_minutes,
+    })
 
 
 def event_vote(request, pk):

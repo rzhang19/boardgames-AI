@@ -5,6 +5,8 @@ from django.core.signing import TimestampSigner
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from club.models import SiteSettings
+
 User = get_user_model()
 
 
@@ -171,3 +173,54 @@ class SettingsEmailVerifiedBadgeTest(TestCase):
         self.client.login(username='testuser', password='testpass123')
         response = self.client.get(reverse('user_settings'))
         self.assertNotContains(response, 'verified-badge')
+
+
+class GlobalVotingOffsetSettingsTest(TestCase):
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(
+            username='organizer', password='testpass123', is_organizer=True
+        )
+        self.regular = User.objects.create_user(
+            username='regular', password='testpass123'
+        )
+
+    def test_organizer_sees_global_offset_on_settings_page(self):
+        self.client.login(username='organizer', password='testpass123')
+        response = self.client.get(reverse('user_settings'))
+        self.assertContains(response, 'Default Voting Deadline Offset')
+
+    def test_regular_user_does_not_see_global_offset(self):
+        self.client.login(username='regular', password='testpass123')
+        response = self.client.get(reverse('user_settings'))
+        self.assertNotContains(response, 'Default Voting Deadline Offset')
+
+    def test_organizer_can_set_global_offset(self):
+        self.client.login(username='organizer', password='testpass123')
+        response = self.client.post(reverse('user_settings'), {
+            'email': self.organizer.email,
+            'timezone': 'UTC',
+            'default_voting_offset_hours': '1',
+            'default_voting_offset_minutes_field': '30',
+        })
+        self.assertEqual(response.status_code, 302)
+        site_settings = SiteSettings.load()
+        self.assertEqual(site_settings.default_voting_offset_minutes, 90)
+
+    def test_global_offset_defaults_to_zero(self):
+        site_settings = SiteSettings.load()
+        self.assertEqual(site_settings.default_voting_offset_minutes, 0)
+
+    def test_organizer_can_set_offset_to_zero(self):
+        site_settings = SiteSettings.load()
+        site_settings.default_voting_offset_minutes = 60
+        site_settings.save()
+        self.client.login(username='organizer', password='testpass123')
+        self.client.post(reverse('user_settings'), {
+            'email': self.organizer.email,
+            'timezone': 'UTC',
+            'default_voting_offset_hours': '0',
+            'default_voting_offset_minutes_field': '0',
+        })
+        site_settings.refresh_from_db()
+        self.assertEqual(site_settings.default_voting_offset_minutes, 0)
