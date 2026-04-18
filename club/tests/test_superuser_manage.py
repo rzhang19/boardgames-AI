@@ -322,6 +322,45 @@ class UserAddTest(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn('newuser@example.com', mail.outbox[0].to)
 
+    def test_add_user_without_email_or_temp_password_fails(self):
+        response = self.client.post(reverse('user_add'), {
+            'username': 'newuser',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username='newuser').exists())
+
+    def test_add_user_with_both_email_and_temp_password_fails(self):
+        response = self.client.post(reverse('user_add'), {
+            'username': 'newuser',
+            'email': 'newuser@example.com',
+            'temporary_password': 'TempP@ss123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username='newuser').exists())
+
+    def test_add_user_with_temp_password_creates_user_with_must_change(self):
+        response = self.client.post(reverse('user_add'), {
+            'username': 'newuser',
+            'temporary_password': 'TempP@ss123',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(User.objects.filter(username='newuser').exists())
+        new_user = User.objects.get(username='newuser')
+        self.assertTrue(new_user.check_password('TempP@ss123'))
+        self.assertTrue(new_user.must_change_password)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_add_user_with_email_only_sends_email_no_must_change(self):
+        response = self.client.post(reverse('user_add'), {
+            'username': 'newuser',
+            'email': 'newuser@example.com',
+        })
+        self.assertEqual(response.status_code, 302)
+        new_user = User.objects.get(username='newuser')
+        self.assertFalse(new_user.must_change_password)
+        self.assertFalse(new_user.has_usable_password())
+        self.assertEqual(len(mail.outbox), 1)
+
 
 class UserDeleteTest(TestCase):
 
@@ -436,6 +475,53 @@ class UserSetPasswordTest(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Set Your Password')
+
+
+class ForcedPasswordChangeTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='tempuser', password='TempP@ss123',
+            must_change_password=True,
+        )
+
+    def test_must_change_password_user_redirected_from_dashboard(self):
+        self.client.login(username='tempuser', password='TempP@ss123')
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('forced_password_change'))
+
+    def test_must_change_password_user_can_access_change_password_page(self):
+        self.client.login(username='tempuser', password='TempP@ss123')
+        response = self.client.get(reverse('forced_password_change'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Change Your Password')
+
+    def test_must_change_password_user_can_logout(self):
+        self.client.login(username='tempuser', password='TempP@ss123')
+        response = self.client.post(reverse('logout'))
+        self.assertEqual(response.status_code, 302)
+
+    def test_change_password_with_same_password_fails(self):
+        self.client.login(username='tempuser', password='TempP@ss123')
+        response = self.client.post(reverse('forced_password_change'), {
+            'new_password1': 'TempP@ss123',
+            'new_password2': 'TempP@ss123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.must_change_password)
+
+    def test_change_password_with_different_password_succeeds(self):
+        self.client.login(username='tempuser', password='TempP@ss123')
+        response = self.client.post(reverse('forced_password_change'), {
+            'new_password1': 'Br@ndN3wPass!',
+            'new_password2': 'Br@ndN3wPass!',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.must_change_password)
+        self.assertTrue(self.user.check_password('Br@ndN3wPass!'))
 
 
 class AdminOrganizerEnforcementTest(TestCase):

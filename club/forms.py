@@ -22,11 +22,29 @@ class UserManageForm(forms.ModelForm):
 
 
 class UserAddForm(forms.ModelForm):
-    email = forms.EmailField(required=True)
+    email = forms.EmailField(required=False)
+    temporary_password = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput,
+    )
 
     class Meta:
         model = User
         fields = ['username', 'email']
+
+    def clean(self):
+        cleaned_data = super().clean()
+        email = cleaned_data.get('email')
+        temp_pw = cleaned_data.get('temporary_password')
+        if not email and not temp_pw:
+            raise forms.ValidationError(
+                'Either an email address or a temporary password is required.'
+            )
+        if email and temp_pw:
+            raise forms.ValidationError(
+                'Provide either an email address or a temporary password, not both.'
+            )
+        return cleaned_data
 
 
 class SetPasswordForm(forms.Form):

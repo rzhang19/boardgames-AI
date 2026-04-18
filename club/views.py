@@ -165,18 +165,24 @@ def user_add(request):
         form = UserAddForm(request.POST)
         if form.is_valid():
             user = form.save(commit=False)
-            user.set_unusable_password()
+            temp_pw = form.cleaned_data.get('temporary_password')
+            if temp_pw:
+                user.set_password(temp_pw)
+                user.must_change_password = True
+            else:
+                user.set_unusable_password()
             user.email_verified = False
             user.save()
-            signer = TimestampSigner()
-            token = signer.sign(user.pk)
-            set_pw_url = request.build_absolute_uri(f'/set-password/{token}/')
-            send_mail(
-                'Set your password - Board Game Club',
-                f'An account has been created for you. Set your password here: {set_pw_url}',
-                settings.DEFAULT_FROM_EMAIL,
-                [user.email],
-            )
+            if user.email:
+                signer = TimestampSigner()
+                token = signer.sign(user.pk)
+                set_pw_url = request.build_absolute_uri(f'/set-password/{token}/')
+                send_mail(
+                    'Set your password - Board Game Club',
+                    f'An account has been created for you. Set your password here: {set_pw_url}',
+                    settings.DEFAULT_FROM_EMAIL,
+                    [user.email],
+                )
             return redirect('manage_users')
     else:
         form = UserAddForm()
@@ -229,6 +235,33 @@ def user_set_password(request, token):
         'form': form,
         'invalid_token': False,
     })
+
+
+def forced_password_change(request):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    if not request.user.must_change_password:
+        return redirect('dashboard')
+
+    if request.method == 'POST':
+        form = SetPasswordForm(request.POST)
+        if form.is_valid():
+            new_pw = form.cleaned_data['new_password1']
+            if check_password(new_pw, request.user.password):
+                form.add_error(
+                    'new_password1',
+                    'Your new password must be different from your temporary password.',
+                )
+            else:
+                request.user.set_password(new_pw)
+                request.user.must_change_password = False
+                request.user.save()
+                login(request, request.user)
+                return redirect('dashboard')
+    else:
+        form = SetPasswordForm()
+
+    return render(request, 'club/forced_password_change.html', {'form': form})
 
 
 def beta_access(request):

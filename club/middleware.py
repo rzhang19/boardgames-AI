@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.contrib.auth.hashers import check_password
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.shortcuts import redirect
 from django.utils import timezone
@@ -6,6 +7,21 @@ from django.utils import timezone
 import zoneinfo as _zoneinfo
 
 EXEMPT_PATHS = ('/beta-access/', '/static/', '/admin/')
+
+
+class MustChangePasswordMiddleware:
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if (request.user.is_authenticated
+                and request.user.must_change_password
+                and not request.path.startswith('/change-password/')
+                and not request.path.startswith('/logout/')
+                and not request.path.startswith(EXEMPT_PATHS)):
+            return redirect('forced_password_change')
+        return self.get_response(request)
 
 
 class BetaAccessMiddleware:

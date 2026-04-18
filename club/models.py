@@ -54,6 +54,7 @@ class User(AbstractUser):
     show_games = models.BooleanField(default=True)
     show_events = models.BooleanField(default=True)
     show_date_joined = models.BooleanField(default=True)
+    must_change_password = models.BooleanField(default=False)
 
     def __str__(self):
         return self.username

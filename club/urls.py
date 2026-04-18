@@ -14,6 +14,7 @@ urlpatterns = [
     path('register/', views.register, name='register'),
     path('login/', views.CustomLoginView.as_view(template_name='registration/login.html', authentication_form=EmailOrUsernameLoginForm), name='login'),
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
+    path('change-password/', views.forced_password_change, name='forced_password_change'),
     path('verify-email/<str:token>/', views.verify_email, name='verify_email'),
     path('set-password/<str:token>/', views.user_set_password, name='user_set_password'),
     path('games/', views.game_list, name='game_list'),

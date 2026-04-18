@@ -135,6 +135,21 @@ class LoginTest(TestCase):
         response = self.client.get(reverse('dashboard'))
         self.assertContains(response, 'loginuser')
 
+    def test_login_with_must_change_password_redirects_to_change_password(self):
+        User.objects.create_user(
+            username='tempuser', password='testpass123',
+            must_change_password=True,
+        )
+        response = self.client.post(reverse('login'), {
+            'username': 'tempuser',
+            'password': 'testpass123',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('dashboard'))
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('forced_password_change'))
+
 
 class AdminBadgeTest(TestCase):
 
