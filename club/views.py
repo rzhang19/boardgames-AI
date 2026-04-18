@@ -2,6 +2,7 @@ from datetime import datetime, time as dt_time
 
 from django.conf import settings
 from django.contrib.auth import get_user_model, login
+from django.contrib.auth import views as auth_views
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import PermissionDenied
 from django.core.mail import send_mail
@@ -18,10 +19,18 @@ from .forms import (
     BetaAccessForm, BoardGameForm, EventForm, SetPasswordForm, SettingsForm,
     UserAddForm, UserManageForm, RegistrationForm, VerifiedIconForm, VoteForm,
 )
-from .models import BoardGame, Event, EventAttendance, VerifiedIcon, Vote
+from .models import BoardGame, Event, EventAttendance, Notification, VerifiedIcon, Vote
+from .notifications import generate_missing_complexity_notifications
 from .timezone_utils import is_valid_timezone
 
 User = get_user_model()
+
+
+class CustomLoginView(auth_views.LoginView):
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        generate_missing_complexity_notifications(self.request.user)
+        return response
 
 
 def site_admin_required(view_func):
@@ -503,6 +512,13 @@ def game_edit(request, pk):
                 if weight is not None:
                     game.bgg_weight = weight
             form.save()
+            if game.complexity:
+                Notification.objects.filter(
+                    user=request.user,
+                    notification_type='missing_complexity',
+                    url=f'/games/{game.pk}/edit/',
+                    is_read=False,
+                ).update(is_read=True)
             return redirect('game_detail', pk=game.pk)
     else:
         form = BoardGameForm(instance=game)
@@ -817,3 +833,52 @@ def delete_verified_icon(request, pk):
             })
         icon.delete()
     return redirect('user_settings')
+
+
+def notification_list(request):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    notifications = Notification.objects.filter(user=request.user)
+    return render(request, 'club/notification_list.html', {
+        'notifications': notifications,
+    })
+
+
+def notification_mark_read(request, pk):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    if request.method != 'POST':
+        from django.http import HttpResponseNotAllowed
+        return HttpResponseNotAllowed(['POST'])
+    notif = get_object_or_404(Notification, pk=pk, user=request.user)
+    notif.is_read = True
+    notif.save()
+    if notif.url:
+        return redirect(notif.url)
+    return redirect('notification_list')
+
+
+def notification_mark_all_read(request):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    if request.method != 'POST':
+        from django.http import HttpResponseNotAllowed
+        return HttpResponseNotAllowed(['POST'])
+    Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+    return redirect('notification_list')
+
+
+def notification_delete_selected(request):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    if request.method != 'POST':
+        from django.http import HttpResponseNotAllowed
+        return HttpResponseNotAllowed(['POST'])
+    selected = request.POST.getlist('selected_notifications')
+    if selected:
+        Notification.objects.filter(
+            pk__in=selected,
+            user=request.user,
+            is_read=True,
+        ).delete()
+    return redirect('notification_list')

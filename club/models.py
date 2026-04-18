@@ -157,3 +157,22 @@ class Vote(models.Model):
 
     def __str__(self):
         return f'{self.user} ranked {self.board_game} #{self.rank} at {self.event}'
+
+
+class Notification(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    message = models.TextField()
+    url = models.URLField(blank=True)
+    url_label = models.CharField(max_length=100, blank=True)
+    is_read = models.BooleanField(default=False)
+    notification_type = models.CharField(max_length=50, default='general')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'is_read', '-created_at'], name='notif_user_read_created'),
+        ]
+
+    def __str__(self):
+        return f'Notification for {self.user}: {self.message[:50]}'

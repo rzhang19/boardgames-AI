@@ -12,7 +12,7 @@ urlpatterns = [
     path('settings/delete-icon/<int:pk>/', views.delete_verified_icon, name='delete_verified_icon'),
     path('save-timezone/', views.save_timezone, name='save_timezone'),
     path('register/', views.register, name='register'),
-    path('login/', auth_views.LoginView.as_view(template_name='registration/login.html', authentication_form=EmailOrUsernameLoginForm), name='login'),
+    path('login/', views.CustomLoginView.as_view(template_name='registration/login.html', authentication_form=EmailOrUsernameLoginForm), name='login'),
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
     path('verify-email/<str:token>/', views.verify_email, name='verify_email'),
     path('set-password/<str:token>/', views.user_set_password, name='user_set_password'),
@@ -37,4 +37,8 @@ urlpatterns = [
     path('manage-users/cancel/', views.manage_users_cancel, name='manage_users_cancel'),
     path('manage-users/add/', views.user_add, name='user_add'),
     path('manage-users/<int:pk>/delete/', views.user_delete, name='user_delete'),
+    path('notifications/', views.notification_list, name='notification_list'),
+    path('notifications/<int:pk>/read/', views.notification_mark_read, name='notification_mark_read'),
+    path('notifications/read-all/', views.notification_mark_all_read, name='notification_mark_all_read'),
+    path('notifications/delete-selected/', views.notification_delete_selected, name='notification_delete_selected'),
 ]

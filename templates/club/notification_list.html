@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications{% endblock %}
+
+{% block content %}
+<h1>Notifications</h1>
+
+{% if notifications %}
+<div class="notification-actions">
+    <form method="post" action="{% url 'notification_mark_all_read' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-neutral btn-sm">Mark All as Read</button>
+    </form>
+</div>
+
+<form method="post" action="{% url 'notification_delete_selected' %}" id="delete-selected-form">
+    {% csrf_token %}
+    <div class="notification-list">
+        {% for notif in notifications %}
+        <div class="notification-item {% if not notif.is_read %}notification-unread{% endif %}">
+            <div class="notification-content">
+                {% if not notif.is_read %}
+                <span class="notification-dot"></span>
+                {% endif %}
+                <div class="notification-message">
+                    {% if notif.url %}
+                    <a href="{% url 'notification_mark_read' notif.pk %}" class="notification-link">{{ notif.message }}</a>
+                    {% else %}
+                    {{ notif.message }}
+                    {% endif %}
+                    <span class="notification-time">{{ notif.created_at|date:"M j, Y g:i A" }}</span>
+                </div>
+            </div>
+            {% if notif.is_read %}
+            <div class="notification-select">
+                <input type="checkbox" name="selected_notifications" value="{{ notif.pk }}" class="notification-checkbox">
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    <div class="notification-delete-bar">
+        <button type="submit" class="btn btn-danger btn-sm">Delete Selected</button>
+    </div>
+</form>
+{% else %}
+<div class="empty-state">
+    <p>No notifications.</p>
+</div>
+{% endif %}
+{% endblock %}

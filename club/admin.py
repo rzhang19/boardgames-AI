@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import User, BoardGame, Event, EventAttendance, VerifiedIcon, Vote
+from .models import User, BoardGame, Event, EventAttendance, Notification, VerifiedIcon, Vote
 
 
 admin.site.register(User, UserAdmin)
@@ -37,3 +37,10 @@ class EventAttendanceAdmin(admin.ModelAdmin):
 class VoteAdmin(admin.ModelAdmin):
     list_display = ('user', 'event', 'board_game', 'rank')
     list_filter = ('event',)
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ('user', 'message', 'is_read', 'notification_type', 'created_at')
+    list_filter = ('is_read', 'notification_type')
+    search_fields = ('user__username', 'message')

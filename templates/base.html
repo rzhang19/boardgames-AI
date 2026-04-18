@@ -27,6 +27,14 @@
         </div>
         {% if user.is_authenticated %}
         <div class="nav-actions">
+            <a href="{% url 'notification_list' %}" class="nav-notification">
+                {% if unread_notification_count > 0 %}
+                <img src="{% static 'img/bell-ring.png' %}" alt="Notifications" class="nav-bell-icon">
+                <span class="notification-badge">{{ notification_badge_display }}</span>
+                {% else %}
+                <img src="{% static 'img/bell.png' %}" alt="Notifications" class="nav-bell-icon">
+                {% endif %}
+            </a>
             <a href="{% url 'user_settings' %}" class="nav-settings">&#9881;</a>
             <form method="post" action="{% url 'logout' %}" style="display:inline;">
                 {% csrf_token %}
