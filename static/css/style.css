@@ -768,3 +768,240 @@ thead th a {
 thead th a:hover {
     text-decoration: underline;
 }
+
+.nav-hamburger {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--nav-text);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 8px;
+    line-height: 1;
+}
+
+.nav-links {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+@media (max-width: 600px) {
+    .nav-hamburger {
+        display: block;
+    }
+
+    nav {
+        flex-wrap: wrap;
+        padding: 0 16px;
+        position: relative;
+    }
+
+    .nav-links {
+        display: none;
+        flex-direction: column;
+        width: 100%;
+        order: 10;
+        padding-bottom: 8px;
+    }
+
+    .nav-links.nav-open {
+        display: flex;
+    }
+
+    .nav-links a,
+    .nav-links form {
+        width: 100%;
+    }
+
+    .nav-links a {
+        padding: 10px 16px;
+        border-radius: 0;
+    }
+
+    .nav-links form {
+        padding: 0;
+    }
+
+    .nav-links form button {
+        width: 100%;
+        text-align: left;
+        padding: 10px 16px;
+        border-radius: 0;
+        border: none;
+        font-size: 0.938rem;
+    }
+
+    nav .nav-settings {
+        margin-left: 0;
+        margin-right: 0;
+        font-size: 1.3rem;
+        text-align: left;
+    }
+
+    main {
+        padding: 16px 12px;
+    }
+
+    h1 {
+        font-size: 1.375rem;
+    }
+
+    .card {
+        padding: 16px;
+    }
+
+    .form-container {
+        max-width: none;
+        padding: 16px;
+    }
+
+    table {
+        display: block;
+    }
+
+    thead {
+        display: none;
+    }
+
+    tbody {
+        display: block;
+    }
+
+    tbody tr {
+        display: block;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        margin-bottom: 12px;
+        padding: 12px;
+        box-shadow: var(--shadow);
+    }
+
+    tbody tr:last-child td {
+        border-bottom: 1px solid var(--border);
+    }
+
+    tbody tr:last-child td:last-child {
+        border-bottom: none;
+    }
+
+    tbody td {
+        display: block;
+        padding: 4px 0;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+        padding-left: calc(45% + 8px);
+        position: relative;
+        min-height: 1.8em;
+    }
+
+    tbody td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 0;
+        top: 4px;
+        width: 45%;
+        font-weight: 600;
+        font-size: 0.813rem;
+        color: var(--text-light);
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    tbody td:last-child {
+        border-bottom: none;
+    }
+
+    tbody tr:hover,
+    tbody tr:nth-child(even),
+    tbody tr:nth-child(even):hover {
+        background: var(--surface);
+    }
+
+    .sub-tabs {
+        flex-wrap: wrap;
+    }
+
+    .sub-tab {
+        padding: 8px 16px;
+        font-size: 0.875rem;
+    }
+
+    .filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding: 12px;
+    }
+
+    .filter-bar .filter-group {
+        width: 100%;
+    }
+
+    .filter-owner-select {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .filter-players-input {
+        width: 100% !important;
+    }
+
+    .filter-actions {
+        width: 100%;
+    }
+
+    .filter-actions .btn {
+        flex: 1;
+    }
+
+    .bgg-search-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .bgg-search-bar input {
+        width: 100%;
+    }
+
+    .bgg-detail-image {
+        float: none;
+        display: block;
+        margin: 0 auto 12px;
+        max-width: 180px;
+    }
+
+    .vote-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .btn-group {
+        flex-direction: column;
+    }
+
+    .btn-group .btn {
+        text-align: center;
+    }
+
+    .podium {
+        padding: 16px;
+    }
+
+    .podium .game-name {
+        font-size: 1.1rem;
+    }
+
+    .action-bar {
+        flex-direction: column;
+    }
+
+    .action-bar .btn {
+        text-align: center;
+    }
+}

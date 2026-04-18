@@ -26,8 +26,8 @@
     <tbody>
         {% for vd in vote_data %}
         <tr>
-            <td>{{ vd.rank }}</td>
-            <td>{{ vd.game_name }}</td>
+            <td data-label="Rank">{{ vd.rank }}</td>
+            <td data-label="Game">{{ vd.game_name }}</td>
         </tr>
         {% endfor %}
     </tbody>

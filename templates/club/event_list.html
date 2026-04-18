@@ -25,10 +25,10 @@
     <tbody>
         {% for event in events %}
         <tr>
-            <td><a href="{% url 'event_detail' event.pk %}">{{ event.title }}</a></td>
-            <td>{{ event.date|date:"N j, Y" }}{% if event.date.time != time_midnight %} {{ event.date|date:"g:i A" }}{% endif %}</td>
-            <td>{{ event.location|default:"-" }}</td>
-            <td>{{ event.created_by.username }}{% verified_badge event.created_by %}</td>
+            <td data-label="Title"><a href="{% url 'event_detail' event.pk %}">{{ event.title }}</a></td>
+            <td data-label="Date">{{ event.date|date:"N j, Y" }}{% if event.date.time != time_midnight %} {{ event.date|date:"g:i A" }}{% endif %}</td>
+            <td data-label="Location">{{ event.location|default:"-" }}</td>
+            <td data-label="Created By">{{ event.created_by.username }}{% verified_badge event.created_by %}</td>
         </tr>
         {% endfor %}
     </tbody>

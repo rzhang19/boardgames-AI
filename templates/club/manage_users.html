@@ -31,12 +31,12 @@
         <tbody>
             {% for form in formset %}
             <tr>
-                <td>{{ form.id }}{{ form.instance.username }}{% verified_badge form.instance %}</td>
-                <td>{{ form.is_organizer }}</td>
+                <td data-label="Username">{{ form.id }}{{ form.instance.username }}{% verified_badge form.instance %}</td>
+                <td data-label="Organizer">{{ form.is_organizer }}</td>
                 {% if is_superuser %}
-                <td>{{ form.is_site_admin }}</td>
+                <td data-label="Site Admin">{{ form.is_site_admin }}</td>
                 {% endif %}
-                <td>
+                <td data-label="Actions">
                     {% if not form.instance.is_superuser %}
                     <a href="{% url 'user_delete' form.instance.pk %}" class="btn btn-danger btn-sm">Delete</a>
                     {% endif %}

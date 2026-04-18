@@ -52,10 +52,10 @@
     <tbody>
         {% for game in games %}
         <tr>
-            <td>
+            <td data-label="Name">
                 <a href="{% url 'game_detail' game.pk %}">{{ game.name }}</a>
             </td>
-            <td>
+            <td data-label="Players">
                 {% if game.min_players and game.max_players %}
                     {{ game.min_players }}-{{ game.max_players }}
                 {% elif game.min_players %}
@@ -64,14 +64,14 @@
                     -
                 {% endif %}
             </td>
-            <td>
+            <td data-label="Complexity">
                 {% if game.complexity %}
                 <span class="complexity-badge complexity-{{ game.complexity }}">{{ game.get_complexity_display }}</span>
                 {% else %}
                     -
                 {% endif %}
             </td>
-            <td>{{ game.owner.username }}{% verified_badge game.owner %}</td>
+            <td data-label="Owner">{{ game.owner.username }}{% verified_badge game.owner %}</td>
         </tr>
         {% endfor %}
     </tbody>

@@ -26,9 +26,9 @@
     <tbody>
         {% for item in results %}
         <tr>
-            <td>{{ forloop.counter }}</td>
-            <td>{{ item.game.name }}</td>
-            <td>{{ item.score }}</td>
+            <td data-label="Rank">{{ forloop.counter }}</td>
+            <td data-label="Game">{{ item.game.name }}</td>
+            <td data-label="Score">{{ item.score }}</td>
         </tr>
         {% endfor %}
     </tbody>
