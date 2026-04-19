@@ -366,3 +366,209 @@ class WeightToComplexityTest(TestCase):
     def test_weight_3_point_99_is_medium_heavy(self):
         """Given weight 3.99, when mapping to complexity, then 'medium_heavy' is returned"""
         self.assertEqual(weight_to_complexity(Decimal('3.99')), 'medium_heavy')
+
+
+class SearchBggRelaxedTest(TestCase):
+
+    def _mock_response(self, data):
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps(data).encode()
+        mock_response.__enter__ = lambda s: mock_response
+        mock_response.__exit__ = MagicMock(return_value=False)
+        return mock_response
+
+    @patch('club.bgg.urlopen')
+    def test_search_returns_results_without_retry_when_found(self, mock_urlopen):
+        """Given a query that returns results, when calling search_bgg, then no retry occurs"""
+        mock_urlopen.return_value = self._mock_response({
+            'items': [{'objectid': '13', 'name': 'Catan'}]
+        })
+
+        results = search_bgg('Catan')
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(mock_urlopen.call_count, 1)
+
+    @patch('club.bgg.urlopen')
+    def test_search_retries_without_punctuation_when_no_results(self, mock_urlopen):
+        """Given a query with punctuation that returns 0 results, when calling search_bgg, then retry without punctuation returns results"""
+        empty_response = self._mock_response({'items': []})
+        results_response = self._mock_response({
+            'items': [{'objectid': '246900', 'name': 'Eclipse: Second Dawn for the Galaxy'}]
+        })
+        mock_urlopen.side_effect = [empty_response, results_response]
+
+        results = search_bgg('Eclipse: Second Dawn')
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['name'], 'Eclipse: Second Dawn for the Galaxy')
+        self.assertEqual(mock_urlopen.call_count, 2)
+
+    @patch('club.bgg.urlopen')
+    def test_search_strips_colons_and_dashes(self, mock_urlopen):
+        """Given a query with colons and dashes, when retry occurs, then punctuation is removed"""
+        empty_response = self._mock_response({'items': []})
+        results_response = self._mock_response({
+            'items': [{'objectid': '100', 'name': 'Game Name'}]
+        })
+        mock_urlopen.side_effect = [empty_response, results_response]
+
+        results = search_bgg('Game: The - Name')
+
+        self.assertEqual(len(results), 1)
+        second_call_url = mock_urlopen.call_args_list[1][0][0].full_url
+        self.assertIn('Game+The+Name', second_call_url)
+
+    @patch('club.bgg.urlopen')
+    def test_search_returns_empty_when_all_retries_fail(self, mock_urlopen):
+        """Given a query where all retries return 0 results, when calling search_bgg, then empty list is returned"""
+        empty_response = self._mock_response({'items': []})
+        mock_urlopen.side_effect = [empty_response, empty_response, empty_response]
+
+        results = search_bgg('xyznonexistent')
+
+        self.assertEqual(results, [])
+
+    @patch('club.bgg.urlopen')
+    def test_search_does_not_retry_when_initial_query_works(self, mock_urlopen):
+        """Given a query with punctuation that already returns results, when calling search_bgg, then no retry occurs"""
+        results_response = self._mock_response({
+            'items': [{'objectid': '246900', 'name': 'Eclipse: Second Dawn for the Galaxy'}]
+        })
+        mock_urlopen.return_value = results_response
+
+        results = search_bgg('Eclipse: Second Dawn')
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(mock_urlopen.call_count, 1)
+
+
+class SearchBggDuplicatesTest(TestCase):
+
+    def _mock_response(self, data):
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps(data).encode()
+        mock_response.__enter__ = lambda s: mock_response
+        mock_response.__exit__ = MagicMock(return_value=False)
+        return mock_response
+
+    @patch('club.bgg.urlopen')
+    def test_duplicate_names_get_year_appended(self, mock_urlopen):
+        """Given search results with duplicate names, when processing, then year is appended to distinguish them"""
+        search_response = self._mock_response({
+            'items': [
+                {'objectid': '38133', 'name': 'Space Base'},
+                {'objectid': '242302', 'name': 'Space Base'},
+            ]
+        })
+        game1_response = self._mock_response({
+            'item': {
+                'name': 'Space Base', 'yearpublished': '1999',
+                'minplayers': None, 'maxplayers': None,
+                'minplaytime': None, 'maxplaytime': None,
+                'description': '', 'short_description': '',
+                'canonical_link': '', 'imageurl': None, 'objectid': '38133',
+            }
+        })
+        game2_response = self._mock_response({
+            'item': {
+                'name': 'Space Base', 'yearpublished': '2018',
+                'minplayers': None, 'maxplayers': None,
+                'minplaytime': None, 'maxplaytime': None,
+                'description': '', 'short_description': '',
+                'canonical_link': '', 'imageurl': None, 'objectid': '242302',
+            }
+        })
+        mock_urlopen.side_effect = [search_response, game1_response, game2_response]
+
+        results = search_bgg('Space Base')
+
+        self.assertEqual(len(results), 2)
+        self.assertIn('(1999)', results[0]['name'])
+        self.assertIn('(2018)', results[1]['name'])
+
+    @patch('club.bgg.urlopen')
+    def test_unique_names_unchanged(self, mock_urlopen):
+        """Given search results with all unique names, when processing, then names are unchanged"""
+        mock_urlopen.return_value = self._mock_response({
+            'items': [
+                {'objectid': '13', 'name': 'Catan'},
+                {'objectid': '278', 'name': 'Catan Card Game'},
+            ]
+        })
+
+        results = search_bgg('Catan')
+
+        self.assertEqual(results[0]['name'], 'Catan')
+        self.assertEqual(results[1]['name'], 'Catan Card Game')
+        self.assertEqual(mock_urlopen.call_count, 1)
+
+    @patch('club.bgg.urlopen')
+    def test_mixed_duplicates_and_uniques(self, mock_urlopen):
+        """Given search results with some duplicate names and some unique, when processing, then only duplicates get year"""
+        search_response = self._mock_response({
+            'items': [
+                {'objectid': '38133', 'name': 'Space Base'},
+                {'objectid': '242302', 'name': 'Space Base'},
+                {'objectid': '322546', 'name': 'Space Base: Biodome'},
+            ]
+        })
+        game1_response = self._mock_response({
+            'item': {
+                'name': 'Space Base', 'yearpublished': '1999',
+                'minplayers': None, 'maxplayers': None,
+                'minplaytime': None, 'maxplaytime': None,
+                'description': '', 'short_description': '',
+                'canonical_link': '', 'imageurl': None, 'objectid': '38133',
+            }
+        })
+        game2_response = self._mock_response({
+            'item': {
+                'name': 'Space Base', 'yearpublished': '2018',
+                'minplayers': None, 'maxplayers': None,
+                'minplaytime': None, 'maxplaytime': None,
+                'description': '', 'short_description': '',
+                'canonical_link': '', 'imageurl': None, 'objectid': '242302',
+            }
+        })
+        mock_urlopen.side_effect = [search_response, game1_response, game2_response]
+
+        results = search_bgg('Space Base')
+
+        self.assertIn('(1999)', results[0]['name'])
+        self.assertIn('(2018)', results[1]['name'])
+        self.assertEqual(results[2]['name'], 'Space Base: Biodome')
+
+    @patch('club.bgg.urlopen')
+    def test_duplicate_with_missing_year_uses_bgg_id(self, mock_urlopen):
+        """Given duplicate names where year fetch fails, when processing, then BGG ID is used as fallback"""
+        search_response = self._mock_response({
+            'items': [
+                {'objectid': '38133', 'name': 'Space Base'},
+                {'objectid': '242302', 'name': 'Space Base'},
+            ]
+        })
+        game1_response = self._mock_response({
+            'item': {
+                'name': 'Space Base', 'yearpublished': None,
+                'minplayers': None, 'maxplayers': None,
+                'minplaytime': None, 'maxplaytime': None,
+                'description': '', 'short_description': '',
+                'canonical_link': '', 'imageurl': None, 'objectid': '38133',
+            }
+        })
+        game2_response = self._mock_response({
+            'item': {
+                'name': 'Space Base', 'yearpublished': '2018',
+                'minplayers': None, 'maxplayers': None,
+                'minplaytime': None, 'maxplaytime': None,
+                'description': '', 'short_description': '',
+                'canonical_link': '', 'imageurl': None, 'objectid': '242302',
+            }
+        })
+        mock_urlopen.side_effect = [search_response, game1_response, game2_response]
+
+        results = search_bgg('Space Base')
+
+        self.assertIn('BGG: 38133', results[0]['name'])
+        self.assertIn('(2018)', results[1]['name'])

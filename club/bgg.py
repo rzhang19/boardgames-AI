@@ -1,5 +1,7 @@
 import json
+import re
 import xml.etree.ElementTree as ET
+from collections import Counter
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -28,23 +30,76 @@ def _safe_int(value):
         return None
 
 
-def search_bgg(query):
+def _strip_punctuation(query):
+    return re.sub(r'[:\-–—,;.!?]', ' ', query)
+
+
+def _raw_search(query):
+    params = urlencode({
+        'objecttype': 'thing',
+        'subtype': 'boardgame',
+        'search': query,
+    })
+    url = f'{BGG_API_BASE}?{params}'
+    data = _make_request(url)
+    return data.get('items', [])
+
+
+def _disambiguate_duplicates(results):
+    name_counts = Counter(r['name'] for r in results)
+    duplicate_names = {name for name, count in name_counts.items() if count > 1}
+
+    if not duplicate_names:
+        return results
+
+    for result in results:
+        if result['name'] in duplicate_names:
+            year = _fetch_year(result['id'])
+            if year:
+                result['name'] = f"{result['name']} ({year})"
+            else:
+                result['name'] = f"{result['name']} (BGG: {result['id']})"
+
+    return results
+
+
+def _fetch_year(bgg_id):
     try:
         params = urlencode({
             'objecttype': 'thing',
-            'subtype': 'boardgame',
-            'search': query,
+            'objectid': bgg_id,
         })
         url = f'{BGG_API_BASE}?{params}'
         data = _make_request(url)
+        item = data.get('item', {})
+        return item.get('yearpublished')
+    except Exception:
+        return None
 
-        items = data.get('items', [])
+
+def search_bgg(query):
+    try:
+        items = _raw_search(query)
+
+        if not items:
+            relaxed = _strip_punctuation(query).strip()
+            relaxed = re.sub(r'\s+', ' ', relaxed)
+            if relaxed and relaxed != query:
+                items = _raw_search(relaxed)
+
+        if not items:
+            first_token = query.split()[0] if query.split() else query
+            if first_token != query and len(first_token) >= 3:
+                items = _raw_search(first_token)
+
         results = []
         for item in items[:MAX_SEARCH_RESULTS]:
             results.append({
                 'id': int(item['objectid']),
                 'name': item['name'],
             })
+
+        results = _disambiguate_duplicates(results)
         return results
     except Exception:
         return []

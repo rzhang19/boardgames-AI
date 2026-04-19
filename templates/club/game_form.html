@@ -127,14 +127,26 @@
         return cookieValue;
     }
 
-    searchBtn.addEventListener('click', function() {
+    var debounceTimer = null;
+    var currentController = null;
+
+    function performSearch() {
         var query = searchInput.value.trim();
-        if (!query) return;
+        if (query.length < 3) {
+            resultsDiv.style.display = 'none';
+            resultsDiv.innerHTML = '';
+            return;
+        }
+
+        if (currentController) {
+            currentController.abort();
+        }
+        currentController = new AbortController();
 
         resultsDiv.innerHTML = '<p>Searching...</p>';
         resultsDiv.style.display = 'block';
 
-        fetch('{% url "bgg_search" %}?q=' + encodeURIComponent(query))
+        fetch('{% url "bgg_search" %}?q=' + encodeURIComponent(query), {signal: currentController.signal})
             .then(function(response) { return response.json(); })
             .then(function(data) {
                 resultsDiv.innerHTML = '';
@@ -153,15 +165,27 @@
                     resultsDiv.appendChild(div);
                 });
             })
-            .catch(function() {
+            .catch(function(err) {
+                if (err.name === 'AbortError') return;
                 resultsDiv.innerHTML = '<p>Search failed. Please try again.</p>';
             });
+    }
+
+    searchInput.addEventListener('input', function() {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(performSearch, 400);
+    });
+
+    searchBtn.addEventListener('click', function() {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        performSearch();
     });
 
     searchInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
-            searchBtn.click();
+            if (debounceTimer) clearTimeout(debounceTimer);
+            performSearch();
         }
     });
 
