@@ -83,7 +83,7 @@ class GameListFilterTest(TestCase):
             name='Risk', owner=self.other_user, min_players=2, max_players=6
         )
         self.game3 = BoardGame.objects.create(
-            name='Go', owner=self.third_user
+            name='Pandemic', owner=self.third_user
         )
 
     def test_filter_by_myself_shows_only_own_games(self):
@@ -92,7 +92,7 @@ class GameListFilterTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Catan')
         self.assertNotContains(response, 'Risk')
-        self.assertNotContains(response, 'Go')
+        self.assertNotContains(response, 'Pandemic')
 
     def test_filter_by_other_user_shows_their_games(self):
         self.client.login(username='gameowner', password='testpass123')
@@ -100,7 +100,7 @@ class GameListFilterTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Risk')
         self.assertNotContains(response, 'Catan')
-        self.assertNotContains(response, 'Go')
+        self.assertNotContains(response, 'Pandemic')
 
     def test_filter_by_multiple_owners(self):
         self.client.login(username='gameowner', password='testpass123')
@@ -108,7 +108,7 @@ class GameListFilterTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Catan')
         self.assertContains(response, 'Risk')
-        self.assertNotContains(response, 'Go')
+        self.assertNotContains(response, 'Pandemic')
 
 
 class GameListPlayerFilterTest(TestCase):
