@@ -175,16 +175,16 @@
                     resultsDiv.innerHTML = '<p>' + data.error + '</p>';
                     return;
                 }
-                if (nameField && !nameField.value) {
+                if (nameField) {
                     nameField.value = data.name || '';
                 }
-                if (descField && !descField.value) {
+                if (descField) {
                     descField.value = data.description || '';
                 }
-                if (minField && !minField.value) {
+                if (minField) {
                     minField.value = data.min_players || '';
                 }
-                if (maxField && !maxField.value) {
+                if (maxField) {
                     maxField.value = data.max_players || '';
                 }
                 if (bggIdField) {
