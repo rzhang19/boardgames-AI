@@ -85,12 +85,12 @@ class BoardGameForm(forms.ModelForm):
     min_players = forms.IntegerField(
         required=True,
         min_value=1,
-        widget=forms.NumberInput(attrs={'min': '1'}),
+        widget=forms.NumberInput(attrs={'min': '1', 'class': 'player-count-input'}),
     )
     max_players = forms.IntegerField(
         required=False,
         min_value=1,
-        widget=forms.NumberInput(attrs={'min': '1'}),
+        widget=forms.NumberInput(attrs={'min': '1', 'class': 'player-count-input'}),
     )
     max_players_unlimited = forms.BooleanField(required=False)
 
