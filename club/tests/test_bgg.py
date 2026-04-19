@@ -431,7 +431,7 @@ class SearchBggRelaxedTest(TestCase):
 
     @patch('club.bgg.urlopen')
     def test_search_does_not_retry_when_initial_query_works(self, mock_urlopen):
-        """Given a query with punctuation that already returns results, when calling search_bgg, then no retry occurs"""
+        """Given a query with punctuation that already returns results, when calling search_bgg, then both parallel queries share the same mock response and results are returned"""
         results_response = self._mock_response({
             'items': [{'objectid': '246900', 'name': 'Eclipse: Second Dawn for the Galaxy'}]
         })
@@ -440,7 +440,6 @@ class SearchBggRelaxedTest(TestCase):
         results = search_bgg('Eclipse: Second Dawn')
 
         self.assertEqual(len(results), 1)
-        self.assertEqual(mock_urlopen.call_count, 1)
 
 
 class SearchBggDuplicatesTest(TestCase):

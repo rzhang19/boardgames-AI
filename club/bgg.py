@@ -2,6 +2,7 @@ import json
 import re
 import xml.etree.ElementTree as ET
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -9,6 +10,7 @@ from urllib.request import Request, urlopen
 BGG_API_BASE = 'https://api.geekdo.com/api/geekitems'
 BGG_XML_API_BASE = 'https://boardgamegeek.com/xmlapi2/thing'
 MAX_SEARCH_RESULTS = 20
+API_TIMEOUT = 5
 
 
 def _build_request(url):
@@ -17,7 +19,7 @@ def _build_request(url):
 
 def _make_request(url):
     req = _build_request(url)
-    with urlopen(req) as response:
+    with urlopen(req, timeout=API_TIMEOUT) as response:
         return json.loads(response.read())
 
 
@@ -45,24 +47,6 @@ def _raw_search(query):
     return data.get('items', [])
 
 
-def _disambiguate_duplicates(results):
-    name_counts = Counter(r['name'] for r in results)
-    duplicate_names = {name for name, count in name_counts.items() if count > 1}
-
-    if not duplicate_names:
-        return results
-
-    for result in results:
-        if result['name'] in duplicate_names:
-            year = _fetch_year(result['id'])
-            if year:
-                result['name'] = f"{result['name']} ({year})"
-            else:
-                result['name'] = f"{result['name']} (BGG: {result['id']})"
-
-    return results
-
-
 def _fetch_year(bgg_id):
     try:
         params = urlencode({
@@ -72,20 +56,58 @@ def _fetch_year(bgg_id):
         url = f'{BGG_API_BASE}?{params}'
         data = _make_request(url)
         item = data.get('item', {})
-        return item.get('yearpublished')
+        return (bgg_id, item.get('yearpublished'))
     except Exception:
-        return None
+        return (bgg_id, None)
+
+
+def _disambiguate_duplicates(results):
+    name_counts = Counter(r['name'] for r in results)
+    duplicate_names = {name for name, count in name_counts.items() if count > 1}
+
+    if not duplicate_names:
+        return results
+
+    dup_ids = [r['id'] for r in results if r['name'] in duplicate_names]
+    year_map = {}
+    with ThreadPoolExecutor(max_workers=min(len(dup_ids), 5)) as executor:
+        futures = {executor.submit(_fetch_year, bid): bid for bid in dup_ids}
+        for future in as_completed(futures):
+            bid, year = future.result()
+            year_map[bid] = year
+
+    for result in results:
+        if result['name'] in duplicate_names:
+            year = year_map.get(result['id'])
+            if year:
+                result['name'] = f"{result['name']} ({year})"
+            else:
+                result['name'] = f"{result['name']} (BGG: {result['id']})"
+
+    return results
+
+
+def _parallel_search(queries):
+    items = []
+    with ThreadPoolExecutor(max_workers=len(queries)) as executor:
+        futures = {executor.submit(_raw_search, q): q for q in queries}
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                items = result
+                break
+    return items
 
 
 def search_bgg(query):
     try:
-        items = _raw_search(query)
+        relaxed = _strip_punctuation(query).strip()
+        relaxed = re.sub(r'\s+', ' ', relaxed)
 
-        if not items:
-            relaxed = _strip_punctuation(query).strip()
-            relaxed = re.sub(r'\s+', ' ', relaxed)
-            if relaxed and relaxed != query:
-                items = _raw_search(relaxed)
+        if relaxed and relaxed != query:
+            items = _parallel_search([query, relaxed])
+        else:
+            items = _raw_search(query)
 
         if not items:
             first_token = query.split()[0] if query.split() else query
