@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}Create Recurring Event{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1>Create Recurring Event</h1>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="field-group">
+            <h2>Event Details</h2>
+            <div class="form-grid">
+                <label for="id_title">Title:<span class="required-asterisk">*</span></label>
+                <div class="input-cell">
+                    {{ form.title }}
+                </div>
+                {% if form.title.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.title.errors }}</div>
+                {% endif %}
+
+                <label for="id_description">Description:</label>
+                <div class="input-cell">
+                    {{ form.description }}
+                </div>
+                {% if form.description.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.description.errors }}</div>
+                {% endif %}
+
+                <label for="id_location">Location:</label>
+                <div class="input-cell">
+                    {{ form.location }}
+                </div>
+                {% if form.location.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.location.errors }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="field-group">
+            <h2>Date &amp; Time</h2>
+            <div class="form-grid">
+                <label for="id_start_date">Start Date:<span class="required-asterisk">*</span></label>
+                <div class="input-cell">
+                    {{ form.start_date }}
+                </div>
+                {% if form.start_date.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.start_date.errors }}</div>
+                {% endif %}
+
+                <label for="id_time">Time:</label>
+                <div class="input-cell">
+                    {{ form.time }}
+                </div>
+                {% if form.time.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.time.errors }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="field-group">
+            <h2>Recurrence</h2>
+            <p class="field-hint">Events repeat weekly on the same day of the week.</p>
+            <div class="form-grid">
+                <label for="id_end_type">End Type:<span class="required-asterisk">*</span></label>
+                <div class="input-cell">
+                    {{ form.end_type }}
+                </div>
+                {% if form.end_type.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.end_type.errors }}</div>
+                {% endif %}
+
+                <label for="id_occurrence_count">Number of Events:</label>
+                <div class="input-cell">
+                    {{ form.occurrence_count }}
+                </div>
+                {% if form.occurrence_count.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.occurrence_count.errors }}</div>
+                {% endif %}
+
+                <label for="id_end_date">End Date:</label>
+                <div class="input-cell">
+                    {{ form.end_date }}
+                </div>
+                {% if form.end_date.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.end_date.errors }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="field-group">
+            <h2>Voting Deadline</h2>
+            <div class="form-grid">
+                <label for="id_voting_deadline_date">Deadline Date:</label>
+                <div class="input-cell">
+                    {{ form.voting_deadline_date }}
+                </div>
+                {% if form.voting_deadline_date.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.voting_deadline_date.errors }}</div>
+                {% endif %}
+
+                <label for="id_voting_deadline_time">Deadline Time:</label>
+                <div class="input-cell">
+                    {{ form.voting_deadline_time }}
+                </div>
+                {% if form.voting_deadline_time.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.voting_deadline_time.errors }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">Preview Dates</button>
+            <a href="{% url 'event_list' %}" class="btn btn-neutral">Cancel</a>
+        </div>
+        {{ form.voting_deadline_offset_minutes }}
+    </form>
+</div>
+
+<script>
+(function() {
+    var dateField = document.getElementById('id_start_date');
+    var timeField = document.getElementById('id_time');
+    var dlDateField = document.getElementById('id_voting_deadline_date');
+    var dlTimeField = document.getElementById('id_voting_deadline_time');
+    var offsetField = document.getElementById('id_voting_deadline_offset_minutes');
+    if (!dateField || !offsetField) return;
+
+    var offsetMinutes = parseInt(offsetField.value, 10) || 0;
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function toDateStr(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+    function toTimeStr(d) { return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+
+    function getEventDate() {
+        var d = dateField.value;
+        var t = timeField.value || '00:00';
+        if (!d) return null;
+        return new Date(d + 'T' + t);
+    }
+
+    function applyOffset() {
+        var ev = getEventDate();
+        if (!ev || isNaN(ev.getTime())) return;
+        var dl = new Date(ev.getTime() - offsetMinutes * 60000);
+        if (dlDateField) dlDateField.value = toDateStr(dl);
+        if (dlTimeField) dlTimeField.value = toTimeStr(dl);
+    }
+
+    function recalcOffset() {
+        var ev = getEventDate();
+        if (!ev || isNaN(ev.getTime())) return;
+        var dld = dlDateField ? dlDateField.value : '';
+        var dlt = dlTimeField ? dlTimeField.value : '00:00';
+        if (!dld) return;
+        var dl = new Date(dld + 'T' + dlt);
+        if (isNaN(dl.getTime())) return;
+        offsetMinutes = Math.round((ev.getTime() - dl.getTime()) / 60000);
+        if (offsetField) offsetField.value = offsetMinutes;
+    }
+
+    dateField.addEventListener('change', applyOffset);
+    if (timeField) timeField.addEventListener('change', applyOffset);
+    if (dlDateField) dlDateField.addEventListener('change', recalcOffset);
+    if (dlTimeField) dlTimeField.addEventListener('change', recalcOffset);
+
+    if (!dlDateField.value && !dlTimeField.value) {
+        applyOffset();
+    }
+
+    var endTypeField = document.getElementById('id_end_type');
+    var countField = document.getElementById('id_occurrence_count');
+    var endDateField = document.getElementById('id_end_date');
+
+    function toggleEndFields() {
+        if (!endTypeField) return;
+        var val = endTypeField.value;
+        if (countField) {
+            countField.parentElement.parentElement.style.display = val === 'count' ? '' : 'none';
+            countField.disabled = val !== 'count';
+        }
+        if (endDateField) {
+            endDateField.parentElement.parentElement.style.display = val === 'end_date' ? '' : 'none';
+            endDateField.disabled = val !== 'end_date';
+        }
+    }
+
+    endTypeField.addEventListener('change', toggleEndFields);
+    toggleEndFields();
+})();
+</script>
+{% endblock %}

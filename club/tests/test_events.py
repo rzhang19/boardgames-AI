@@ -626,3 +626,317 @@ class EventDetailEditButtonTest(TestCase):
         response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
         self.assertContains(response, reverse('event_edit', kwargs={'pk': self.event.pk}))
         self.assertContains(response, 'Edit Event')
+
+
+class RecurringEventAccessTest(TestCase):
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(
+            username='organizer', password='testpass123', is_organizer=True
+        )
+        self.regular = User.objects.create_user(
+            username='regular', password='testpass123'
+        )
+        self.site_admin = User.objects.create_user(
+            username='siteadmin', password='testpass123',
+            is_site_admin=True, is_organizer=False,
+        )
+
+    def test_recurring_page_requires_login(self):
+        response = self.client.get(reverse('event_add_recurring'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_organizer_can_access_recurring_page(self):
+        self.client.login(username='organizer', password='testpass123')
+        response = self.client.get(reverse('event_add_recurring'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_regular_user_cannot_access_recurring_page(self):
+        self.client.login(username='regular', password='testpass123')
+        response = self.client.get(reverse('event_add_recurring'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_site_admin_can_access_recurring_page(self):
+        self.client.login(username='siteadmin', password='testpass123')
+        response = self.client.get(reverse('event_add_recurring'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_preview_page_requires_login(self):
+        response = self.client.get(reverse('event_add_recurring_preview'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_regular_user_cannot_access_preview_page(self):
+        self.client.login(username='regular', password='testpass123')
+        response = self.client.get(reverse('event_add_recurring_preview'))
+        self.assertEqual(response.status_code, 403)
+
+
+class RecurringEventFormValidationTest(TestCase):
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(
+            username='organizer', password='testpass123', is_organizer=True
+        )
+        self.client.login(username='organizer', password='testpass123')
+
+    def test_start_date_in_past_fails(self):
+        past = (timezone.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        response = self.client.post(reverse('event_add_recurring'), {
+            'title': 'Past Recurring',
+            'start_date': past,
+            'end_type': 'count',
+            'occurrence_count': '3',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Event.objects.filter(title='Past Recurring').exists())
+
+    def test_occurrence_count_below_minimum_fails(self):
+        future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        response = self.client.post(reverse('event_add_recurring'), {
+            'title': 'Too Few',
+            'start_date': future,
+            'end_type': 'count',
+            'occurrence_count': '1',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Event.objects.filter(title='Too Few').exists())
+
+    def test_occurrence_count_above_maximum_fails(self):
+        future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        response = self.client.post(reverse('event_add_recurring'), {
+            'title': 'Too Many',
+            'start_date': future,
+            'end_type': 'count',
+            'occurrence_count': '53',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Event.objects.filter(title='Too Many').exists())
+
+    def test_end_date_before_start_date_fails(self):
+        start = (timezone.now() + timedelta(days=14)).strftime('%Y-%m-%d')
+        end = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        response = self.client.post(reverse('event_add_recurring'), {
+            'title': 'Bad Range',
+            'start_date': start,
+            'end_type': 'end_date',
+            'end_date': end,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Event.objects.filter(title='Bad Range').exists())
+
+    def test_end_date_in_past_fails(self):
+        future = (timezone.now() + timedelta(days=30)).strftime('%Y-%m-%d')
+        past = (timezone.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        response = self.client.post(reverse('event_add_recurring'), {
+            'title': 'Past End',
+            'start_date': future,
+            'end_type': 'end_date',
+            'end_date': past,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Event.objects.filter(title='Past End').exists())
+
+    def test_missing_title_fails(self):
+        future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        response = self.client.post(reverse('event_add_recurring'), {
+            'title': '',
+            'start_date': future,
+            'end_type': 'count',
+            'occurrence_count': '3',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Event.objects.exists())
+
+    def test_missing_start_date_fails(self):
+        response = self.client.post(reverse('event_add_recurring'), {
+            'title': 'No Date',
+            'start_date': '',
+            'end_type': 'count',
+            'occurrence_count': '3',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Event.objects.exists())
+
+    def test_valid_count_redirects_to_preview(self):
+        future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        response = self.client.post(reverse('event_add_recurring'), {
+            'title': 'Weekly Game Night',
+            'start_date': future,
+            'time': '18:00',
+            'location': 'The Den',
+            'description': 'Weekly meetup',
+            'end_type': 'count',
+            'occurrence_count': '4',
+            'voting_deadline_offset_minutes': '60',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('event_add_recurring_preview'))
+
+    def test_valid_end_date_redirects_to_preview(self):
+        start = (timezone.now() + timedelta(days=3)).strftime('%Y-%m-%d')
+        end = (timezone.now() + timedelta(days=24)).strftime('%Y-%m-%d')
+        response = self.client.post(reverse('event_add_recurring'), {
+            'title': 'Weekly Game Night',
+            'start_date': start,
+            'end_type': 'end_date',
+            'end_date': end,
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('event_add_recurring_preview'))
+
+
+class RecurringEventPreviewTest(TestCase):
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(
+            username='organizer', password='testpass123', is_organizer=True
+        )
+        self.client.login(username='organizer', password='testpass123')
+
+    def _post_valid_form(self, **kwargs):
+        future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        defaults = {
+            'title': 'Weekly Game Night',
+            'start_date': future,
+            'time': '18:00',
+            'location': 'The Den',
+            'description': 'Weekly meetup',
+            'end_type': 'count',
+            'occurrence_count': '4',
+            'voting_deadline_offset_minutes': '60',
+        }
+        defaults.update(kwargs)
+        return self.client.post(reverse('event_add_recurring'), defaults)
+
+    def test_preview_shows_all_computed_dates(self):
+        self._post_valid_form()
+        response = self.client.get(reverse('event_add_recurring_preview'))
+        self.assertEqual(response.status_code, 200)
+        dates = response.context['dates']
+        self.assertEqual(len(dates), 4)
+        for d in dates:
+            self.assertTrue(d['checked'])
+
+    def test_preview_shows_event_details(self):
+        self._post_valid_form()
+        response = self.client.get(reverse('event_add_recurring_preview'))
+        self.assertContains(response, 'Weekly Game Night')
+        self.assertContains(response, 'The Den')
+
+    def test_preview_without_session_redirects_to_form(self):
+        response = self.client.get(reverse('event_add_recurring_preview'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('event_add_recurring'))
+
+    def test_preview_with_skip_dates_creates_only_checked_events(self):
+        self._post_valid_form(occurrence_count='4')
+        response = self.client.post(reverse('event_add_recurring_preview'), {
+            'submit': 'Create Events',
+            'selected_dates': ['0', '2'],
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Event.objects.filter(title='Weekly Game Night').count(), 2)
+
+    def test_preview_creates_events_with_correct_fields(self):
+        self._post_valid_form()
+        response = self.client.post(reverse('event_add_recurring_preview'), {
+            'submit': 'Create Events',
+            'selected_dates': ['0', '1', '2', '3'],
+        })
+        self.assertEqual(response.status_code, 302)
+        events = Event.objects.filter(title='Weekly Game Night').order_by('date')
+        self.assertEqual(events.count(), 4)
+        for event in events:
+            self.assertEqual(event.location, 'The Den')
+            self.assertEqual(event.description, 'Weekly meetup')
+            self.assertEqual(event.created_by, self.organizer)
+            self.assertEqual(event.date.hour, 18)
+            self.assertEqual(event.date.minute, 0)
+            self.assertEqual(event.voting_deadline_offset_minutes, 60)
+            expected_deadline = event.date - timedelta(minutes=60)
+            self.assertEqual(event.voting_deadline, expected_deadline)
+
+    def test_preview_clears_session_after_creation(self):
+        self._post_valid_form()
+        self.client.post(reverse('event_add_recurring_preview'), {
+            'submit': 'Create Events',
+            'selected_dates': ['0', '1', '2', '3'],
+        })
+        session = self.client.session
+        self.assertNotIn('recurring_event_form_data', session)
+        self.assertNotIn('recurring_event_dates', session)
+
+    def test_preview_cancel_clears_session_and_redirects(self):
+        self._post_valid_form()
+        response = self.client.post(reverse('event_add_recurring_preview'), {
+            'cancel': 'Cancel',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('event_list'))
+        session = self.client.session
+        self.assertNotIn('recurring_event_form_data', session)
+        self.assertNotIn('recurring_event_dates', session)
+        self.assertEqual(Event.objects.filter(title='Weekly Game Night').count(), 0)
+
+    def test_preview_skip_all_dates_fails(self):
+        self._post_valid_form(occurrence_count='2')
+        response = self.client.post(reverse('event_add_recurring_preview'), {
+            'submit': 'Create Events',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Event.objects.filter(title='Weekly Game Night').count(), 0)
+
+    def test_preview_redirects_to_event_list_after_creation(self):
+        self._post_valid_form()
+        response = self.client.post(reverse('event_add_recurring_preview'), {
+            'submit': 'Create Events',
+            'selected_dates': ['0', '1', '2', '3'],
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('event_list'))
+
+    def test_weekly_dates_are_seven_days_apart(self):
+        self._post_valid_form(occurrence_count='3')
+        response = self.client.get(reverse('event_add_recurring_preview'))
+        dates = response.context['dates']
+        self.assertEqual(len(dates), 3)
+        for i in range(1, len(dates)):
+            diff = dates[i]['datetime'] - dates[i - 1]['datetime']
+            self.assertEqual(diff.days, 7)
+
+    def test_end_date_produces_correct_number_of_dates(self):
+        start = (timezone.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+        end = (timezone.now() + timedelta(days=22)).strftime('%Y-%m-%d')
+        self._post_valid_form(end_type='end_date', end_date=end, start_date=start)
+        response = self.client.get(reverse('event_add_recurring_preview'))
+        dates = response.context['dates']
+        self.assertEqual(len(dates), 4)
+
+    def test_preview_has_select_all_checkbox(self):
+        self._post_valid_form()
+        response = self.client.get(reverse('event_add_recurring_preview'))
+        self.assertContains(response, 'select-all-toggle')
+
+
+class RecurringEventButtonTest(TestCase):
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(
+            username='organizer', password='testpass123', is_organizer=True
+        )
+        self.regular = User.objects.create_user(
+            username='regular', password='testpass123'
+        )
+
+    def test_organizer_sees_recurring_event_button(self):
+        self.client.login(username='organizer', password='testpass123')
+        response = self.client.get(reverse('event_list'))
+        self.assertContains(response, reverse('event_add_recurring'))
+        self.assertContains(response, 'Create Recurring Event')
+
+    def test_regular_user_does_not_see_recurring_event_button(self):
+        self.client.login(username='regular', password='testpass123')
+        response = self.client.get(reverse('event_list'))
+        self.assertNotContains(response, 'Create Recurring Event')

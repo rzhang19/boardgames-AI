@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Preview Recurring Events{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1>Preview Recurring Events</h1>
+
+    <div class="card">
+        <h2>Event Details</h2>
+        <p><strong>Title:</strong> {{ event_data.title }}</p>
+        {% if event_data.location %}
+        <p><strong>Location:</strong> {{ event_data.location }}</p>
+        {% endif %}
+        {% if event_data.description %}
+        <p><strong>Description:</strong> {{ event_data.description }}</p>
+        {% endif %}
+        {% if event_data.time %}
+        <p><strong>Time:</strong> {{ event_data.time }}</p>
+        {% endif %}
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="card">
+            <h2>Select Dates ({{ dates|length }} events)</h2>
+
+            {% if error %}
+            <div class="form-errors">{{ error }}</div>
+            {% endif %}
+
+            <div class="recurring-dates-header">
+                <label>
+                    <input type="checkbox" id="select-all-toggle" checked>
+                    Select All
+                </label>
+            </div>
+
+            <div class="recurring-dates-list">
+                {% for d in dates %}
+                <div class="recurring-date-row">
+                    <label>
+                        <input type="checkbox" name="selected_dates" value="{{ forloop.counter0 }}"
+                               class="recurring-date-checkbox" {% if d.checked %}checked{% endif %}>
+                        {{ d.display }}
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button type="submit" name="submit" value="Create Events" class="btn btn-primary">Create Events</button>
+            <button type="submit" name="cancel" value="Cancel" class="btn btn-neutral">Cancel</button>
+        </div>
+    </form>
+</div>
+
+<script>
+(function() {
+    var selectAll = document.getElementById('select-all-toggle');
+    var checkboxes = document.querySelectorAll('.recurring-date-checkbox');
+    if (!selectAll || !checkboxes.length) return;
+
+    selectAll.addEventListener('change', function() {
+        var isChecked = selectAll.checked;
+        checkboxes.forEach(function(cb) { cb.checked = isChecked; });
+    });
+
+    checkboxes.forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            var allChecked = true;
+            checkboxes.forEach(function(c) { if (!c.checked) allChecked = false; });
+            selectAll.checked = allChecked;
+        });
+    });
+})();
+</script>
+{% endblock %}

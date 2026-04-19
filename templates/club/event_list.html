@@ -9,6 +9,7 @@
 {% if user.is_organizer %}
 <div class="action-bar">
     <a href="{% url 'event_add' %}" class="btn btn-primary">Create Event</a>
+    <a href="{% url 'event_add_recurring' %}" class="btn btn-outline">Create Recurring Event</a>
 </div>
 {% endif %}
 

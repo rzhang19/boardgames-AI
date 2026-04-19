@@ -16,7 +16,7 @@ from django.utils import timezone
 from .bgg import fetch_bgg_game, fetch_bgg_weight, search_bgg, weight_to_complexity
 from .borda import calculate_borda_scores
 from .forms import (
-    BetaAccessForm, BoardGameForm, EventForm, SetPasswordForm, SettingsForm,
+    BetaAccessForm, BoardGameForm, EventForm, RecurringEventForm, SetPasswordForm, SettingsForm,
     UserAddForm, UserManageForm, RegistrationForm, VerifiedIconForm, VoteForm,
 )
 from .models import BoardGame, Event, EventAttendance, Notification, SiteSettings, VerifiedIcon, Vote
@@ -714,6 +714,166 @@ def event_add(request):
         'form': form,
         'action': 'Create',
         'voting_offset': SiteSettings.load().default_voting_offset_minutes,
+    })
+
+
+def _compute_recurring_dates(start_dt, end_type, occurrence_count, end_date):
+    dates = []
+    current = start_dt
+    if end_type == 'count':
+        for _ in range(occurrence_count):
+            dates.append(current)
+            current = current + timezone.timedelta(days=7)
+    else:
+        end_dt = timezone.make_aware(
+            datetime.combine(end_date, dt_time(23, 59))
+        ) if timezone.is_naive(datetime.combine(end_date, dt_time(23, 59))) else datetime.combine(
+            end_date, dt_time(23, 59)
+        )
+        while current <= end_dt:
+            dates.append(current)
+            current = current + timezone.timedelta(days=7)
+    return dates
+
+
+def event_add_recurring(request):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    if not (request.user.is_organizer or request.user.is_site_admin):
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        form = RecurringEventForm(request.POST)
+        if form.is_valid():
+            start_dt = form.cleaned_data['start_datetime']
+            end_type = form.cleaned_data['end_type']
+            occurrence_count = form.cleaned_data.get('occurrence_count') or 0
+            end_date = form.cleaned_data.get('end_date')
+
+            dates = _compute_recurring_dates(start_dt, end_type, occurrence_count, end_date)
+
+            if not dates:
+                form.add_error(None, 'No dates could be computed. Check your start date and end condition.')
+                return render(request, 'club/event_form_recurring.html', {
+                    'form': form,
+                    'voting_offset': SiteSettings.load().default_voting_offset_minutes,
+                })
+
+            date_list = []
+            for d in dates:
+                date_list.append({
+                    'date': d.strftime('%Y-%m-%d'),
+                    'time': d.strftime('%H:%M') if d.time() != dt_time(0, 0) else '',
+                    'datetime': d.isoformat(),
+                    'checked': True,
+                })
+
+            vd_date = form.cleaned_data.get('voting_deadline_date')
+            vd_time = form.cleaned_data.get('voting_deadline_time')
+            vd_offset = form.cleaned_data.get('voting_deadline_offset_minutes') or 0
+
+            form_data = {
+                'title': form.cleaned_data['title'],
+                'description': form.cleaned_data.get('description', ''),
+                'location': form.cleaned_data.get('location', ''),
+                'time': form.cleaned_data.get('time').strftime('%H:%M') if form.cleaned_data.get('time') else '',
+                'voting_deadline_offset_minutes': vd_offset,
+                'voting_deadline_date': vd_date.strftime('%Y-%m-%d') if vd_date else '',
+                'voting_deadline_time': vd_time.strftime('%H:%M') if vd_time else '',
+            }
+
+            request.session['recurring_event_form_data'] = form_data
+            request.session['recurring_event_dates'] = date_list
+            return redirect('event_add_recurring_preview')
+    else:
+        form = RecurringEventForm(initial={
+            'voting_deadline_offset_minutes': SiteSettings.load().default_voting_offset_minutes,
+        })
+
+    return render(request, 'club/event_form_recurring.html', {
+        'form': form,
+        'voting_offset': SiteSettings.load().default_voting_offset_minutes,
+    })
+
+
+def event_add_recurring_preview(request):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    if not (request.user.is_organizer or request.user.is_site_admin):
+        raise PermissionDenied
+
+    form_data = request.session.get('recurring_event_dates')
+    if not form_data:
+        return redirect('event_add_recurring')
+
+    dates_data = request.session.get('recurring_event_dates', [])
+    event_data = request.session.get('recurring_event_form_data', {})
+
+    dates = []
+    for d in dates_data:
+        dt = timezone.datetime.fromisoformat(d['datetime'])
+        dates.append({
+            'date': d['date'],
+            'time': d['time'],
+            'datetime': dt,
+            'display': dt.strftime('%A, %B %d, %Y') + (f' at {dt.strftime("%I:%M %p")}' if dt.time() != dt_time(0, 0) else ''),
+            'checked': d.get('checked', True),
+        })
+
+    if request.method == 'POST':
+        if 'cancel' in request.POST:
+            request.session.pop('recurring_event_form_data', None)
+            request.session.pop('recurring_event_dates', None)
+            return redirect('event_list')
+
+        checked_indices = request.POST.getlist('selected_dates')
+        checked_indices = [int(i) for i in checked_indices]
+
+        if not checked_indices:
+            return render(request, 'club/event_recurring_preview.html', {
+                'dates': dates,
+                'event_data': event_data,
+                'error': 'You must select at least one date.',
+            })
+
+        offset = event_data.get('voting_deadline_offset_minutes', 0) or 0
+        time_str = event_data.get('time', '')
+
+        for idx in checked_indices:
+            d = dates_data[idx]
+            dt = timezone.datetime.fromisoformat(d['datetime'])
+
+            event = Event(
+                title=event_data['title'],
+                description=event_data.get('description', ''),
+                location=event_data.get('location', ''),
+                date=dt,
+                created_by=request.user,
+                voting_deadline_offset_minutes=offset,
+            )
+            custom_vd_date = event_data.get('voting_deadline_date')
+            custom_vd_time = event_data.get('voting_deadline_time')
+            if custom_vd_date:
+                vd_t = dt_time(0, 0)
+                if custom_vd_time:
+                    h, m = custom_vd_time.split(':')
+                    vd_t = dt_time(int(h), int(m))
+                vd_combined = datetime.combine(
+                    datetime.strptime(custom_vd_date, '%Y-%m-%d').date(), vd_t
+                )
+                vd_combined = timezone.make_aware(vd_combined) if timezone.is_naive(vd_combined) else vd_combined
+                event.voting_deadline = vd_combined
+            else:
+                event.voting_deadline = event.date - timezone.timedelta(minutes=offset)
+            event.save()
+
+        request.session.pop('recurring_event_form_data', None)
+        request.session.pop('recurring_event_dates', None)
+        return redirect('event_list')
+
+    return render(request, 'club/event_recurring_preview.html', {
+        'dates': dates,
+        'event_data': event_data,
     })
 
 

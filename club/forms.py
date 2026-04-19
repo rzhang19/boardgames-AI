@@ -197,6 +197,76 @@ class EventForm(forms.ModelForm):
         return cleaned_data
 
 
+class RecurringEventForm(forms.Form):
+    title = forms.CharField(max_length=200)
+    description = forms.CharField(
+        max_length=2000, required=False,
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+    location = forms.CharField(max_length=300, required=False)
+    start_date = forms.DateField(
+        widget=forms.DateInput(attrs={'type': 'date'}),
+    )
+    time = forms.TimeField(
+        required=False,
+        widget=forms.TimeInput(attrs={'type': 'time'}),
+    )
+    end_type = forms.ChoiceField(
+        choices=[('count', 'Number of events'), ('end_date', 'End date')],
+        initial='count',
+    )
+    occurrence_count = forms.IntegerField(
+        required=False, min_value=2, max_value=52,
+    )
+    end_date = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'date'}),
+    )
+    voting_deadline_date = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'date'}),
+    )
+    voting_deadline_time = forms.TimeField(
+        required=False,
+        widget=forms.TimeInput(attrs={'type': 'time'}),
+    )
+    voting_deadline_offset_minutes = forms.IntegerField(
+        required=False,
+        widget=forms.HiddenInput,
+    )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        start_date = cleaned_data.get('start_date')
+        time_val = cleaned_data.get('time') or dt_time(0, 0)
+        end_type = cleaned_data.get('end_type')
+
+        if start_date:
+            combined = datetime.combine(start_date, time_val)
+            combined = timezone.make_aware(combined) if timezone.is_naive(combined) else combined
+            if combined < timezone.now():
+                self.add_error('start_date', 'The start date cannot be in the past.')
+            cleaned_data['start_datetime'] = combined
+
+        if end_type == 'count':
+            count = cleaned_data.get('occurrence_count')
+            if not count:
+                self.add_error('occurrence_count', 'Enter the number of events (2-52).')
+        elif end_type == 'end_date':
+            end_date = cleaned_data.get('end_date')
+            if not end_date:
+                self.add_error('end_date', 'Enter an end date.')
+            elif start_date and end_date < start_date:
+                self.add_error('end_date', 'End date must be on or after the start date.')
+            elif end_date:
+                end_combined = datetime.combine(end_date, dt_time(23, 59))
+                end_combined = timezone.make_aware(end_combined) if timezone.is_naive(end_combined) else end_combined
+                if end_combined < timezone.now():
+                    self.add_error('end_date', 'End date cannot be in the past.')
+
+        return cleaned_data
+
+
 class VoteForm(forms.ModelForm):
 
     class Meta:
