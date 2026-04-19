@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 BGG_API_BASE = 'https://api.geekdo.com/api/geekitems'
 BGG_XML_API_BASE = 'https://boardgamegeek.com/xmlapi2/thing'
 MAX_SEARCH_RESULTS = 20
-API_TIMEOUT = 5
+API_TIMEOUT = 15
 
 
 def _build_request(url):
