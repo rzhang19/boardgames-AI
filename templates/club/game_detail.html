@@ -19,10 +19,8 @@
 
     {% if game.min_players or game.max_players %}
     <p><strong>Players:</strong>
-        {% if game.min_players and game.max_players %}
-            {{ game.min_players }}-{{ game.max_players }}
-        {% elif game.min_players %}
-            {{ game.min_players }}+
+        {% if game.min_players %}
+            {{ game.min_players }}-{% if game.max_players == 0 %}Unlimited{% else %}{{ game.max_players }}{% endif %}
         {% endif %}
     </p>
     {% endif %}

@@ -56,10 +56,8 @@
                 <a href="{% url 'game_detail' game.pk %}">{{ game.name }}</a>
             </td>
             <td data-label="Players">
-                {% if game.min_players and game.max_players %}
-                    {{ game.min_players }}-{{ game.max_players }}
-                {% elif game.min_players %}
-                    {{ game.min_players }}+
+                {% if game.min_players %}
+                    {{ game.min_players }}-{% if game.max_players == 0 %}Unlimited{% elif game.max_players %}{{ game.max_players }}{% else %}?{% endif %}
                 {% else %}
                     -
                 {% endif %}

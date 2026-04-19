@@ -20,7 +20,7 @@ from .forms import (
     UserAddForm, UserManageForm, RegistrationForm, VerifiedIconForm, VoteForm,
 )
 from .models import BoardGame, Event, EventAttendance, Notification, SiteSettings, VerifiedIcon, Vote
-from .notifications import generate_missing_complexity_notifications
+from .notifications import generate_missing_complexity_notifications, generate_missing_max_players_notifications
 from .timezone_utils import is_valid_timezone
 from .utils import resize_profile_picture
 
@@ -31,6 +31,7 @@ class CustomLoginView(auth_views.LoginView):
     def form_valid(self, form):
         response = super().form_valid(form)
         generate_missing_complexity_notifications(self.request.user)
+        generate_missing_max_players_notifications(self.request.user)
         return response
 
 
@@ -546,8 +547,8 @@ def game_list(request):
         try:
             player_count = int(players_param)
             games = games.filter(
-                Q(min_players__isnull=False, max_players__isnull=False,
-                  min_players__lte=player_count, max_players__gte=player_count)
+                Q(min_players__isnull=False, min_players__lte=player_count)
+                & (Q(max_players=0) | Q(max_players__isnull=False, max_players__gte=player_count))
             )
         except (ValueError, TypeError):
             pass
@@ -641,6 +642,13 @@ def game_edit(request, pk):
                 Notification.objects.filter(
                     user=request.user,
                     notification_type='missing_complexity',
+                    url=f'/games/{game.pk}/edit/',
+                    is_read=False,
+                ).update(is_read=True)
+            if game.max_players is not None:
+                Notification.objects.filter(
+                    user=request.user,
+                    notification_type='missing_max_players',
                     url=f'/games/{game.pk}/edit/',
                     is_read=False,
                 ).update(is_read=True)

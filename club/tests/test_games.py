@@ -265,6 +265,8 @@ class GameCreateViewTest(TestCase):
         self.client.login(username='creator', password='testpass123')
         response = self.client.post(reverse('game_add'), {
             'name': 'Ticket to Ride',
+            'min_players': 2,
+            'max_players': 5,
             'complexity': 'light',
         })
         self.assertEqual(response.status_code, 302)
@@ -298,6 +300,8 @@ class GameCreateViewTest(TestCase):
         self.client.login(username='creator', password='testpass123')
         response = self.client.post(reverse('game_add'), {
             'name': 'Chess',
+            'min_players': 2,
+            'max_players': 2,
             'complexity': 'unknown',
         })
         self.assertEqual(response.status_code, 302)
@@ -308,6 +312,8 @@ class GameCreateViewTest(TestCase):
         self.client.login(username='creator', password='testpass123')
         response = self.client.post(reverse('game_add'), {
             'name': 'Pandemic',
+            'min_players': 2,
+            'max_players': 4,
             'complexity': 'medium',
         })
         self.assertEqual(response.status_code, 302)
@@ -321,6 +327,73 @@ class GameCreateViewTest(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertFalse(BoardGame.objects.filter(name='No Complexity Game').exists())
+
+    def test_create_game_without_min_players_fails(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('game_add'), {
+            'name': 'No Min',
+            'max_players': 4,
+            'complexity': 'medium',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(BoardGame.objects.filter(name='No Min').exists())
+
+    def test_create_game_without_max_players_or_unlimited_fails(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('game_add'), {
+            'name': 'No Max',
+            'min_players': 2,
+            'complexity': 'medium',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(BoardGame.objects.filter(name='No Max').exists())
+
+    def test_create_game_with_min_players_zero_fails(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('game_add'), {
+            'name': 'Zero Min',
+            'min_players': 0,
+            'max_players': 4,
+            'complexity': 'medium',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(BoardGame.objects.filter(name='Zero Min').exists())
+
+    def test_create_game_with_max_below_min_fails(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('game_add'), {
+            'name': 'Inverted',
+            'min_players': 4,
+            'max_players': 2,
+            'complexity': 'medium',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(BoardGame.objects.filter(name='Inverted').exists())
+
+    def test_create_game_with_unlimited_max_players(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('game_add'), {
+            'name': 'Unlimited Game',
+            'min_players': 2,
+            'max_players_unlimited': 'on',
+            'complexity': 'medium',
+        })
+        self.assertEqual(response.status_code, 302)
+        game = BoardGame.objects.get(name='Unlimited Game')
+        self.assertEqual(game.max_players, 0)
+
+    def test_create_game_with_valid_min_max(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('game_add'), {
+            'name': 'Valid Game',
+            'min_players': 2,
+            'max_players': 6,
+            'complexity': 'medium',
+        })
+        self.assertEqual(response.status_code, 302)
+        game = BoardGame.objects.get(name='Valid Game')
+        self.assertEqual(game.min_players, 2)
+        self.assertEqual(game.max_players, 6)
 
 
 class GameDetailViewTest(TestCase):
@@ -438,6 +511,8 @@ class GameUpdateViewTest(TestCase):
         self.client.login(username='owner', password='testpass123')
         response = self.client.post(reverse('game_edit', kwargs={'pk': self.game.pk}), {
             'name': 'Catan',
+            'min_players': 3,
+            'max_players': 4,
             'complexity': 'medium',
         })
         self.assertEqual(response.status_code, 302)
@@ -478,6 +553,44 @@ class GameUpdateViewTest(TestCase):
         response = self.client.get(reverse('game_edit', kwargs={'pk': own_game.pk}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Edit Game')
+
+    def test_edit_to_set_unlimited_max_players(self):
+        self.client.login(username='owner', password='testpass123')
+        response = self.client.post(reverse('game_edit', kwargs={'pk': self.game.pk}), {
+            'name': 'Catan',
+            'min_players': 3,
+            'max_players_unlimited': 'on',
+            'complexity': 'medium',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.max_players, 0)
+
+    def test_edit_to_remove_unlimited_and_set_value(self):
+        self.game.max_players = 0
+        self.game.save()
+        self.client.login(username='owner', password='testpass123')
+        response = self.client.post(reverse('game_edit', kwargs={'pk': self.game.pk}), {
+            'name': 'Catan',
+            'min_players': 3,
+            'max_players': 6,
+            'complexity': 'medium',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.max_players, 6)
+
+    def test_edit_with_max_below_min_fails(self):
+        self.client.login(username='owner', password='testpass123')
+        response = self.client.post(reverse('game_edit', kwargs={'pk': self.game.pk}), {
+            'name': 'Catan',
+            'min_players': 5,
+            'max_players': 2,
+            'complexity': 'medium',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.name, 'Catan')
 
 
 class GameDeleteViewTest(TestCase):

@@ -171,6 +171,8 @@ class GameAddWithBggTest(TestCase):
         self.client.login(username='creator', password='testpass123')
         response = self.client.post(reverse('game_add'), {
             'name': 'Chess',
+            'min_players': 2,
+            'max_players': 2,
             'complexity': 'unknown',
         })
         self.assertEqual(response.status_code, 302)
@@ -187,6 +189,8 @@ class GameAddWithBggTest(TestCase):
         response = self.client.post(reverse('game_add'), {
             'name': 'Catan',
             'bgg_id': 13,
+            'min_players': 3,
+            'max_players': 4,
             'complexity': 'medium',
         })
         self.assertEqual(response.status_code, 302)
@@ -240,6 +244,8 @@ class GameAddWithBggTest(TestCase):
         response = self.client.post(reverse('game_add'), {
             'name': 'Catan',
             'bgg_id': 13,
+            'min_players': 3,
+            'max_players': 4,
             'complexity': 'medium',
         })
         self.assertEqual(response.status_code, 302)

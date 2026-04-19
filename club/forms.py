@@ -82,10 +82,39 @@ class BoardGameForm(forms.ModelForm):
         choices=[('', '---')] + BoardGame.COMPLEXITY_CHOICES,
         required=True,
     )
+    min_players = forms.IntegerField(
+        required=True,
+        min_value=1,
+        widget=forms.NumberInput(attrs={'min': '1'}),
+    )
+    max_players = forms.IntegerField(
+        required=False,
+        min_value=1,
+        widget=forms.NumberInput(attrs={'min': '1'}),
+    )
+    max_players_unlimited = forms.BooleanField(required=False)
 
     class Meta:
         model = BoardGame
         fields = ['name', 'description', 'min_players', 'max_players', 'complexity', 'bgg_id']
+
+    def clean(self):
+        cleaned_data = super().clean()
+        min_p = cleaned_data.get('min_players')
+        max_p = cleaned_data.get('max_players')
+        unlimited = cleaned_data.get('max_players_unlimited')
+
+        if min_p is not None and min_p < 1:
+            self.add_error('min_players', 'Min players must be at least 1.')
+
+        if unlimited:
+            cleaned_data['max_players'] = 0
+        elif not max_p and max_p != 0:
+            self.add_error('max_players', 'Enter a max player count or check Unlimited.')
+        elif min_p is not None and max_p is not None and max_p < min_p:
+            self.add_error('max_players', 'Max players cannot be less than min players.')
+
+        return cleaned_data
 
 
 class EventForm(forms.ModelForm):

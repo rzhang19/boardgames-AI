@@ -19,7 +19,62 @@
 
     <form method="post">
         {% csrf_token %}
-        {{ form.as_p }}
+
+        <div class="field-group">
+            <h2>Game Details</h2>
+            <div class="form-grid">
+                <label for="id_name">Name:<span class="required-asterisk">*</span></label>
+                <div class="input-cell">
+                    {{ form.name }}
+                </div>
+                {% if form.name.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.name.errors }}</div>
+                {% endif %}
+
+                <label for="id_description">Description:</label>
+                <div class="input-cell">
+                    {{ form.description }}
+                </div>
+                {% if form.description.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.description.errors }}</div>
+                {% endif %}
+
+                <label for="id_min_players">Min Players:<span class="required-asterisk">*</span></label>
+                <div class="input-cell">
+                    {{ form.min_players }}
+                </div>
+                {% if form.min_players.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.min_players.errors }}</div>
+                {% endif %}
+
+                <label for="id_max_players">Max Players:<span class="required-asterisk">*</span></label>
+                <div class="input-cell">
+                    {{ form.max_players }}
+                    <label class="inline-checkbox">
+                        <input type="checkbox" id="id_max_players_unlimited" name="max_players_unlimited" {% if form.max_players_unlimited.value %}checked{% elif game and game.max_players == 0 %}checked{% endif %}>
+                        Unlimited
+                    </label>
+                </div>
+                {% if form.max_players.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.max_players.errors }}</div>
+                {% endif %}
+
+                <label for="id_complexity">Complexity:<span class="required-asterisk">*</span></label>
+                <div class="input-cell">
+                    {{ form.complexity }}
+                </div>
+                {% if form.complexity.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.complexity.errors }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        {{ form.bgg_id }}
         <div id="bgg-complexity-suggestion" class="bgg-suggestion" style="display:none; color: #666; font-size: 0.9em; margin-top: -10px;"></div>
         <div class="btn-group">
             <button type="submit" class="btn btn-primary">{{ action }} Game</button>
@@ -140,6 +195,39 @@
                 resultsDiv.innerHTML = '<p>Failed to load game data.</p>';
             });
     }
+
+    var unlimitedCb = document.getElementById('id_max_players_unlimited');
+
+    function updateMaxField() {
+        if (!maxField || !unlimitedCb) return;
+        if (unlimitedCb.checked) {
+            maxField.disabled = true;
+            maxField.value = '';
+            maxField.removeAttribute('min');
+        } else {
+            maxField.disabled = false;
+            var minVal = minField ? parseInt(minField.value, 10) : 1;
+            if (!isNaN(minVal) && minVal >= 1) {
+                maxField.setAttribute('min', minVal);
+            }
+        }
+    }
+
+    function updateMaxMin() {
+        if (!maxField || !minField || (unlimitedCb && unlimitedCb.checked)) return;
+        var minVal = parseInt(minField.value, 10);
+        if (!isNaN(minVal) && minVal >= 1) {
+            maxField.setAttribute('min', minVal);
+            var currentMax = parseInt(maxField.value, 10);
+            if (!isNaN(currentMax) && currentMax < minVal) {
+                maxField.value = minVal;
+            }
+        }
+    }
+
+    if (unlimitedCb) unlimitedCb.addEventListener('change', updateMaxField);
+    if (minField) minField.addEventListener('change', updateMaxMin);
+    updateMaxField();
 
     clearBtn.addEventListener('click', function() {
         if (bggIdField) bggIdField.value = '';

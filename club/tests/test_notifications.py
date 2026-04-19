@@ -375,8 +375,8 @@ class MissingComplexityNotificationTest(TestCase):
         self.client.post(reverse('game_edit', kwargs={'pk': game.pk}), {
             'name': 'Catan',
             'description': '',
-            'min_players': '',
-            'max_players': '',
+            'min_players': 3,
+            'max_players': 4,
             'complexity': 'medium',
             'bgg_id': '',
         })
@@ -405,6 +405,43 @@ class MissingComplexityNotificationOnLoginTest(TestCase):
         })
         notifs = Notification.objects.filter(user=user, notification_type='missing_complexity')
         self.assertEqual(notifs.count(), 0)
+
+
+class MissingMaxPlayersNotificationTest(TestCase):
+
+    def test_generates_notification_for_game_without_max_players(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        game = BoardGame.objects.create(name='Catan', owner=user)
+        from club.notifications import generate_missing_max_players_notifications
+        generate_missing_max_players_notifications(user)
+        notifs = Notification.objects.filter(user=user, notification_type='missing_max_players')
+        self.assertEqual(notifs.count(), 1)
+        self.assertIn('Catan', notifs.first().message)
+
+    def test_does_not_generate_for_game_with_max_players(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        BoardGame.objects.create(name='Catan', owner=user, max_players=4)
+        from club.notifications import generate_missing_max_players_notifications
+        generate_missing_max_players_notifications(user)
+        notifs = Notification.objects.filter(user=user, notification_type='missing_max_players')
+        self.assertEqual(notifs.count(), 0)
+
+    def test_does_not_generate_for_game_with_unlimited(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        BoardGame.objects.create(name='Catan', owner=user, max_players=0)
+        from club.notifications import generate_missing_max_players_notifications
+        generate_missing_max_players_notifications(user)
+        notifs = Notification.objects.filter(user=user, notification_type='missing_max_players')
+        self.assertEqual(notifs.count(), 0)
+
+    def test_skips_if_notification_already_exists(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        BoardGame.objects.create(name='Catan', owner=user)
+        from club.notifications import generate_missing_max_players_notifications
+        generate_missing_max_players_notifications(user)
+        generate_missing_max_players_notifications(user)
+        notifs = Notification.objects.filter(user=user, notification_type='missing_max_players')
+        self.assertEqual(notifs.count(), 1)
 
 
 class CleanupNotificationsTest(TestCase):
