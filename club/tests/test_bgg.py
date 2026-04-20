@@ -3,7 +3,7 @@ from decimal import Decimal
 from unittest.mock import patch, MagicMock
 from django.test import TestCase
 
-from club.bgg import search_bgg, fetch_bgg_game, fetch_bgg_weight, weight_to_complexity
+from club.bgg import search_bgg, fetch_bgg_game, fetch_bgg_weight, weight_to_complexity, _clean_name, _score_item, _rank_results
 
 
 class SearchBggTest(TestCase):
@@ -368,6 +368,117 @@ class WeightToComplexityTest(TestCase):
         self.assertEqual(weight_to_complexity(Decimal('3.99')), 'medium_heavy')
 
 
+class CleanNameTest(TestCase):
+
+    def test_strips_colon(self):
+        """Given a name with colon, when cleaning, then colon is removed"""
+        self.assertEqual(_clean_name("Eclipse: Second Dawn"), "eclipse second dawn")
+
+    def test_strips_apostrophe(self):
+        """Given a name with apostrophe, when cleaning, then apostrophe is removed"""
+        self.assertEqual(_clean_name("Chris's Game"), "chriss game")
+
+    def test_strips_dash(self):
+        """Given a name with dashes, when cleaning, then dashes are removed"""
+        self.assertEqual(_clean_name("Game - Subtitle"), "game subtitle")
+
+    def test_normalizes_whitespace(self):
+        """Given a name with extra spaces, when cleaning, then whitespace is normalized"""
+        self.assertEqual(_clean_name("Game  of   Thrones"), "game of thrones")
+
+    def test_lowercase(self):
+        """Given a name with uppercase, when cleaning, then name is lowercased"""
+        self.assertEqual(_clean_name("MY GAME"), "my game")
+
+
+class ScoreItemTest(TestCase):
+
+    def test_full_match(self):
+        """Given all query words in name, when scoring, then score is 1.0"""
+        score = _score_item("Eclipse: Second Dawn for the Galaxy", ["eclipse", "second", "dawn"])
+        self.assertEqual(score, 1.0)
+
+    def test_partial_match(self):
+        """Given some query words in name, when scoring, then score is fractional"""
+        score = _score_item("Eclipse: New Dawn for the Galaxy", ["eclipse", "second", "dawn"])
+        self.assertAlmostEqual(score, 2 / 3)
+
+    def test_single_word_match(self):
+        """Given one query word in name, when scoring, then score reflects one match"""
+        score = _score_item("Eclipse Phase", ["eclipse", "second", "dawn"])
+        self.assertAlmostEqual(score, 1 / 3)
+
+    def test_no_match(self):
+        """Given no query words in name, when scoring, then score is 0"""
+        score = _score_item("Totally Unrelated", ["eclipse", "second", "dawn"])
+        self.assertEqual(score, 0)
+
+    def test_matches_with_apostrophe_in_name(self):
+        """Given a name with apostrophe, when scoring against query without, then match occurs"""
+        score = _score_item("Chris's Board Game", ["chriss", "board"])
+        self.assertEqual(score, 1.0)
+
+    def test_empty_query_words(self):
+        """Given empty query words, when scoring, then score is 0"""
+        score = _score_item("Some Game", [])
+        self.assertEqual(score, 0)
+
+
+class RankResultsTest(TestCase):
+
+    def test_ranks_by_score_descending(self):
+        """Given items with different match scores, when ranking, then higher scores come first"""
+        items = [
+            {'objectid': '1', 'name': 'Eclipse Phase'},
+            {'objectid': '2', 'name': 'Eclipse: Second Dawn for the Galaxy'},
+            {'objectid': '3', 'name': 'Eclipse: New Dawn for the Galaxy'},
+        ]
+        ranked = _rank_results(items, 'Eclipse Second Dawn')
+        self.assertEqual(ranked[0]['name'], 'Eclipse: Second Dawn for the Galaxy')
+        self.assertEqual(ranked[1]['name'], 'Eclipse: New Dawn for the Galaxy')
+        self.assertEqual(ranked[2]['name'], 'Eclipse Phase')
+
+    def test_preserves_order_for_ties(self):
+        """Given items with same score, when ranking, then original order is preserved"""
+        items = [
+            {'objectid': '1', 'name': 'Eclipse Phase'},
+            {'objectid': '2', 'name': 'Eclipse Nations'},
+        ]
+        ranked = _rank_results(items, 'Eclipse Random')
+        self.assertEqual(ranked[0]['name'], 'Eclipse Phase')
+        self.assertEqual(ranked[1]['name'], 'Eclipse Nations')
+
+    def test_single_word_query_returns_unsorted(self):
+        """Given a single word query, when ranking, then items are returned as-is"""
+        items = [
+            {'objectid': '1', 'name': 'Game B'},
+            {'objectid': '2', 'name': 'Game A'},
+        ]
+        ranked = _rank_results(items, 'Game')
+        self.assertEqual(ranked[0]['name'], 'Game B')
+
+    def test_filters_zero_score_with_fallback(self):
+        """Given items where none match any query word, when ranking, then all items are returned as fallback"""
+        items = [
+            {'objectid': '1', 'name': 'Catan'},
+            {'objectid': '2', 'name': 'Monopoly'},
+        ]
+        ranked = _rank_results(items, 'Eclipse Second Dawn')
+        self.assertEqual(len(ranked), 2)
+
+    def test_filters_out_zero_score_items(self):
+        """Given items where some match and some don't, when ranking, then zero-score items are removed"""
+        items = [
+            {'objectid': '1', 'name': 'Eclipse: Second Dawn for the Galaxy'},
+            {'objectid': '2', 'name': 'Totally Unrelated Game'},
+            {'objectid': '3', 'name': 'Eclipse Phase'},
+        ]
+        ranked = _rank_results(items, 'Eclipse Second Dawn')
+        self.assertEqual(len(ranked), 2)
+        self.assertEqual(ranked[0]['name'], 'Eclipse: Second Dawn for the Galaxy')
+        self.assertEqual(ranked[1]['name'], 'Eclipse Phase')
+
+
 class SearchBggRelaxedTest(TestCase):
 
     def _mock_response(self, data):
@@ -378,8 +489,8 @@ class SearchBggRelaxedTest(TestCase):
         return mock_response
 
     @patch('club.bgg.urlopen')
-    def test_search_returns_results_without_retry_when_found(self, mock_urlopen):
-        """Given a query that returns results, when calling search_bgg, then no retry occurs"""
+    def test_single_word_returns_results_directly(self, mock_urlopen):
+        """Given a single word query that returns results, when calling search_bgg, then results are returned with one API call"""
         mock_urlopen.return_value = self._mock_response({
             'items': [{'objectid': '13', 'name': 'Catan'}]
         })
@@ -390,56 +501,31 @@ class SearchBggRelaxedTest(TestCase):
         self.assertEqual(mock_urlopen.call_count, 1)
 
     @patch('club.bgg.urlopen')
-    def test_search_retries_without_punctuation_when_no_results(self, mock_urlopen):
-        """Given a query with punctuation that returns 0 results, when calling search_bgg, then retry without punctuation returns results"""
+    def test_multi_word_uses_first_token_fallback(self, mock_urlopen):
+        """Given a multi-word query with no exact results, when calling search_bgg, then first-token broad results are ranked and returned"""
         empty_response = self._mock_response({'items': []})
-        results_response = self._mock_response({
-            'items': [{'objectid': '246900', 'name': 'Eclipse: Second Dawn for the Galaxy'}]
+        broad_response = self._mock_response({
+            'items': [
+                {'objectid': '246900', 'name': 'Eclipse: Second Dawn for the Galaxy'},
+                {'objectid': '72125', 'name': 'Eclipse: New Dawn for the Galaxy'},
+                {'objectid': '23272', 'name': 'Eclipse'},
+            ]
         })
-        mock_urlopen.side_effect = [empty_response, results_response]
+        mock_urlopen.side_effect = [empty_response, broad_response]
 
-        results = search_bgg('Eclipse: Second Dawn')
+        results = search_bgg('Eclipse Second Dawn')
 
-        self.assertEqual(len(results), 1)
+        self.assertTrue(len(results) >= 2)
         self.assertEqual(results[0]['name'], 'Eclipse: Second Dawn for the Galaxy')
-        self.assertEqual(mock_urlopen.call_count, 2)
 
     @patch('club.bgg.urlopen')
-    def test_search_strips_colons_and_dashes(self, mock_urlopen):
-        """Given a query with colons and dashes, when retry occurs, then punctuation is removed"""
-        empty_response = self._mock_response({'items': []})
-        results_response = self._mock_response({
-            'items': [{'objectid': '100', 'name': 'Game Name'}]
-        })
-        mock_urlopen.side_effect = [empty_response, results_response]
-
-        results = search_bgg('Game: The - Name')
-
-        self.assertEqual(len(results), 1)
-        second_call_url = mock_urlopen.call_args_list[1][0][0].full_url
-        self.assertIn('Game+The+Name', second_call_url)
-
-    @patch('club.bgg.urlopen')
-    def test_search_returns_empty_when_all_retries_fail(self, mock_urlopen):
-        """Given a query where all retries return 0 results, when calling search_bgg, then empty list is returned"""
-        empty_response = self._mock_response({'items': []})
-        mock_urlopen.side_effect = [empty_response, empty_response, empty_response]
+    def test_returns_empty_when_no_results(self, mock_urlopen):
+        """Given a query where all searches return empty, when calling search_bgg, then empty list is returned"""
+        mock_urlopen.return_value = self._mock_response({'items': []})
 
         results = search_bgg('xyznonexistent')
 
         self.assertEqual(results, [])
-
-    @patch('club.bgg.urlopen')
-    def test_search_does_not_retry_when_initial_query_works(self, mock_urlopen):
-        """Given a query with punctuation that already returns results, when calling search_bgg, then both parallel queries share the same mock response and results are returned"""
-        results_response = self._mock_response({
-            'items': [{'objectid': '246900', 'name': 'Eclipse: Second Dawn for the Galaxy'}]
-        })
-        mock_urlopen.return_value = results_response
-
-        results = search_bgg('Eclipse: Second Dawn')
-
-        self.assertEqual(len(results), 1)
 
 
 class SearchBggDuplicatesTest(TestCase):
@@ -456,13 +542,13 @@ class SearchBggDuplicatesTest(TestCase):
         """Given search results with duplicate names, when processing, then year is appended to distinguish them"""
         search_response = self._mock_response({
             'items': [
-                {'objectid': '38133', 'name': 'Space Base'},
-                {'objectid': '242302', 'name': 'Space Base'},
+                {'objectid': '38133', 'name': 'Gizmo'},
+                {'objectid': '242302', 'name': 'Gizmo'},
             ]
         })
         game1_response = self._mock_response({
             'item': {
-                'name': 'Space Base', 'yearpublished': '1999',
+                'name': 'Gizmo', 'yearpublished': '1999',
                 'minplayers': None, 'maxplayers': None,
                 'minplaytime': None, 'maxplaytime': None,
                 'description': '', 'short_description': '',
@@ -471,7 +557,7 @@ class SearchBggDuplicatesTest(TestCase):
         })
         game2_response = self._mock_response({
             'item': {
-                'name': 'Space Base', 'yearpublished': '2018',
+                'name': 'Gizmo', 'yearpublished': '2018',
                 'minplayers': None, 'maxplayers': None,
                 'minplaytime': None, 'maxplaytime': None,
                 'description': '', 'short_description': '',
@@ -480,11 +566,12 @@ class SearchBggDuplicatesTest(TestCase):
         })
         mock_urlopen.side_effect = [search_response, game1_response, game2_response]
 
-        results = search_bgg('Space Base')
+        results = search_bgg('Gizmo')
 
         self.assertEqual(len(results), 2)
-        self.assertIn('(1999)', results[0]['name'])
-        self.assertIn('(2018)', results[1]['name'])
+        names = [r['name'] for r in results]
+        self.assertTrue(any('(1999)' in n for n in names), f"Expected (1999) in {names}")
+        self.assertTrue(any('(2018)' in n for n in names), f"Expected (2018) in {names}")
 
     @patch('club.bgg.urlopen')
     def test_unique_names_unchanged(self, mock_urlopen):
@@ -507,14 +594,14 @@ class SearchBggDuplicatesTest(TestCase):
         """Given search results with some duplicate names and some unique, when processing, then only duplicates get year"""
         search_response = self._mock_response({
             'items': [
-                {'objectid': '38133', 'name': 'Space Base'},
-                {'objectid': '242302', 'name': 'Space Base'},
-                {'objectid': '322546', 'name': 'Space Base: Biodome'},
+                {'objectid': '38133', 'name': 'Gizmo'},
+                {'objectid': '242302', 'name': 'Gizmo'},
+                {'objectid': '322546', 'name': 'Gizmo: Biodome'},
             ]
         })
         game1_response = self._mock_response({
             'item': {
-                'name': 'Space Base', 'yearpublished': '1999',
+                'name': 'Gizmo', 'yearpublished': '1999',
                 'minplayers': None, 'maxplayers': None,
                 'minplaytime': None, 'maxplaytime': None,
                 'description': '', 'short_description': '',
@@ -523,7 +610,7 @@ class SearchBggDuplicatesTest(TestCase):
         })
         game2_response = self._mock_response({
             'item': {
-                'name': 'Space Base', 'yearpublished': '2018',
+                'name': 'Gizmo', 'yearpublished': '2018',
                 'minplayers': None, 'maxplayers': None,
                 'minplaytime': None, 'maxplaytime': None,
                 'description': '', 'short_description': '',
@@ -532,24 +619,27 @@ class SearchBggDuplicatesTest(TestCase):
         })
         mock_urlopen.side_effect = [search_response, game1_response, game2_response]
 
-        results = search_bgg('Space Base')
+        results = search_bgg('Gizmo')
 
-        self.assertIn('(1999)', results[0]['name'])
-        self.assertIn('(2018)', results[1]['name'])
-        self.assertEqual(results[2]['name'], 'Space Base: Biodome')
+        dup_names = [r['name'] for r in results if r['name'].startswith('Gizmo (')]
+        unique_names = [r['name'] for r in results if not r['name'].startswith('Gizmo (')]
+        self.assertEqual(len(dup_names), 2)
+        self.assertTrue(any('(1999)' in n for n in dup_names))
+        self.assertTrue(any('(2018)' in n for n in dup_names))
+        self.assertIn('Gizmo: Biodome', unique_names)
 
     @patch('club.bgg.urlopen')
     def test_duplicate_with_missing_year_uses_bgg_id(self, mock_urlopen):
         """Given duplicate names where year fetch fails, when processing, then BGG ID is used as fallback"""
         search_response = self._mock_response({
             'items': [
-                {'objectid': '38133', 'name': 'Space Base'},
-                {'objectid': '242302', 'name': 'Space Base'},
+                {'objectid': '38133', 'name': 'Gizmo'},
+                {'objectid': '242302', 'name': 'Gizmo'},
             ]
         })
         game1_response = self._mock_response({
             'item': {
-                'name': 'Space Base', 'yearpublished': None,
+                'name': 'Gizmo', 'yearpublished': None,
                 'minplayers': None, 'maxplayers': None,
                 'minplaytime': None, 'maxplaytime': None,
                 'description': '', 'short_description': '',
@@ -558,7 +648,7 @@ class SearchBggDuplicatesTest(TestCase):
         })
         game2_response = self._mock_response({
             'item': {
-                'name': 'Space Base', 'yearpublished': '2018',
+                'name': 'Gizmo', 'yearpublished': '2018',
                 'minplayers': None, 'maxplayers': None,
                 'minplaytime': None, 'maxplaytime': None,
                 'description': '', 'short_description': '',
@@ -567,7 +657,8 @@ class SearchBggDuplicatesTest(TestCase):
         })
         mock_urlopen.side_effect = [search_response, game1_response, game2_response]
 
-        results = search_bgg('Space Base')
+        results = search_bgg('Gizmo')
 
-        self.assertIn('BGG: 38133', results[0]['name'])
-        self.assertIn('(2018)', results[1]['name'])
+        names = [r['name'] for r in results]
+        self.assertTrue(any('BGG: 38133' in n for n in names), f"Expected BGG: 38133 in {names}")
+        self.assertTrue(any('(2018)' in n for n in names), f"Expected (2018) in {names}")

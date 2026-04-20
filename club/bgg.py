@@ -32,10 +32,6 @@ def _safe_int(value):
         return None
 
 
-def _strip_punctuation(query):
-    return re.sub(r'[:\-–—,;.!?]', ' ', query)
-
-
 def _raw_search(query):
     params = urlencode({
         'objecttype': 'thing',
@@ -87,32 +83,72 @@ def _disambiguate_duplicates(results):
     return results
 
 
-def _parallel_search(queries):
-    items = []
+def _clean_name(name):
+    cleaned = re.sub(r"[''\u2019]", '', name)
+    cleaned = re.sub(r"[:\-–—,;.!?]", ' ', cleaned)
+    return re.sub(r'\s+', ' ', cleaned).strip().lower()
+
+
+def _score_item(name, query_words):
+    cleaned = _clean_name(name)
+    name_words = set(cleaned.split())
+    matched = sum(1 for w in query_words if w.lower() in name_words)
+    return matched / len(query_words) if query_words else 0
+
+
+def _rank_results(items, query):
+    query_words = query.lower().split()
+    if len(query_words) <= 1:
+        return items
+
+    scored = []
+    for idx, item in enumerate(items):
+        score = _score_item(item['name'], query_words)
+        scored.append((score, idx, item))
+
+    scored.sort(key=lambda x: (-x[0], x[1]))
+
+    ranked = [item for score, _, item in scored if score > 0]
+    if not ranked:
+        return items
+    return ranked
+
+
+def _parallel_search_exact_and_first(query):
+    first_token = query.split()[0] if query.split() else query
+    queries = [query]
+    if first_token != query and len(first_token) >= 3:
+        queries.append(first_token)
+
+    exact_items = []
+    broad_items = []
+
     with ThreadPoolExecutor(max_workers=len(queries)) as executor:
         futures = {executor.submit(_raw_search, q): q for q in queries}
         for future in as_completed(futures):
-            result = future.result()
-            if result:
-                items = result
-                break
-    return items
+            query_used = futures[future]
+            try:
+                result = future.result()
+            except Exception:
+                result = []
+            if query_used == query:
+                exact_items = result
+            else:
+                broad_items = result
+
+    if exact_items:
+        return exact_items
+    return broad_items
 
 
 def search_bgg(query):
     try:
-        relaxed = _strip_punctuation(query).strip()
-        relaxed = re.sub(r'\s+', ' ', relaxed)
-
-        if relaxed and relaxed != query:
-            items = _parallel_search([query, relaxed])
-        else:
-            items = _raw_search(query)
+        items = _parallel_search_exact_and_first(query)
 
         if not items:
-            first_token = query.split()[0] if query.split() else query
-            if first_token != query and len(first_token) >= 3:
-                items = _raw_search(first_token)
+            return []
+
+        items = _rank_results(items, query)
 
         results = []
         for item in items[:MAX_SEARCH_RESULTS]:
