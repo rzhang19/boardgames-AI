@@ -41,6 +41,18 @@
                 <div class="form-errors">{{ form.description.errors }}</div>
                 {% endif %}
 
+                <label for="id_bgg_link_input">BGG Link:</label>
+                <div class="input-cell">
+                    {{ form.bgg_link_input }}
+                    <div id="bgg-link-warning" class="bgg-link-warning" style="display:none; color: #856404; background-color: #fff3cd; border: 1px solid #ffc107; padding: 6px 10px; border-radius: 4px; margin-top: 4px; font-size: 0.85em;">
+                        No BoardGameGeek link set. You can search for this game above or paste a link manually.
+                    </div>
+                </div>
+                {% if form.bgg_link_input.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.bgg_link_input.errors }}</div>
+                {% endif %}
+
                 <label for="id_min_players">Min Players:<span class="required-asterisk">*</span></label>
                 <div class="input-cell">
                     {{ form.min_players }}
@@ -111,6 +123,8 @@
     var maxField = document.getElementById('id_max_players');
     var complexityField = document.getElementById('id_complexity');
     var bggSuggestionDiv = document.getElementById('bgg-complexity-suggestion');
+    var bggLinkInput = document.getElementById('id_bgg_link_input');
+    var bggLinkWarning = document.getElementById('bgg-link-warning');
 
     function getCookie(name) {
         var cookieValue = null;
@@ -126,6 +140,22 @@
         }
         return cookieValue;
     }
+
+    function updateBggLinkWarning() {
+        if (!bggLinkWarning) return;
+        var hasBggId = bggIdField && bggIdField.value;
+        var hasBggLink = bggLinkInput && bggLinkInput.value.trim();
+        if (!hasBggId && !hasBggLink) {
+            bggLinkWarning.style.display = 'block';
+        } else {
+            bggLinkWarning.style.display = 'none';
+        }
+    }
+
+    if (bggLinkInput) {
+        bggLinkInput.addEventListener('input', updateBggLinkWarning);
+    }
+    updateBggLinkWarning();
 
     var debounceTimer = null;
     var currentController = null;
@@ -214,6 +244,9 @@
                 if (bggIdField) {
                     bggIdField.value = data.bgg_id || bggId;
                 }
+                if (bggLinkInput && data.bgg_link) {
+                    bggLinkInput.value = data.bgg_link;
+                }
                 if (data.image_url) {
                     imagePreview.innerHTML = '<img src="' + data.image_url + '" alt="' + (data.name || '') + '">';
                     imagePreview.style.display = 'block';
@@ -228,6 +261,7 @@
                 resultsDiv.style.display = 'none';
                 searchInput.value = '';
                 clearBtn.style.display = 'inline-block';
+                updateBggLinkWarning();
             })
             .catch(function() {
                 resultsDiv.innerHTML = '<p>Failed to load game data.</p>';
@@ -269,10 +303,12 @@
 
     clearBtn.addEventListener('click', function() {
         if (bggIdField) bggIdField.value = '';
+        if (bggLinkInput) bggLinkInput.value = '';
         imagePreview.innerHTML = '';
         imagePreview.style.display = 'none';
         if (bggSuggestionDiv) bggSuggestionDiv.style.display = 'none';
         clearBtn.style.display = 'none';
+        updateBggLinkWarning();
     });
 })();
 </script>

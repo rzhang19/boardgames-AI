@@ -22,9 +22,48 @@ from .forms import (
 from .models import BoardGame, Event, EventAttendance, Notification, SiteSettings, VerifiedIcon, Vote
 from .notifications import generate_missing_complexity_notifications, generate_missing_max_players_notifications
 from .timezone_utils import is_valid_timezone
-from .utils import resize_profile_picture
+from .utils import parse_bgg_link, resize_profile_picture
 
 User = get_user_model()
+
+
+def _process_bgg_link(game, form):
+    bgg_id = form.cleaned_data.get('bgg_id')
+    bgg_link_input = form.cleaned_data.get('bgg_link_input', '')
+
+    if bgg_id:
+        bgg_data = fetch_bgg_game(bgg_id)
+        if bgg_data:
+            game.bgg_id = bgg_data['bgg_id']
+            game.bgg_link = bgg_data['bgg_link']
+            game.image_url = bgg_data.get('image_url') or ''
+            game.bgg_last_synced = timezone.now()
+        weight = fetch_bgg_weight(bgg_id)
+        if weight is not None:
+            game.bgg_weight = weight
+            if not game.complexity:
+                game.complexity = weight_to_complexity(weight)
+    elif bgg_link_input and bgg_link_input.strip():
+        parsed = parse_bgg_link(bgg_link_input)
+        if parsed:
+            game.bgg_id = parsed['bgg_id']
+            game.bgg_link = parsed['bgg_link']
+            bgg_data = fetch_bgg_game(parsed['bgg_id'])
+            if bgg_data:
+                game.bgg_link = bgg_data['bgg_link'] or game.bgg_link
+                game.image_url = bgg_data.get('image_url') or ''
+                game.bgg_last_synced = timezone.now()
+            weight = fetch_bgg_weight(parsed['bgg_id'])
+            if weight is not None:
+                game.bgg_weight = weight
+                if not game.complexity:
+                    game.complexity = weight_to_complexity(weight)
+    else:
+        game.bgg_id = None
+        game.bgg_link = ''
+        game.image_url = ''
+        game.bgg_weight = None
+        game.bgg_last_synced = None
 
 
 class CustomLoginView(auth_views.LoginView):
@@ -587,19 +626,7 @@ def game_add(request):
         if form.is_valid():
             game = form.save(commit=False)
             game.owner = request.user
-            bgg_id = form.cleaned_data.get('bgg_id')
-            if bgg_id:
-                bgg_data = fetch_bgg_game(bgg_id)
-                if bgg_data:
-                    game.bgg_id = bgg_data['bgg_id']
-                    game.bgg_link = bgg_data['bgg_link']
-                    game.image_url = bgg_data['image_url'] or ''
-                    game.bgg_last_synced = timezone.now()
-                weight = fetch_bgg_weight(bgg_id)
-                if weight is not None:
-                    game.bgg_weight = weight
-                    if not game.complexity:
-                        game.complexity = weight_to_complexity(weight)
+            _process_bgg_link(game, form)
             game.save()
             return redirect('game_detail', pk=game.pk)
     else:
@@ -626,17 +653,7 @@ def game_edit(request, pk):
     if request.method == 'POST':
         form = BoardGameForm(request.POST, instance=game)
         if form.is_valid():
-            bgg_id = form.cleaned_data.get('bgg_id')
-            if bgg_id:
-                bgg_data = fetch_bgg_game(bgg_id)
-                if bgg_data:
-                    game.bgg_id = bgg_data['bgg_id']
-                    game.bgg_link = bgg_data['bgg_link']
-                    game.image_url = bgg_data['image_url'] or ''
-                    game.bgg_last_synced = timezone.now()
-                weight = fetch_bgg_weight(bgg_id)
-                if weight is not None:
-                    game.bgg_weight = weight
+            _process_bgg_link(game, form)
             form.save()
             if game.complexity:
                 Notification.objects.filter(

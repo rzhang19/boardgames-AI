@@ -1,10 +1,54 @@
 import io
+import re
+from urllib.parse import urlparse
 
 from PIL import Image
 
 
 MAX_PROFILE_SIZE = 300
 MAX_FILE_SIZE = 2 * 1024 * 1024
+
+BGG_URL_PATTERN = re.compile(
+    r'^/(?:boardgame|boardgameexpansion)/(\d+)'
+)
+
+
+def parse_bgg_link(value):
+    value = value.strip()
+    if not value:
+        return None
+
+    try:
+        bgg_id = int(value)
+        return {
+            'bgg_id': bgg_id,
+            'bgg_link': f'https://boardgamegeek.com/boardgame/{bgg_id}/',
+        }
+    except (ValueError, TypeError):
+        pass
+
+    url = value
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
+
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return None
+
+    host = parsed.hostname or ''
+    if 'boardgamegeek.com' not in host:
+        return None
+
+    match = BGG_URL_PATTERN.match(parsed.path)
+    if not match:
+        return None
+
+    bgg_id = int(match.group(1))
+    return {
+        'bgg_id': bgg_id,
+        'bgg_link': url,
+    }
 
 
 def resize_profile_picture(image_field):

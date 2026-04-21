@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from .models import BoardGame, Event, VerifiedIcon, Vote
 from .timezone_utils import get_timezone_choices, is_valid_timezone
-from .utils import MAX_FILE_SIZE, validate_image_size
+from .utils import MAX_FILE_SIZE, parse_bgg_link, validate_image_size
 
 User = get_user_model()
 
@@ -78,6 +78,12 @@ class EmailOrUsernameLoginForm(AuthenticationForm):
 
 class BoardGameForm(forms.ModelForm):
     bgg_id = forms.IntegerField(required=False, widget=forms.HiddenInput)
+    bgg_link_input = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={
+            'placeholder': 'Paste a BoardGameGeek URL or ID (e.g. https://boardgamegeek.com/boardgame/13/catan)',
+        }),
+    )
     complexity = forms.ChoiceField(
         choices=[('', '---')] + BoardGame.COMPLEXITY_CHOICES,
         required=True,
@@ -97,6 +103,22 @@ class BoardGameForm(forms.ModelForm):
     class Meta:
         model = BoardGame
         fields = ['name', 'description', 'min_players', 'max_players', 'complexity', 'bgg_id']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk and self.instance.bgg_link:
+            self.fields['bgg_link_input'].initial = self.instance.bgg_link
+
+    def clean_bgg_link_input(self):
+        value = self.cleaned_data.get('bgg_link_input', '')
+        if not value or not value.strip():
+            return ''
+        parsed = parse_bgg_link(value)
+        if parsed is None:
+            raise forms.ValidationError(
+                'Enter a valid BoardGameGeek URL or numeric ID.'
+            )
+        return value
 
     def clean(self):
         cleaned_data = super().clean()
