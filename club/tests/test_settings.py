@@ -2,7 +2,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.signing import TimestampSigner
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 from django.urls import reverse
 
 from club.models import SiteSettings
@@ -10,6 +10,7 @@ from club.models import SiteSettings
 User = get_user_model()
 
 
+@tag("integration")
 class SettingsPageAccessTest(TestCase):
 
     def test_settings_page_shows_current_email(self):
@@ -28,6 +29,7 @@ class SettingsPageAccessTest(TestCase):
         self.assertIn('/login/', response.url)
 
 
+@tag("integration")
 class SettingsGearIconTest(TestCase):
 
     def test_gear_icon_present_in_nav_when_logged_in(self):
@@ -42,6 +44,7 @@ class SettingsGearIconTest(TestCase):
         self.assertNotContains(response, reverse('user_settings'))
 
 
+@tag("integration")
 class SettingsAddEmailTest(TestCase):
 
     def setUp(self):
@@ -88,6 +91,7 @@ class SettingsAddEmailTest(TestCase):
         self.assertTrue(self.user.email_verified)
 
 
+@tag("integration")
 class SettingsUpdateEmailTest(TestCase):
 
     def setUp(self):
@@ -154,6 +158,7 @@ class SettingsUpdateEmailTest(TestCase):
         self.assertFalse(self.user.email_verified)
 
 
+@tag("integration")
 class SettingsEmailVerifiedBadgeTest(TestCase):
 
     def test_settings_shows_verified_status_when_verified(self):
@@ -175,6 +180,7 @@ class SettingsEmailVerifiedBadgeTest(TestCase):
         self.assertNotContains(response, 'verified-badge')
 
 
+@tag("integration")
 class GlobalVotingOffsetSettingsTest(TestCase):
 
     def setUp(self):

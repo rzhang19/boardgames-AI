@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.signing import TimestampSigner
@@ -31,6 +31,7 @@ def _build_formset_data(users, overrides=None):
     return data
 
 
+@tag("integration")
 class ManageUsersAccessTest(TestCase):
 
     def setUp(self):
@@ -78,6 +79,7 @@ class ManageUsersAccessTest(TestCase):
         self.assertEqual(response.status_code, 403)
 
 
+@tag("integration")
 class ManageUsersPreviewTest(TestCase):
 
     def setUp(self):
@@ -126,6 +128,7 @@ class ManageUsersPreviewTest(TestCase):
         self.assertContains(response, 'No changes')
 
 
+@tag("integration")
 class ManageUsersConfirmTest(TestCase):
 
     def setUp(self):
@@ -191,6 +194,7 @@ class ManageUsersConfirmTest(TestCase):
         self.assertTrue(self.user1.is_site_admin)
 
 
+@tag("integration")
 class ManageUsersCancelTest(TestCase):
 
     def setUp(self):
@@ -224,6 +228,7 @@ class ManageUsersCancelTest(TestCase):
         self.assertEqual(response.url, reverse('dashboard'))
 
 
+@tag("integration")
 class SiteAdminRestrictionTest(TestCase):
 
     def setUp(self):
@@ -283,6 +288,7 @@ class SiteAdminRestrictionTest(TestCase):
         self.assertTrue(self.regular.is_organizer)
 
 
+@tag("integration")
 class UserAddTest(TestCase):
 
     def setUp(self):
@@ -362,6 +368,7 @@ class UserAddTest(TestCase):
         self.assertEqual(len(mail.outbox), 1)
 
 
+@tag("integration")
 class UserDeleteTest(TestCase):
 
     def setUp(self):
@@ -427,6 +434,7 @@ class UserDeleteTest(TestCase):
         self.assertEqual(response.status_code, 403)
 
 
+@tag("integration")
 class UserSetPasswordTest(TestCase):
 
     def test_valid_token_shows_password_form(self):
@@ -477,6 +485,7 @@ class UserSetPasswordTest(TestCase):
         self.assertContains(response, 'Set Your Password')
 
 
+@tag("integration")
 class ForcedPasswordChangeTest(TestCase):
 
     def setUp(self):
@@ -524,6 +533,7 @@ class ForcedPasswordChangeTest(TestCase):
         self.assertTrue(self.user.check_password('Br@ndN3wPass!'))
 
 
+@tag("integration")
 class AdminOrganizerEnforcementTest(TestCase):
     """Tests for server-side enforcement that site admin implies organizer,
     and that the Site Admin column is visible to site admins."""

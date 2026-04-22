@@ -1,4 +1,4 @@
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.urls import reverse
@@ -6,6 +6,7 @@ from django.urls import reverse
 User = get_user_model()
 
 
+@tag("integration")
 class RegistrationWithoutEmailTest(TestCase):
 
     def test_registration_without_email(self):
@@ -27,6 +28,7 @@ class RegistrationWithoutEmailTest(TestCase):
         self.assertContains(response, 'noemailuser')
 
 
+@tag("integration")
 class RegistrationWithEmailOptionalWarningTest(TestCase):
 
     def test_register_page_shows_email_optional_warning(self):
@@ -36,6 +38,7 @@ class RegistrationWithEmailOptionalWarningTest(TestCase):
         self.assertContains(response, 'email')
 
 
+@tag("integration")
 @override_settings(REQUIRE_EMAIL_VERIFICATION=True)
 class NoEmailLoginWhenVerificationRequiredTest(TestCase):
 

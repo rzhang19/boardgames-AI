@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
 
 from club.models import BoardGame, Event, EventAttendance, Vote
@@ -7,6 +7,7 @@ from club.models import BoardGame, Event, EventAttendance, Vote
 User = get_user_model()
 
 
+@tag("integration")
 class VerifiedBadgeDashboardTest(TestCase):
 
     def test_verified_user_sees_blue_checkmark_on_dashboard(self):
@@ -30,6 +31,7 @@ class VerifiedBadgeDashboardTest(TestCase):
         self.assertNotContains(response, 'verified-badge')
 
 
+@tag("integration")
 class VerifiedBadgeGamePagesTest(TestCase):
 
     def test_verified_owner_shows_checkmark_on_game_pages(self):
@@ -57,6 +59,7 @@ class VerifiedBadgeGamePagesTest(TestCase):
         self.assertNotContains(response, 'verified-badge')
 
 
+@tag("integration")
 class VerifiedBadgeEventPagesTest(TestCase):
 
     def test_verified_creator_shows_checkmark_in_event_list(self):

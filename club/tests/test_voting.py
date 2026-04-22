@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -8,6 +8,7 @@ from club.borda import calculate_borda_scores
 User = get_user_model()
 
 
+@tag("integration")
 class VoteViewAccessTest(TestCase):
 
     def setUp(self):
@@ -45,6 +46,7 @@ class VoteViewAccessTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
+@tag("integration")
 class VoteSubmissionTest(TestCase):
 
     def setUp(self):
@@ -125,6 +127,7 @@ class VoteSubmissionTest(TestCase):
         self.assertEqual(Vote.objects.count(), 0)
 
 
+@tag("unit")
 class BordaCountTest(TestCase):
 
     def setUp(self):
@@ -206,6 +209,7 @@ class BordaCountTest(TestCase):
         self.assertEqual(scores[self.game2.pk], 1)
 
 
+@tag("integration")
 class EventResultsViewTest(TestCase):
 
     def setUp(self):
@@ -242,6 +246,7 @@ class EventResultsViewTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+@tag("integration")
 class VoteVisibilityToggleTest(TestCase):
 
     def setUp(self):

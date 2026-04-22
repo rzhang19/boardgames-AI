@@ -1,6 +1,6 @@
 import os
 
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.templatetags.static import static
@@ -8,6 +8,7 @@ from django.templatetags.static import static
 User = get_user_model()
 
 
+@tag("integration")
 class CSSMobileResponsiveTest(TestCase):
 
     def test_css_file_contains_mobile_media_query(self):
@@ -65,6 +66,7 @@ class CSSMobileResponsiveTest(TestCase):
         self.assertIn('grid-template-columns: 1fr', css)
 
 
+@tag("integration")
 class BaseTemplateMobileTest(TestCase):
 
     def test_base_template_has_viewport_meta_tag(self):
@@ -99,6 +101,7 @@ class BaseTemplateMobileTest(TestCase):
         self.assertIn('nav-actions', source)
 
 
+@tag("integration")
 class GameListDataLabelsTest(TestCase):
 
     def setUp(self):
@@ -118,6 +121,7 @@ class GameListDataLabelsTest(TestCase):
         self.assertContains(response, 'data-label="Owner"')
 
 
+@tag("integration")
 class EventListDataLabelsTest(TestCase):
 
     def test_event_list_table_has_data_labels(self):
@@ -142,6 +146,7 @@ class EventListDataLabelsTest(TestCase):
         self.assertContains(response, 'data-label="Created By"')
 
 
+@tag("integration")
 class EventResultsDataLabelsTest(TestCase):
 
     def test_event_results_table_has_data_labels(self):

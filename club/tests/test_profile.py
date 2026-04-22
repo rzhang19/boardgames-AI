@@ -5,7 +5,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
@@ -23,6 +23,7 @@ def _create_image(filename='test.jpg', size=(100, 100), fmt='JPEG'):
     return SimpleUploadedFile(filename, buf.read(), content_type='image/jpeg')
 
 
+@tag("integration")
 class ProfileViewAccessTest(TestCase):
 
     def setUp(self):
@@ -92,6 +93,7 @@ class ProfileViewAccessTest(TestCase):
         self.assertNotContains(response, 'Edit Profile')
 
 
+@tag("integration")
 class ProfilePrivacyTest(TestCase):
 
     def setUp(self):
@@ -188,6 +190,7 @@ class ProfilePrivacyTest(TestCase):
         self.assertContains(response, 'Joined')
 
 
+@tag("integration")
 class ProfilePictureUploadTest(TestCase):
 
     def setUp(self):
@@ -261,6 +264,7 @@ class ProfilePictureUploadTest(TestCase):
         self.assertFalse(self.user.show_date_joined)
 
 
+@tag("integration")
 class ProfileLinkTest(TestCase):
 
     def setUp(self):

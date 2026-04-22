@@ -1,7 +1,7 @@
 import zoneinfo
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, SimpleTestCase, RequestFactory
+from django.test import TestCase, SimpleTestCase, RequestFactory, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -11,6 +11,7 @@ from club.timezone_utils import get_timezone_choices, is_valid_timezone
 User = get_user_model()
 
 
+@tag("unit")
 class UserModelTimezoneTest(TestCase):
 
     def test_user_timezone_defaults_to_utc(self):
@@ -36,6 +37,7 @@ class UserModelTimezoneTest(TestCase):
         self.assertTrue(user.timezone_detected)
 
 
+@tag("unit")
 class TimezoneUtilsTest(SimpleTestCase):
 
     def test_get_timezone_choices_returns_list(self):
@@ -73,6 +75,7 @@ class TimezoneUtilsTest(SimpleTestCase):
         self.assertFalse(is_valid_timezone(''))
 
 
+@tag("unit")
 class TimezoneMiddlewareTest(TestCase):
 
     def setUp(self):
@@ -118,6 +121,7 @@ class TimezoneMiddlewareTest(TestCase):
         self.assertEqual(timezone.get_current_timezone(), zoneinfo.ZoneInfo('UTC'))
 
 
+@tag("integration")
 class SettingsTimezoneViewTest(TestCase):
 
     def setUp(self):
@@ -171,6 +175,7 @@ class SettingsTimezoneViewTest(TestCase):
         self.assertContains(response, 'Save Settings')
 
 
+@tag("integration")
 class SaveTimezoneEndpointTest(TestCase):
 
     def setUp(self):
@@ -230,6 +235,7 @@ class SaveTimezoneEndpointTest(TestCase):
         self.assertRedirects(response, '/')
 
 
+@tag("integration")
 class AutoDetectJavascriptTest(TestCase):
 
     def test_detect_script_present_when_not_detected(self):

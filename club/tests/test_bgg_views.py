@@ -1,7 +1,7 @@
 import json
 from decimal import Decimal
 from unittest.mock import patch
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -10,6 +10,7 @@ from club.models import BoardGame
 User = get_user_model()
 
 
+@tag("integration")
 class BggSearchViewTest(TestCase):
 
     def setUp(self):
@@ -65,6 +66,7 @@ class BggSearchViewTest(TestCase):
         self.assertEqual(data, [])
 
 
+@tag("integration")
 class BggImportViewTest(TestCase):
 
     def setUp(self):
@@ -129,6 +131,7 @@ class BggImportViewTest(TestCase):
         self.assertIn('error', data)
 
 
+@tag("integration")
 class GameAddWithBggTest(TestCase):
 
     def setUp(self):
@@ -254,6 +257,7 @@ class GameAddWithBggTest(TestCase):
         self.assertEqual(game.complexity, 'medium')
 
 
+@tag("integration")
 class GameEditWithBggTest(TestCase):
 
     def setUp(self):
@@ -292,6 +296,7 @@ class GameEditWithBggTest(TestCase):
         self.assertEqual(self.game.image_url, 'https://cf.geekdo-images.com/pic123.png')
 
 
+@tag("integration")
 class GameDetailWithBggTest(TestCase):
 
     def setUp(self):
@@ -367,6 +372,7 @@ class GameDetailWithBggTest(TestCase):
         self.assertContains(response, 'target="_blank"')
 
 
+@tag("unit")
 class ParseBggLinkTest(TestCase):
 
     def test_parse_full_url_extracts_id(self):
@@ -442,6 +448,7 @@ class ParseBggLinkTest(TestCase):
         self.assertEqual(result, {'bgg_id': 13, 'bgg_link': 'https://www.boardgamegeek.com/boardgame/13/catan'})
 
 
+@tag("integration")
 class GameAddWithBggLinkInputTest(TestCase):
 
     def setUp(self):
@@ -564,6 +571,7 @@ class GameAddWithBggLinkInputTest(TestCase):
         self.assertContains(response, 'bgg-link-warning')
 
 
+@tag("integration")
 class GameEditWithBggLinkInputTest(TestCase):
 
     def setUp(self):

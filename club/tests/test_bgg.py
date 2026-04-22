@@ -1,11 +1,12 @@
 import json
 from decimal import Decimal
 from unittest.mock import patch, MagicMock
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from club.bgg import search_bgg, fetch_bgg_game, fetch_bgg_weight, weight_to_complexity, _clean_name, _score_item, _rank_results
 
 
+@tag("unit")
 class SearchBggTest(TestCase):
 
     @patch('club.bgg.urlopen')
@@ -80,6 +81,7 @@ class SearchBggTest(TestCase):
         self.assertIn('subtype=boardgame', call_args.full_url)
 
 
+@tag("unit")
 class FetchBggGameTest(TestCase):
 
     @patch('club.bgg.urlopen')
@@ -205,6 +207,7 @@ class FetchBggGameTest(TestCase):
         self.assertIn('objecttype=thing', call_args.full_url)
 
 
+@tag("unit")
 class FetchBggWeightTest(TestCase):
 
     BGG_XML_RESPONSE = '''<?xml version="1.0" encoding="utf-8"?>
@@ -313,6 +316,7 @@ class FetchBggWeightTest(TestCase):
         self.assertIsNone(result)
 
 
+@tag("unit")
 class WeightToComplexityTest(TestCase):
 
     def test_weight_below_2_is_light(self):
@@ -368,6 +372,7 @@ class WeightToComplexityTest(TestCase):
         self.assertEqual(weight_to_complexity(Decimal('3.99')), 'medium_heavy')
 
 
+@tag("unit")
 class CleanNameTest(TestCase):
 
     def test_strips_colon(self):
@@ -391,6 +396,7 @@ class CleanNameTest(TestCase):
         self.assertEqual(_clean_name("MY GAME"), "my game")
 
 
+@tag("unit")
 class ScoreItemTest(TestCase):
 
     def test_full_match(self):
@@ -424,6 +430,7 @@ class ScoreItemTest(TestCase):
         self.assertEqual(score, 0)
 
 
+@tag("unit")
 class RankResultsTest(TestCase):
 
     def test_ranks_by_score_descending(self):
@@ -479,6 +486,7 @@ class RankResultsTest(TestCase):
         self.assertEqual(ranked[1]['name'], 'Eclipse Phase')
 
 
+@tag("unit")
 class SearchBggRelaxedTest(TestCase):
 
     def _mock_response(self, data):
@@ -528,6 +536,7 @@ class SearchBggRelaxedTest(TestCase):
         self.assertEqual(results, [])
 
 
+@tag("unit")
 class SearchBggDuplicatesTest(TestCase):
 
     def _mock_response(self, data):

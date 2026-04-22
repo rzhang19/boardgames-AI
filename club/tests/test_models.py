@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
 
@@ -7,6 +7,7 @@ from club.models import BoardGame, Event, EventAttendance, Vote
 User = get_user_model()
 
 
+@tag("unit")
 class BoardGameModelTest(TestCase):
 
     def setUp(self):
@@ -153,6 +154,7 @@ class BoardGameModelTest(TestCase):
         self.assertEqual(game.bgg_weight, Decimal('2.28'))
 
 
+@tag("unit")
 class EventModelTest(TestCase):
 
     def setUp(self):
@@ -217,6 +219,7 @@ class EventModelTest(TestCase):
         self.assertTrue(event.is_active)
 
 
+@tag("unit")
 class EventAttendanceModelTest(TestCase):
 
     def setUp(self):
@@ -285,6 +288,7 @@ class EventAttendanceModelTest(TestCase):
         self.assertEqual(EventAttendance.objects.filter(event=self.event).count(), 2)
 
 
+@tag("unit")
 class VoteModelTest(TestCase):
 
     def setUp(self):

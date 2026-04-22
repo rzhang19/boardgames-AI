@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
 
 from club.models import BoardGame, Event, EventAttendance, VerifiedIcon, Vote
@@ -13,6 +13,7 @@ def _create_svg(name='test.svg'):
     return ContentFile(svg, name=name)
 
 
+@tag("unit")
 class VerifiedIconModelTest(TestCase):
 
     def test_create_verified_icon(self):
@@ -38,6 +39,7 @@ class VerifiedIconModelTest(TestCase):
         self.assertIsNone(user.verified_icon)
 
 
+@tag("integration")
 class SettingsIconPickerTest(TestCase):
 
     def setUp(self):
@@ -103,6 +105,7 @@ class SettingsIconPickerTest(TestCase):
         self.assertIsNone(self.user.verified_icon)
 
 
+@tag("integration")
 class SettingsIconPickerUnverifiedTest(TestCase):
 
     def setUp(self):
@@ -129,6 +132,7 @@ class SettingsIconPickerUnverifiedTest(TestCase):
         self.assertIsNone(self.user.verified_icon)
 
 
+@tag("integration")
 class VerifiedBadgeCustomIconRenderingTest(TestCase):
 
     def setUp(self):
@@ -254,6 +258,7 @@ class VerifiedBadgeCustomIconRenderingTest(TestCase):
         self.assertContains(response, 'verified-badge')
 
 
+@tag("integration")
 class IconManagementAccessTest(TestCase):
 
     def setUp(self):
@@ -283,6 +288,7 @@ class IconManagementAccessTest(TestCase):
         self.assertContains(response, 'delete-icon')
 
 
+@tag("integration")
 class IconManagementAddTest(TestCase):
 
     def setUp(self):
@@ -338,6 +344,7 @@ class IconManagementAddTest(TestCase):
         self.assertFalse(VerifiedIcon.objects.exists())
 
 
+@tag("integration")
 class IconManagementDeleteTest(TestCase):
 
     def setUp(self):

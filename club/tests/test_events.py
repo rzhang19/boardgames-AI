@@ -1,6 +1,6 @@
 from datetime import timedelta, time
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
@@ -10,6 +10,7 @@ from club.models import Event, EventAttendance, SiteSettings
 User = get_user_model()
 
 
+@tag("integration")
 class EventListViewTest(TestCase):
 
     def setUp(self):
@@ -34,6 +35,7 @@ class EventListViewTest(TestCase):
         self.assertContains(response, 'Saturday Bash')
 
 
+@tag("integration")
 class EventCreateViewTest(TestCase):
 
     def setUp(self):
@@ -240,6 +242,7 @@ class EventCreateViewTest(TestCase):
         self.assertEqual(event.voting_deadline_offset_minutes, 0)
 
 
+@tag("integration")
 class EventDetailViewTest(TestCase):
 
     def setUp(self):
@@ -277,6 +280,7 @@ class EventDetailViewTest(TestCase):
         self.assertContains(response, 'RSVP')
 
 
+@tag("integration")
 class EventRSVPTest(TestCase):
 
     def setUp(self):
@@ -325,6 +329,7 @@ class EventRSVPTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+@tag("integration")
 class EventEditViewTest(TestCase):
 
     def setUp(self):
@@ -586,6 +591,7 @@ class EventEditViewTest(TestCase):
         self.assertEqual(self.event.voting_deadline, expected_deadline)
 
 
+@tag("integration")
 class EventDetailEditButtonTest(TestCase):
 
     def setUp(self):
@@ -628,6 +634,7 @@ class EventDetailEditButtonTest(TestCase):
         self.assertContains(response, 'Edit Event')
 
 
+@tag("integration")
 class RecurringEventAccessTest(TestCase):
 
     def setUp(self):
@@ -673,6 +680,7 @@ class RecurringEventAccessTest(TestCase):
         self.assertEqual(response.status_code, 403)
 
 
+@tag("integration")
 class RecurringEventFormValidationTest(TestCase):
 
     def setUp(self):
@@ -787,6 +795,7 @@ class RecurringEventFormValidationTest(TestCase):
         self.assertEqual(response.url, reverse('event_add_recurring_preview'))
 
 
+@tag("system")
 class RecurringEventPreviewTest(TestCase):
 
     def setUp(self):
@@ -920,6 +929,7 @@ class RecurringEventPreviewTest(TestCase):
         self.assertContains(response, 'select-all-toggle')
 
 
+@tag("integration")
 class RecurringEventButtonTest(TestCase):
 
     def setUp(self):

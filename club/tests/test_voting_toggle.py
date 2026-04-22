@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -10,6 +10,7 @@ from club.models import BoardGame, Event, EventAttendance, Vote
 User = get_user_model()
 
 
+@tag("unit")
 class EventVotingModelTest(TestCase):
 
     def setUp(self):
@@ -216,6 +217,7 @@ class EventVotingModelTest(TestCase):
         self.assertFalse(event.voting_open)
 
 
+@tag("integration")
 class ToggleVotingViewTest(TestCase):
 
     def setUp(self):
@@ -330,6 +332,7 @@ class ToggleVotingViewTest(TestCase):
         self.assertFalse(self.event.voting_open)
 
 
+@tag("integration")
 class VoteViewWhenVotingClosedTest(TestCase):
 
     def setUp(self):
@@ -454,6 +457,7 @@ class VoteViewWhenVotingClosedTest(TestCase):
         ).exists())
 
 
+@tag("integration")
 class EventDetailVotingStatusTest(TestCase):
 
     def setUp(self):
@@ -572,6 +576,7 @@ class EventDetailVotingStatusTest(TestCase):
         self.assertContains(response, 'Voting Closed')
 
 
+@tag("integration")
 class VotingDeadlineValidationTest(TestCase):
 
     def setUp(self):

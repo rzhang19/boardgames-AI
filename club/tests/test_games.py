@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -7,6 +7,7 @@ from club.models import BoardGame
 User = get_user_model()
 
 
+@tag("integration")
 class GameListViewTest(TestCase):
 
     def setUp(self):
@@ -64,6 +65,7 @@ class GameListViewTest(TestCase):
         self.assertContains(response, 'Click here to add a game')
 
 
+@tag("integration")
 class GameListFilterTest(TestCase):
 
     def setUp(self):
@@ -111,6 +113,7 @@ class GameListFilterTest(TestCase):
         self.assertNotContains(response, 'Pandemic')
 
 
+@tag("integration")
 class GameListPlayerFilterTest(TestCase):
 
     def setUp(self):
@@ -151,6 +154,7 @@ class GameListPlayerFilterTest(TestCase):
         self.assertContains(response, 'Chess')
 
 
+@tag("integration")
 class GameListSortTest(TestCase):
 
     def setUp(self):
@@ -233,6 +237,7 @@ class GameListSortTest(TestCase):
         self.assertEqual(owners, sorted(owners, reverse=True))
 
 
+@tag("integration")
 class GameCreateViewTest(TestCase):
 
     def setUp(self):
@@ -396,6 +401,7 @@ class GameCreateViewTest(TestCase):
         self.assertEqual(game.max_players, 6)
 
 
+@tag("integration")
 class GameDetailViewTest(TestCase):
 
     def setUp(self):
@@ -454,6 +460,7 @@ class GameDetailViewTest(TestCase):
         self.assertContains(response, reverse('game_delete', kwargs={'pk': self.game.pk}))
 
 
+@tag("integration")
 class GameUpdateViewTest(TestCase):
 
     def setUp(self):
@@ -593,6 +600,7 @@ class GameUpdateViewTest(TestCase):
         self.assertEqual(self.game.name, 'Catan')
 
 
+@tag("integration")
 class GameDeleteViewTest(TestCase):
 
     def setUp(self):

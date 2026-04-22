@@ -1,3 +1,4 @@
+import pytest
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -5,6 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from bot import is_authorized, load_config, parse_target, get_service
 
 
+@pytest.mark.unit
 class TestIsAuthorized:
     def test_authorized_user_returns_true(self):
         import bot
@@ -22,6 +24,7 @@ class TestIsAuthorized:
         assert is_authorized(12345) is False
 
 
+@pytest.mark.unit
 class TestParseTarget:
     def test_no_args_defaults_to_production(self):
         target, remaining = parse_target(None)
@@ -59,6 +62,7 @@ class TestParseTarget:
         assert remaining == ["list"]
 
 
+@pytest.mark.unit
 class TestGetService:
     def test_production_returns_web(self):
         assert get_service("production") == "web"
@@ -67,6 +71,7 @@ class TestGetService:
         assert get_service("staging") == "staging-web"
 
 
+@pytest.mark.unit
 class TestLoadConfig:
     def test_loads_bot_token(self):
         os.environ["TELEGRAM_BOT_TOKEN"] = "test-token-123"

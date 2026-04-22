@@ -1,9 +1,10 @@
 from django.contrib.auth.hashers import make_password
 from django.core.signing import TimestampSigner
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 from django.urls import reverse
 
 
+@tag("integration")
 @override_settings(BETA_ACCESS_CODE_HASH=make_password('testbeta'))
 class BetaAccessGateActiveTest(TestCase):
 
@@ -61,6 +62,7 @@ class BetaAccessGateActiveTest(TestCase):
         self.assertEqual(response.url, '/beta-access/')
 
 
+@tag("integration")
 @override_settings(BETA_ACCESS_CODE_HASH='')
 class BetaAccessGateInactiveTest(TestCase):
 

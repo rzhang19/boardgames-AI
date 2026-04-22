@@ -1,4 +1,4 @@
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.signing import TimestampSigner
@@ -7,6 +7,7 @@ from django.urls import reverse
 User = get_user_model()
 
 
+@tag("integration")
 class RegistrationTest(TestCase):
 
     def test_registration_page_loads(self):
@@ -86,6 +87,7 @@ class RegistrationTest(TestCase):
         self.assertFalse(user.email_verified)
 
 
+@tag("integration")
 class LoginTest(TestCase):
 
     def setUp(self):
@@ -151,6 +153,7 @@ class LoginTest(TestCase):
         self.assertEqual(response.url, reverse('forced_password_change'))
 
 
+@tag("integration")
 class AdminBadgeTest(TestCase):
 
     def setUp(self):
@@ -181,6 +184,7 @@ class AdminBadgeTest(TestCase):
         self.assertNotContains(response, 'Site Admin')
 
 
+@tag("integration")
 class LogoutTest(TestCase):
 
     def setUp(self):
@@ -201,6 +205,7 @@ class LogoutTest(TestCase):
         self.assertNotContains(response, 'logoutuser')
 
 
+@tag("integration")
 class AccessControlTest(TestCase):
 
     def test_unauthenticated_user_cannot_access_manage_users(self):
@@ -227,6 +232,7 @@ class AccessControlTest(TestCase):
         self.assertContains(response, reverse('register'))
 
 
+@tag("integration")
 @override_settings(REQUIRE_EMAIL_VERIFICATION=True)
 class EmailVerificationRegistrationTest(TestCase):
 
@@ -272,6 +278,7 @@ class EmailVerificationRegistrationTest(TestCase):
         self.assertFalse(user.email_verified)
 
 
+@tag("integration")
 class EmailVerificationViewTest(TestCase):
 
     def test_valid_token_verifies_email(self):
@@ -305,6 +312,7 @@ class EmailVerificationViewTest(TestCase):
         self.assertTrue(user.email_verified)
 
 
+@tag("integration")
 @override_settings(REQUIRE_EMAIL_VERIFICATION=True, DEBUG=False)
 class EmailVerificationLoginBlockTest(TestCase):
 
@@ -345,6 +353,7 @@ class EmailVerificationLoginBlockTest(TestCase):
         self.assertEqual(response.url, reverse('dashboard'))
 
 
+@tag("integration")
 class UsernameValidationTest(TestCase):
 
     def test_register_with_letters_numbers_underscore_dash(self):

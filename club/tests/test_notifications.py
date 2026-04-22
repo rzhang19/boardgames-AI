@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -8,6 +8,7 @@ from club.models import BoardGame, Notification
 User = get_user_model()
 
 
+@tag("unit")
 class NotificationModelTest(TestCase):
 
     def test_create_notification(self):
@@ -67,6 +68,7 @@ class NotificationModelTest(TestCase):
         self.assertEqual(Notification.objects.count(), 0)
 
 
+@tag("integration")
 class NotificationContextProcessorTest(TestCase):
 
     def test_authenticated_user_sees_unread_count(self):
@@ -113,6 +115,7 @@ class NotificationContextProcessorTest(TestCase):
         self.assertEqual(response.context['notification_badge_display'], '0')
 
 
+@tag("integration")
 class NotificationListViewTest(TestCase):
 
     def test_notification_list_requires_login(self):
@@ -144,6 +147,7 @@ class NotificationListViewTest(TestCase):
         self.assertLess(second_pos, first_pos)
 
 
+@tag("integration")
 class NotificationMarkReadTest(TestCase):
 
     def test_mark_read_requires_login(self):
@@ -205,6 +209,7 @@ class NotificationMarkReadTest(TestCase):
         self.assertTrue(notif.is_read)
 
 
+@tag("integration")
 class NotificationMarkAllReadTest(TestCase):
 
     def test_mark_all_read_requires_login(self):
@@ -239,6 +244,7 @@ class NotificationMarkAllReadTest(TestCase):
         self.assertEqual(response.status_code, 405)
 
 
+@tag("integration")
 class NotificationDeleteSelectedTest(TestCase):
 
     def test_delete_selected_requires_login(self):
@@ -294,6 +300,7 @@ class NotificationDeleteSelectedTest(TestCase):
         self.assertEqual(response.status_code, 405)
 
 
+@tag("unit")
 class MissingComplexityNotificationTest(TestCase):
 
     def test_generates_notification_for_game_without_complexity(self):
@@ -384,6 +391,7 @@ class MissingComplexityNotificationTest(TestCase):
         self.assertTrue(notif.is_read)
 
 
+@tag("integration")
 class MissingComplexityNotificationOnLoginTest(TestCase):
 
     def test_notifications_generated_on_login(self):
@@ -407,6 +415,7 @@ class MissingComplexityNotificationOnLoginTest(TestCase):
         self.assertEqual(notifs.count(), 0)
 
 
+@tag("unit")
 class MissingMaxPlayersNotificationTest(TestCase):
 
     def test_generates_notification_for_game_without_max_players(self):
@@ -444,6 +453,7 @@ class MissingMaxPlayersNotificationTest(TestCase):
         self.assertEqual(notifs.count(), 1)
 
 
+@tag("unit")
 class CleanupNotificationsTest(TestCase):
 
     def test_deletes_read_notifications_older_than_30_days(self):
