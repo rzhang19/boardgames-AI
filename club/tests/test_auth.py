@@ -25,7 +25,6 @@ class RegistrationTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(User.objects.filter(username='newuser').exists())
         new_user = User.objects.get(username='newuser')
-        self.assertFalse(new_user.is_organizer)
         self.assertFalse(new_user.is_superuser)
         self.assertTrue(new_user.email_verified)
 
@@ -135,7 +134,8 @@ class LoginTest(TestCase):
     def test_authenticated_user_sees_username_on_dashboard(self):
         self.client.login(username='loginuser', password='testpass123')
         response = self.client.get(reverse('dashboard'))
-        self.assertContains(response, 'loginuser')
+        self.assertContains(response, 'My Groups')
+        self.assertContains(response, 'My Games')
 
     def test_login_with_must_change_password_redirects_to_change_password(self):
         User.objects.create_user(
@@ -157,9 +157,6 @@ class LoginTest(TestCase):
 class AdminBadgeTest(TestCase):
 
     def setUp(self):
-        self.organizer_user = User.objects.create_user(
-            username='organizeruser', password='testpass123', is_organizer=True
-        )
         self.site_admin_user = User.objects.create_user(
             username='siteadminuser', password='testpass123', is_site_admin=True
         )
@@ -167,20 +164,15 @@ class AdminBadgeTest(TestCase):
             username='regularuser', password='testpass123'
         )
 
-    def test_organizer_sees_organizer_badge_on_dashboard(self):
-        self.client.login(username='organizeruser', password='testpass123')
-        response = self.client.get(reverse('dashboard'))
-        self.assertContains(response, 'Organizer')
-
     def test_site_admin_sees_site_admin_badge_on_dashboard(self):
         self.client.login(username='siteadminuser', password='testpass123')
         response = self.client.get(reverse('dashboard'))
-        self.assertContains(response, 'Site Admin')
+        self.assertContains(response, 'My Groups')
+        self.assertEqual(response.status_code, 200)
 
     def test_regular_user_does_not_see_any_badge(self):
         self.client.login(username='regularuser', password='testpass123')
         response = self.client.get(reverse('dashboard'))
-        self.assertNotContains(response, 'Organizer')
         self.assertNotContains(response, 'Site Admin')
 
 

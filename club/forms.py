@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.utils import timezone
 
-from .models import BoardGame, Event, VerifiedIcon, Vote
+from .models import BoardGame, Event, Group, GroupMembership, VerifiedIcon, Vote
 from .timezone_utils import get_timezone_choices, is_valid_timezone
 from .utils import MAX_FILE_SIZE, parse_bgg_link, validate_image_size
 
@@ -13,12 +13,11 @@ User = get_user_model()
 
 
 class UserManageForm(forms.ModelForm):
-    is_organizer = forms.BooleanField(required=False)
     is_site_admin = forms.BooleanField(required=False)
 
     class Meta:
         model = User
-        fields = ['is_organizer', 'is_site_admin']
+        fields = ['is_site_admin']
 
 
 class UserAddForm(forms.ModelForm):
@@ -358,3 +357,35 @@ class VerifiedIconForm(forms.ModelForm):
         if name and VerifiedIcon.objects.filter(name=name).exists():
             raise forms.ValidationError('An icon with this name already exists.')
         return name
+
+
+class GroupCreateForm(forms.ModelForm):
+    class Meta:
+        model = Group
+        fields = ['name', 'description', 'image', 'discoverable', 'join_policy']
+
+
+class GroupSettingsForm(forms.ModelForm):
+    class Meta:
+        model = Group
+        fields = ['name', 'description', 'image', 'discoverable', 'join_policy', 'max_members']
+
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+        if self.user and not self.user.is_superuser:
+            self.fields['max_members'].disabled = True
+
+
+class SuccessorPickForm(forms.Form):
+    successor = forms.IntegerField(widget=forms.HiddenInput())
+
+    def __init__(self, *args, members=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._member_ids = [m.user_id for m in (members or [])]
+
+    def clean_successor(self):
+        uid = self.cleaned_data['successor']
+        if uid not in self._member_ids:
+            raise forms.ValidationError('Invalid successor.')
+        return uid

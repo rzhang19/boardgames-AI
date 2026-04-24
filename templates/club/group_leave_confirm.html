@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Leave {{ group.name }}{% endblock %}
+
+{% block content %}
+<h1>Leave {{ group.name }}</h1>
+
+{% if needs_successor %}
+<div class="card">
+    <div class="alert alert-warning">
+        You are the last admin of this group. You must appoint a successor before leaving.
+    </div>
+    <form method="post">{% csrf_token %}
+        {{ form.as_p }}
+        <div class="btn-group">
+            <button type="submit" class="btn btn-danger">Transfer &amp; Leave</button>
+            <a href="{% url 'group_dashboard' group.slug %}" class="btn btn-neutral">Cancel</a>
+        </div>
+    </form>
+</div>
+
+{% elif is_last_member %}
+<div class="card">
+    <div class="alert alert-danger">
+        <strong>Warning:</strong> You are the last member of this group. Leaving will place the group in a 30-day grace period. After 30 days, the group and all its data (events, votes, attendance) will be permanently deleted. Contact a site admin to restore the group during the grace period.
+    </div>
+    <form method="post">{% csrf_token %}
+        <div class="btn-group">
+            <button type="submit" class="btn btn-danger">Leave &amp; Disband Group</button>
+            <a href="{% url 'group_dashboard' group.slug %}" class="btn btn-neutral">Cancel</a>
+        </div>
+    </form>
+</div>
+
+{% else %}
+<div class="card">
+    <p>Are you sure you want to leave <strong>{{ group.name }}</strong>?</p>
+    <form method="post">{% csrf_token %}
+        <div class="btn-group">
+            <button type="submit" class="btn btn-danger">Leave Group</button>
+            <a href="{% url 'group_dashboard' group.slug %}" class="btn btn-neutral">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

@@ -6,37 +6,53 @@
 {% block content %}
 <h1>Events</h1>
 
-{% if user.is_organizer %}
-<div class="action-bar">
-    <a href="{% url 'event_add' %}" class="btn btn-primary">Create Event</a>
-    <a href="{% url 'event_add_recurring' %}" class="btn btn-outline">Create Recurring Event</a>
-</div>
-{% endif %}
+{% for eg in event_groups %}
+<div class="card">
+    <h2>
+        {% if not group %}
+        <a href="{% url 'group_event_list' eg.group.slug %}">{{ eg.group.name }}</a>
+        {% else %}
+        {{ eg.group.name }}
+        {% endif %}
+    </h2>
 
-{% if events %}
-<table>
-    <thead>
-        <tr>
-            <th>Title</th>
-            <th>Date</th>
-            <th>Location</th>
-            <th>Created By</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for event in events %}
-        <tr>
-            <td data-label="Title"><a href="{% url 'event_detail' event.pk %}">{{ event.title }}</a></td>
-            <td data-label="Date">{{ event.date|date:"N j, Y" }}{% if event.date.time != time_midnight %} {{ event.date|date:"g:i A" }}{% endif %}</td>
-            <td data-label="Location">{{ event.location|default:"-" }}</td>
-            <td data-label="Created By"><a href="{% url 'public_profile' event.created_by.username %}">{{ event.created_by.username }}</a>{% verified_badge event.created_by %}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% else %}
+    {% if eg.is_organizer %}
+    <div class="action-bar">
+        <a href="{% url 'event_add' eg.group.slug %}" class="btn btn-primary">Create Event</a>
+        <a href="{% url 'event_add_recurring' eg.group.slug %}" class="btn btn-outline">Create Recurring Event</a>
+    </div>
+    {% endif %}
+
+    {% if eg.events %}
+    <table>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Date</th>
+                <th>Location</th>
+                <th>Created By</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in eg.events %}
+            <tr>
+                <td data-label="Title"><a href="{% url 'event_detail' event.group.slug event.pk %}">{{ event.title }}</a></td>
+                <td data-label="Date">{{ event.date|date:"N j, Y" }}{% if event.date.time != time_midnight %} {{ event.date|date:"g:i A" }}{% endif %}</td>
+                <td data-label="Location">{{ event.location|default:"-" }}</td>
+                <td data-label="Created By"><a href="{% url 'public_profile' event.created_by.username %}">{{ event.created_by.username }}</a>{% verified_badge event.created_by %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <p>No events scheduled yet.</p>
+    </div>
+    {% endif %}
+</div>
+{% empty %}
 <div class="empty-state">
     <p>No events scheduled yet.</p>
 </div>
-{% endif %}
+{% endfor %}
 {% endblock %}

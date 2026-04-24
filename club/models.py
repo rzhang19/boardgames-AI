@@ -1,13 +1,16 @@
 from django.contrib.auth.models import AbstractUser, UserManager
 from django.core.validators import RegexValidator
 from django.db import models
+from django.db.models.signals import pre_save
+from django.dispatch import receiver
 from django.utils import timezone
+from django.utils.text import slugify
+from uuid import uuid4
 
 
 class ClubUserManager(UserManager):
 
     def create_superuser(self, username, email=None, password=None, **extra_fields):
-        extra_fields.setdefault('is_organizer', True)
         extra_fields.setdefault('is_site_admin', True)
         return super().create_superuser(username, email, password, **extra_fields)
 
@@ -23,6 +26,7 @@ class VerifiedIcon(models.Model):
 
 class SiteSettings(models.Model):
     default_voting_offset_minutes = models.IntegerField(default=0)
+    allow_site_admins_to_delete_groups = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         self.pk = 1
@@ -53,7 +57,6 @@ class User(AbstractUser):
         },
     )
 
-    is_organizer = models.BooleanField(default=False)
     is_site_admin = models.BooleanField(default=False)
     email_verified = models.BooleanField(default=False)
     timezone = models.CharField(max_length=63, default='UTC')
@@ -70,9 +73,244 @@ class User(AbstractUser):
     show_events = models.BooleanField(default=True)
     show_date_joined = models.BooleanField(default=True)
     must_change_password = models.BooleanField(default=False)
+    group_creation_override = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return self.username
+
+
+class Group(models.Model):
+    JOIN_POLICY_CHOICES = [
+        ('open', 'Open'),
+        ('request', 'Request Approval'),
+        ('invite_only', 'Invite Only'),
+    ]
+
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=100, unique=True, blank=True)
+    description = models.TextField(blank=True)
+    image = models.ImageField(upload_to='group_images/', blank=True)
+    discoverable = models.BooleanField(default=True)
+    join_policy = models.CharField(
+        max_length=20,
+        choices=JOIN_POLICY_CHOICES,
+        default='open',
+    )
+    max_members = models.PositiveIntegerField(default=50)
+    disbanded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_groups',
+    )
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def is_disbanded(self):
+        return self.disbanded_at is not None
+
+    @property
+    def is_grace_period_expired(self):
+        if self.disbanded_at is None:
+            return False
+        return self.disbanded_at + timezone.timedelta(days=30) <= timezone.now()
+
+    def member_count(self):
+        return self.membership.count()
+
+    def is_member(self, user):
+        if not user.is_authenticated:
+            return False
+        return GroupMembership.objects.filter(user=user, group=self).exists()
+
+    def is_admin(self, user):
+        if not user.is_authenticated:
+            return False
+        return GroupMembership.objects.filter(
+            user=user, group=self, role='admin',
+        ).exists()
+
+    def visible_to(self, user):
+        if not user.is_authenticated:
+            return self.discoverable
+        return (
+            self.discoverable
+            or self.is_member(user)
+            or user.is_superuser
+            or user.is_site_admin
+        )
+
+    def games(self):
+        return BoardGame.objects.filter(
+            owner__membership__group=self,
+            owner__membership__role__in=['admin', 'organizer', 'member'],
+        )
+
+    def can_change_max_members(self, user):
+        return user.is_superuser
+
+
+@receiver(pre_save, sender=Group)
+def group_generate_slug(sender, instance, **kwargs):
+    if instance.slug:
+        return
+    base_slug = slugify(instance.name)
+    if not base_slug:
+        base_slug = 'group'
+    slug = base_slug
+    counter = 2
+    while Group.objects.filter(slug=slug).exclude(pk=instance.pk).exists():
+        slug = f'{base_slug}-{counter}'
+        counter += 1
+    instance.slug = slug
+
+
+class GroupMembership(models.Model):
+    ROLE_CHOICES = [
+        ('member', 'Member'),
+        ('organizer', 'Organizer'),
+        ('admin', 'Admin'),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='membership',
+    )
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.CASCADE,
+        related_name='membership',
+    )
+    role = models.CharField(
+        max_length=20,
+        choices=ROLE_CHOICES,
+        default='member',
+    )
+    joined_at = models.DateTimeField(auto_now_add=True)
+    is_favorite = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'group'],
+                name='unique_group_membership',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.user} - {self.group} ({self.role})'
+
+
+class GroupInvite(models.Model):
+    group = models.ForeignKey(Group, on_delete=models.CASCADE)
+    token = models.CharField(max_length=64, unique=True, default=uuid4)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    used = models.BooleanField(default=False)
+
+    def is_valid(self):
+        if self.used:
+            return False
+        if timezone.now() >= self.expires_at:
+            return False
+        return True
+
+    def use(self, user):
+        if self.used:
+            raise ValueError('Invite has already been used.')
+        if timezone.now() >= self.expires_at:
+            raise ValueError('Invite has expired.')
+        if self.group.membership.count() >= self.group.max_members:
+            raise ValueError('Group has reached its maximum number of members.')
+        if GroupMembership.objects.filter(user=user, group=self.group).exists():
+            raise ValueError('User is already a member of this group.')
+        self.used = True
+        self.save(update_fields=['used'])
+        return GroupMembership.objects.create(
+            user=user,
+            group=self.group,
+            role='member',
+        )
+
+    def __str__(self):
+        return f'Invite to {self.group} (expires {self.expires_at})'
+
+
+class GroupJoinRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    group = models.ForeignKey(Group, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'group'],
+                name='unique_join_request',
+            ),
+        ]
+
+    @property
+    def is_valid(self):
+        return self.status == 'pending' and timezone.now() < self.expires_at
+
+    def approve(self):
+        if self.status != 'pending':
+            raise ValueError('Request is not pending.')
+        if timezone.now() >= self.expires_at:
+            raise ValueError('Request has expired.')
+        if self.group.membership.count() >= self.group.max_members:
+            raise ValueError('Group has reached its maximum number of members.')
+        if GroupMembership.objects.filter(user=self.user, group=self.group).exists():
+            raise ValueError('User is already a member of this group.')
+        self.status = 'approved'
+        self.save(update_fields=['status'])
+        return GroupMembership.objects.create(
+            user=self.user,
+            group=self.group,
+            role='member',
+        )
+
+    def reject(self):
+        self.status = 'rejected'
+        self.save(update_fields=['status'])
+
+    def __str__(self):
+        return f'{self.user} requests to join {self.group} ({self.status})'
+
+
+class GroupCreationLog(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.SET_NULL,
+        null=True,
+    )
+
+    def __str__(self):
+        return f'{self.user} created a group at {self.created_at}'
 
 
 class BoardGame(models.Model):
@@ -114,6 +352,10 @@ class Event(models.Model):
     location = models.CharField(max_length=300, blank=True)
     description = models.TextField(blank=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.CASCADE,
+    )
     show_individual_votes = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     voting_open = models.BooleanField(default=True)

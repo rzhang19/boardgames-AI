@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Restore {{ group.name }}{% endblock %}
+
+{% block content %}
+<h1>Restore Group</h1>
+
+<div class="card">
+    <div class="alert alert-warning">
+        This group was disbanded and is currently in a grace period.
+    </div>
+    <p>Restore <strong>{{ group.name }}</strong>?</p>
+    {% if group.disbanded_at %}
+    <p class="helptext">Disbanded on {{ group.disbanded_at|date:"N j, Y" }}. Former members will not be automatically re-added.</p>
+    {% endif %}
+    <form method="post">{% csrf_token %}
+        <div class="btn-group">
+            <button type="submit" class="btn btn-success">Restore Group</button>
+            <a href="{% url 'group_list' %}" class="btn btn-neutral">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

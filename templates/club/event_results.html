@@ -53,5 +53,5 @@
 {% endfor %}
 {% endif %}
 
-<a href="{% url 'event_detail' event.pk %}" class="btn btn-outline btn-sm">Back to Event</a>
+<a href="{% url 'event_detail' event.group.slug event.pk %}" class="btn btn-outline btn-sm">Back to Event</a>
 {% endblock %}

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% load club_tags %}
+
+{% block title %}Groups{% endblock %}
+
+{% block content %}
+<h1>Groups</h1>
+
+<div class="sub-tabs">
+    <a href="{% url 'group_list' %}?tab=my" class="sub-tab {% if tab == 'my' %}active{% endif %}">My Groups</a>
+    <a href="{% url 'group_list' %}?tab=all" class="sub-tab {% if tab == 'all' %}active{% endif %}">All Groups</a>
+    <a href="{% url 'group_list' %}?tab=pending" class="sub-tab {% if tab == 'pending' %}active{% endif %}">Pending</a>
+</div>
+
+<div class="action-bar">
+    <form method="get" class="filter-bar filter-bar-inline">
+        <input type="hidden" name="tab" value="{{ tab }}">
+        <input type="text" name="q" value="{{ query }}" placeholder="Search groups..." class="search-input">
+        {% if query %}
+        <a href="{% url 'group_list' %}?tab={{ tab }}" class="btn btn-neutral btn-sm">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+{% if tab == 'pending' %}
+{% if pending_requests %}
+<div class="card">
+    <h2>Pending Requests</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Group</th>
+                <th>Requested</th>
+                <th>Expires</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for req in pending_requests %}
+            <tr>
+                <td data-label="Group"><a href="{% url 'group_dashboard' req.group.slug %}">{{ req.group.name }}</a></td>
+                <td data-label="Requested">{{ req.created_at|date:"N j, Y" }}</td>
+                <td data-label="Expires">{{ req.expires_at|date:"N j, Y" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>No pending join requests.</p>
+</div>
+{% endif %}
+
+{% else %}
+{% if groups %}
+{% for group in groups %}
+<div class="card group-card">
+    <div class="group-card-header">
+        {% if group.image %}
+        <img src="{{ group.image.url }}" alt="{{ group.name }}" class="group-thumbnail">
+        {% else %}
+        <div class="group-thumbnail-placeholder">&#9826;</div>
+        {% endif %}
+        <div class="group-card-info">
+            <a href="{% url 'group_dashboard' group.slug %}" class="group-card-name">{{ group.name }}</a>
+            <div class="group-card-meta">
+                <span>{{ group.member_count }} members</span>
+                {% if not group.discoverable %}
+                <span class="badge badge-private">Private</span>
+                {% elif group.join_policy == 'open' %}
+                <span class="badge badge-public">Public</span>
+                {% elif group.join_policy == 'request' %}
+                <span class="badge badge-semi-public">Request</span>
+                {% else %}
+                <span class="badge badge-private">Invite Only</span>
+                {% endif %}
+            </div>
+            {% if group.description %}
+            <p class="group-card-desc">{{ group.description|truncatewords:20 }}</p>
+            {% endif %}
+        </div>
+        <div class="group-card-actions">
+            {% if group.pk in member_group_ids %}
+            <form method="post" action="{% url 'group_favorite' group.slug %}" style="display:inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm {% if group.pk in favorite_group_ids %}btn-warning{% else %}btn-outline{% endif %}">
+                    {% if group.pk in favorite_group_ids %}&#9733;{% else %}&#9734;{% endif %}
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="empty-state">
+    {% if tab == 'my' %}
+    <p>You haven't joined any groups yet.</p>
+    <a href="{% url 'group_list' %}?tab=all" class="btn btn-primary">Browse Groups</a>
+    {% else %}
+    <p>No groups found.</p>
+    {% endif %}
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

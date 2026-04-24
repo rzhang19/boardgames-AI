@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% load club_tags %}
+
+{% block title %}{{ group.name }} — Games{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="group-dashboard-header">
+        <div>
+            <h1><a href="{% url 'group_dashboard' group.slug %}">{{ group.name }}</a> — Games</h1>
+            <p class="group-card-meta">Games owned by group members</p>
+        </div>
+    </div>
+</div>
+
+{% if games %}
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Players</th>
+            <th>Complexity</th>
+            <th>Owner</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for game in games %}
+        <tr>
+            <td data-label="Name">
+                <a href="{% url 'game_detail' game.pk %}">{{ game.name }}</a>
+            </td>
+            <td data-label="Players">
+                {% if game.min_players %}
+                    {{ game.min_players }}-{% if game.max_players == 0 %}Unlimited{% elif game.max_players %}{{ game.max_players }}{% else %}?{% endif %}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td data-label="Complexity">
+                {% if game.complexity %}
+                <span class="complexity-badge complexity-{{ game.complexity }}">{{ game.get_complexity_display }}</span>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td data-label="Owner"><a href="{% url 'public_profile' game.owner.username %}">{{ game.owner.username }}</a>{% verified_badge game.owner %}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    <p>No members have added games yet.</p>
+</div>
+{% endif %}
+{% endblock %}

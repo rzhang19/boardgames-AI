@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm Action — {{ group.name }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>Confirm Action</h1>
+
+    <div class="alert alert-warning">
+        <p><strong>Are you sure</strong> you want to {{ action_label }} <strong>{{ target_membership.user.username }}</strong>?</p>
+        <p>This user is a group admin.</p>
+        {% if action == 'remove' %}
+        <p>Their votes and RSVPs for upcoming events will be deleted.</p>
+        {% endif %}
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="user_id" value="{{ target_membership.user.pk }}">
+        <input type="hidden" name="action" value="{{ action }}">
+        <input type="hidden" name="confirmed" value="true">
+        <div class="action-bar">
+            <button type="submit" class="btn btn-danger">Confirm</button>
+            <a href="{% url 'group_members_manage' group.slug %}" class="btn btn-neutral">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Delete {{ group.name }}{% endblock %}
+
+{% block content %}
+<h1>Delete Group</h1>
+
+<div class="card">
+    <div class="alert alert-danger">
+        <strong>This will permanently delete "{{ group.name }}"</strong> and all related events, votes, RSVPs, and membership data. This action cannot be undone.
+    </div>
+
+    {% if error %}
+    <div class="alert alert-warning">{{ error }}</div>
+    {% endif %}
+
+    <p>Type <strong>{{ group.name }}</strong> to confirm:</p>
+    <form method="post">{% csrf_token %}
+        <div class="form-field">
+            <input type="text" name="confirm_name" placeholder="{{ group.name }}" autocomplete="off">
+        </div>
+        <div class="btn-group">
+            <button type="submit" class="btn btn-danger">Delete Group</button>
+            <a href="{% url 'group_list' %}" class="btn btn-neutral">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

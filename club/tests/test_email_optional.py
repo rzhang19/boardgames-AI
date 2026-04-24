@@ -21,7 +21,6 @@ class RegistrationWithoutEmailTest(TestCase):
         self.assertTrue(User.objects.filter(username='noemailuser').exists())
         user = User.objects.get(username='noemailuser')
         self.assertEqual(user.email, '')
-        self.assertFalse(user.is_organizer)
         self.assertFalse(user.is_superuser)
         self.assertFalse(user.email_verified)
         response = self.client.get(reverse('dashboard'))

@@ -184,14 +184,14 @@ class SettingsEmailVerifiedBadgeTest(TestCase):
 class GlobalVotingOffsetSettingsTest(TestCase):
 
     def setUp(self):
-        self.organizer = User.objects.create_user(
-            username='organizer', password='testpass123', is_organizer=True
+        self.admin = User.objects.create_user(
+            username='organizer', password='testpass123', is_site_admin=True
         )
         self.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
 
-    def test_organizer_sees_global_offset_on_settings_page(self):
+    def test_admin_sees_global_offset_on_settings_page(self):
         self.client.login(username='organizer', password='testpass123')
         response = self.client.get(reverse('user_settings'))
         self.assertContains(response, 'Default Voting Deadline Offset')
@@ -201,10 +201,10 @@ class GlobalVotingOffsetSettingsTest(TestCase):
         response = self.client.get(reverse('user_settings'))
         self.assertNotContains(response, 'Default Voting Deadline Offset')
 
-    def test_organizer_can_set_global_offset(self):
+    def test_admin_can_set_global_offset(self):
         self.client.login(username='organizer', password='testpass123')
         response = self.client.post(reverse('user_settings'), {
-            'email': self.organizer.email,
+            'email': self.admin.email,
             'timezone': 'UTC',
             'default_voting_offset_hours': '1',
             'default_voting_offset_minutes_field': '30',
@@ -217,13 +217,13 @@ class GlobalVotingOffsetSettingsTest(TestCase):
         site_settings = SiteSettings.load()
         self.assertEqual(site_settings.default_voting_offset_minutes, 0)
 
-    def test_organizer_can_set_offset_to_zero(self):
+    def test_admin_can_set_offset_to_zero(self):
         site_settings = SiteSettings.load()
         site_settings.default_voting_offset_minutes = 60
         site_settings.save()
         self.client.login(username='organizer', password='testpass123')
         self.client.post(reverse('user_settings'), {
-            'email': self.organizer.email,
+            'email': self.admin.email,
             'timezone': 'UTC',
             'default_voting_offset_hours': '0',
             'default_voting_offset_minutes_field': '0',

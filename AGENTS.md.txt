@@ -5,6 +5,7 @@
 - after creating the code, run the tests and ensure all tests pass before continuing
 - if any tests fail, stop the generation so I can review
 - for any files that are .gitignore or may be different in Production than in local, make sure to explicitly state any new lines or variable declarations that need to be added to that file in production.
+- If instructions are given to modify only text files, and/or tells you not to modify any code, DO NOT MODIFY CODE. ONLY modify the specified .txt file.
 
 ### DON'T
 - do not add any heavy dependencies without approval
@@ -31,5 +32,8 @@ Ask first before acting:
 - Wehn complete, when summarizing any changes, list any changes that need to be made to files solely in the production environment, e.g. .env or .env.staging files. Since these files' data are private, any changes made in this environment may not reflect in production.
 
 ### Regarding tests:
+- If when running tests and they fail, the order of priority of debugging the failure should be:
+    1. Checking if any changes in non-test code done between the last run and the current run caused any logical, functional changes that could cause that failure. If all non-test code changes are functionally and logically correct, then you can move on to the next step.
+    2. Check the failing test to see if any test setup data that may cause a failure, because the setup and its corresponding expected output is now different because of the code change. This is when we change the test to make it pass correctly.
 - Upon working on a feature, always check if there are existing tests that can be reused instead of creating duplicate tests.
 - For end to end system tests, always check if we can incorporate tests into an existing system test instead of creating a net new test that would use previous setup or transactions.

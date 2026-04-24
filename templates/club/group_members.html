@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% load club_tags %}
+
+{% block title %}Members - {{ group.name }}{% endblock %}
+
+{% block content %}
+<h1>Members &mdash; {{ group.name }}</h1>
+
+<div class="action-bar">
+    <a href="{% url 'group_dashboard' group.slug %}" class="btn btn-outline btn-sm">Back to Group</a>
+    {% if is_admin %}
+    <a href="{% url 'group_members_manage' group.slug %}" class="btn btn-primary btn-sm">Manage Members</a>
+    {% endif %}
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Joined</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for m in members %}
+        <tr>
+            <td data-label="Username">
+                <a href="{% url 'public_profile' m.user.username %}">{{ m.user.username }}</a>{% verified_badge m.user %}
+            </td>
+            <td data-label="Role">
+                <span class="badge badge-role-{{ m.role }}">{{ m.role }}</span>
+            </td>
+            <td data-label="Joined">{{ m.joined_at|date:"N j, Y" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

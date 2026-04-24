@@ -5,9 +5,17 @@ from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
-from club.models import BoardGame, Event, EventAttendance, Vote
+from club.models import BoardGame, Event, EventAttendance, Group, GroupMembership, Notification, Vote
 
 User = get_user_model()
+
+
+def _make_organizer(user, group):
+    GroupMembership.objects.create(user=user, group=group, role='admin')
+
+
+def _make_member(user, group):
+    GroupMembership.objects.create(user=user, group=group, role='member')
 
 
 @tag("unit")
@@ -15,8 +23,9 @@ class EventVotingModelTest(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='admin', password='testpass123', is_organizer=True
+            username='admin', password='testpass123', is_site_admin=True
         )
+        self.group = Group.objects.create(name='Voting Model Group')
 
     def test_phase_returns_upcoming_for_future_event(self):
         event_date = timezone.now() + timedelta(days=7)
@@ -24,6 +33,7 @@ class EventVotingModelTest(TestCase):
             title='Future Event',
             date=event_date,
             created_by=self.admin,
+            group=self.group,
             voting_deadline=event_date,
         )
         self.assertEqual(event.phase, 'upcoming')
@@ -34,6 +44,7 @@ class EventVotingModelTest(TestCase):
             title='Past Event',
             date=event_date,
             created_by=self.admin,
+            group=self.group,
             voting_deadline=event_date,
         )
         self.assertEqual(event.phase, 'completed')
@@ -43,6 +54,7 @@ class EventVotingModelTest(TestCase):
             title='Active Future',
             date=timezone.now() + timedelta(days=7),
             created_by=self.admin,
+            group=self.group,
             is_active=True,
             voting_deadline=timezone.now() + timedelta(days=7),
         )
@@ -53,6 +65,7 @@ class EventVotingModelTest(TestCase):
             title='Inactive Future',
             date=timezone.now() + timedelta(days=7),
             created_by=self.admin,
+            group=self.group,
             is_active=False,
             voting_deadline=timezone.now() + timedelta(days=7),
         )
@@ -63,6 +76,7 @@ class EventVotingModelTest(TestCase):
             title='Active Past',
             date=timezone.now() - timedelta(days=1),
             created_by=self.admin,
+            group=self.group,
             is_active=True,
             voting_deadline=timezone.now() - timedelta(days=1),
         )
@@ -73,6 +87,7 @@ class EventVotingModelTest(TestCase):
             title='Inactive Past',
             date=timezone.now() - timedelta(days=1),
             created_by=self.admin,
+            group=self.group,
             is_active=False,
             voting_deadline=timezone.now() - timedelta(days=1),
         )
@@ -83,6 +98,7 @@ class EventVotingModelTest(TestCase):
             title='Open Event',
             date=timezone.now() + timedelta(days=7),
             created_by=self.admin,
+            group=self.group,
             is_active=True,
             voting_open=True,
             voting_deadline=timezone.now() + timedelta(days=7),
@@ -94,6 +110,7 @@ class EventVotingModelTest(TestCase):
             title='Inactive Event',
             date=timezone.now() + timedelta(days=7),
             created_by=self.admin,
+            group=self.group,
             is_active=False,
             voting_open=True,
             voting_deadline=timezone.now() + timedelta(days=7),
@@ -105,6 +122,7 @@ class EventVotingModelTest(TestCase):
             title='Paused Event',
             date=timezone.now() + timedelta(days=7),
             created_by=self.admin,
+            group=self.group,
             is_active=True,
             voting_open=False,
             voting_deadline=timezone.now() + timedelta(days=7),
@@ -116,6 +134,7 @@ class EventVotingModelTest(TestCase):
             title='Deadline Passed',
             date=timezone.now() + timedelta(days=7),
             created_by=self.admin,
+            group=self.group,
             is_active=True,
             voting_open=True,
             voting_deadline=timezone.now() - timedelta(hours=1),
@@ -127,6 +146,7 @@ class EventVotingModelTest(TestCase):
             title='Before Deadline',
             date=timezone.now() + timedelta(days=7),
             created_by=self.admin,
+            group=self.group,
             is_active=True,
             voting_open=True,
             voting_deadline=timezone.now() + timedelta(hours=1),
@@ -138,6 +158,7 @@ class EventVotingModelTest(TestCase):
             title='Paused Past',
             date=timezone.now() - timedelta(days=1),
             created_by=self.admin,
+            group=self.group,
             is_active=True,
             voting_open=False,
             voting_deadline=timezone.now() - timedelta(days=1),
@@ -150,6 +171,7 @@ class EventVotingModelTest(TestCase):
             title='New Event',
             date=event_date,
             created_by=self.admin,
+            group=self.group,
             voting_deadline=event_date,
         )
         self.assertTrue(event.voting_open)
@@ -160,6 +182,7 @@ class EventVotingModelTest(TestCase):
             title='New Event',
             date=event_date,
             created_by=self.admin,
+            group=self.group,
             voting_deadline=event_date,
         )
         self.assertEqual(event.voting_deadline, event.date)
@@ -169,6 +192,7 @@ class EventVotingModelTest(TestCase):
             title='Expired Deadline',
             date=timezone.now() + timedelta(days=7),
             created_by=self.admin,
+            group=self.group,
             is_active=True,
             voting_open=True,
             voting_deadline=timezone.now() - timedelta(hours=1),
@@ -182,6 +206,7 @@ class EventVotingModelTest(TestCase):
             title='Still Open',
             date=timezone.now() + timedelta(days=7),
             created_by=self.admin,
+            group=self.group,
             is_active=True,
             voting_open=True,
             voting_deadline=timezone.now() + timedelta(hours=1),
@@ -195,6 +220,7 @@ class EventVotingModelTest(TestCase):
             title='Already Paused',
             date=timezone.now() + timedelta(days=7),
             created_by=self.admin,
+            group=self.group,
             is_active=True,
             voting_open=False,
             voting_deadline=timezone.now() + timedelta(days=7),
@@ -208,6 +234,7 @@ class EventVotingModelTest(TestCase):
             title='Inactive',
             date=timezone.now() + timedelta(days=7),
             created_by=self.admin,
+            group=self.group,
             is_active=False,
             voting_open=True,
             voting_deadline=timezone.now() + timedelta(days=7),
@@ -222,19 +249,23 @@ class ToggleVotingViewTest(TestCase):
 
     def setUp(self):
         self.organizer = User.objects.create_user(
-            username='organizer', password='testpass123', is_organizer=True
+            username='organizer', password='testpass123', is_site_admin=True
         )
         self.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
         self.site_admin_only = User.objects.create_user(
             username='siteadminonly', password='testpass123',
-            is_site_admin=True, is_organizer=False,
+            is_site_admin=True,
         )
+        self.group = Group.objects.create(name='Toggle View Group')
+        _make_organizer(self.organizer, self.group)
+        _make_organizer(self.site_admin_only, self.group)
         self.event = Event.objects.create(
             title='Toggle Event',
             date=timezone.now() + timedelta(days=7),
             created_by=self.organizer,
+            group=self.group,
             is_active=True,
             voting_open=True,
             voting_deadline=timezone.now() + timedelta(days=7),
@@ -243,7 +274,7 @@ class ToggleVotingViewTest(TestCase):
     def test_organizer_can_end_voting(self):
         self.client.login(username='organizer', password='testpass123')
         response = self.client.post(
-            reverse('event_toggle_voting', kwargs={'pk': self.event.pk})
+            reverse('event_toggle_voting', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
         )
         self.assertEqual(response.status_code, 302)
         self.event.refresh_from_db()
@@ -254,7 +285,7 @@ class ToggleVotingViewTest(TestCase):
         self.event.save()
         self.client.login(username='organizer', password='testpass123')
         response = self.client.post(
-            reverse('event_toggle_voting', kwargs={'pk': self.event.pk})
+            reverse('event_toggle_voting', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
         )
         self.assertEqual(response.status_code, 302)
         self.event.refresh_from_db()
@@ -263,13 +294,13 @@ class ToggleVotingViewTest(TestCase):
     def test_regular_user_cannot_toggle_voting(self):
         self.client.login(username='regular', password='testpass123')
         response = self.client.post(
-            reverse('event_toggle_voting', kwargs={'pk': self.event.pk})
+            reverse('event_toggle_voting', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
         )
         self.assertEqual(response.status_code, 403)
 
     def test_toggle_voting_requires_login(self):
         response = self.client.post(
-            reverse('event_toggle_voting', kwargs={'pk': self.event.pk})
+            reverse('event_toggle_voting', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
         )
         self.assertEqual(response.status_code, 302)
         self.assertIn('/login/', response.url)
@@ -280,7 +311,7 @@ class ToggleVotingViewTest(TestCase):
         self.event.save()
         self.client.login(username='organizer', password='testpass123')
         response = self.client.post(
-            reverse('event_toggle_voting', kwargs={'pk': self.event.pk})
+            reverse('event_toggle_voting', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
         )
         self.event.refresh_from_db()
         self.assertFalse(self.event.voting_open)
@@ -291,7 +322,7 @@ class ToggleVotingViewTest(TestCase):
         self.event.save()
         self.client.login(username='organizer', password='testpass123')
         response = self.client.post(
-            reverse('event_toggle_voting', kwargs={'pk': self.event.pk})
+            reverse('event_toggle_voting', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
         )
         self.event.refresh_from_db()
         self.assertFalse(self.event.voting_open)
@@ -299,11 +330,11 @@ class ToggleVotingViewTest(TestCase):
     def test_toggle_redirects_to_event_detail(self):
         self.client.login(username='organizer', password='testpass123')
         response = self.client.post(
-            reverse('event_toggle_voting', kwargs={'pk': self.event.pk})
+            reverse('event_toggle_voting', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
         )
         self.assertRedirects(
             response,
-            reverse('event_detail', kwargs={'pk': self.event.pk})
+            reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
         )
 
     def test_toggle_on_completed_event_noop(self):
@@ -311,21 +342,22 @@ class ToggleVotingViewTest(TestCase):
             title='Past Event',
             date=timezone.now() - timedelta(days=1),
             created_by=self.organizer,
+            group=self.group,
             is_active=True,
             voting_open=False,
             voting_deadline=timezone.now() - timedelta(days=1),
         )
         self.client.login(username='organizer', password='testpass123')
         response = self.client.post(
-            reverse('event_toggle_voting', kwargs={'pk': past_event.pk})
+            reverse('event_toggle_voting', kwargs={'slug': past_event.group.slug, 'pk': past_event.pk})
         )
         past_event.refresh_from_db()
         self.assertFalse(past_event.voting_open)
 
-    def test_site_admin_without_organizer_can_toggle_voting(self):
+    def test_site_admin_who_is_organizer_can_toggle_voting(self):
         self.client.login(username='siteadminonly', password='testpass123')
         response = self.client.post(
-            reverse('event_toggle_voting', kwargs={'pk': self.event.pk})
+            reverse('event_toggle_voting', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
         )
         self.assertEqual(response.status_code, 302)
         self.event.refresh_from_db()
@@ -337,15 +369,19 @@ class VoteViewWhenVotingClosedTest(TestCase):
 
     def setUp(self):
         self.organizer = User.objects.create_user(
-            username='organizer', password='testpass123', is_organizer=True
+            username='organizer', password='testpass123', is_site_admin=True
         )
         self.attendee = User.objects.create_user(
             username='attendee', password='testpass123'
         )
+        self.group = Group.objects.create(name='Closed Group')
+        _make_organizer(self.organizer, self.group)
+        _make_member(self.attendee, self.group)
         self.event = Event.objects.create(
             title='Closed Event',
             date=timezone.now() + timedelta(days=7),
             created_by=self.organizer,
+            group=self.group,
             is_active=True,
             voting_open=False,
             voting_deadline=timezone.now() + timedelta(days=7),
@@ -356,7 +392,7 @@ class VoteViewWhenVotingClosedTest(TestCase):
     def test_vote_page_shows_readonly_when_voting_paused(self):
         self.client.login(username='attendee', password='testpass123')
         response = self.client.get(
-            reverse('event_vote', kwargs={'pk': self.event.pk})
+            reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Voting is currently paused')
@@ -368,7 +404,7 @@ class VoteViewWhenVotingClosedTest(TestCase):
         )
         self.client.login(username='attendee', password='testpass123')
         response = self.client.get(
-            reverse('event_vote', kwargs={'pk': self.event.pk})
+            reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Catan')
@@ -376,7 +412,7 @@ class VoteViewWhenVotingClosedTest(TestCase):
     def test_submit_vote_rejected_when_voting_paused(self):
         self.client.login(username='attendee', password='testpass123')
         response = self.client.post(
-            reverse('event_vote', kwargs={'pk': self.event.pk}),
+            reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}),
             {
                 'form-TOTAL_FORMS': '1',
                 'form-INITIAL_FORMS': '0',
@@ -398,7 +434,7 @@ class VoteViewWhenVotingClosedTest(TestCase):
         )
         self.client.login(username='attendee', password='testpass123')
         self.client.post(
-            reverse('event_vote', kwargs={'pk': self.event.pk}),
+            reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}),
             {
                 'form-TOTAL_FORMS': '0',
                 'form-INITIAL_FORMS': '0',
@@ -415,6 +451,7 @@ class VoteViewWhenVotingClosedTest(TestCase):
             title='Past Event',
             date=timezone.now() - timedelta(days=1),
             created_by=self.organizer,
+            group=self.group,
             is_active=True,
             voting_open=True,
             voting_deadline=timezone.now() - timedelta(days=1),
@@ -422,7 +459,7 @@ class VoteViewWhenVotingClosedTest(TestCase):
         EventAttendance.objects.create(user=self.attendee, event=past_event)
         self.client.login(username='attendee', password='testpass123')
         response = self.client.get(
-            reverse('event_vote', kwargs={'pk': past_event.pk})
+            reverse('event_vote', kwargs={'slug': past_event.group.slug, 'pk': past_event.pk})
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Voting is currently closed')
@@ -433,7 +470,7 @@ class VoteViewWhenVotingClosedTest(TestCase):
             board_game=self.game1, rank=1
         )
         self.client.login(username='attendee', password='testpass123')
-        self.client.get(reverse('event_vote', kwargs={'pk': self.event.pk}))
+        self.client.get(reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
 
         self.event.voting_open = True
         self.event.save()
@@ -442,7 +479,7 @@ class VoteViewWhenVotingClosedTest(TestCase):
         self.event.save()
 
         self.client.post(
-            reverse('event_vote', kwargs={'pk': self.event.pk}),
+            reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}),
             {
                 'form-TOTAL_FORMS': '1',
                 'form-INITIAL_FORMS': '0',
@@ -462,24 +499,28 @@ class EventDetailVotingStatusTest(TestCase):
 
     def setUp(self):
         self.organizer = User.objects.create_user(
-            username='organizer', password='testpass123', is_organizer=True
+            username='organizer', password='testpass123', is_site_admin=True
         )
         self.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
+        self.group = Group.objects.create(name='Status Group')
+        _make_organizer(self.organizer, self.group)
+        _make_member(self.regular, self.group)
 
     def test_organizer_sees_end_voting_button(self):
         event = Event.objects.create(
             title='Open Event',
             date=timezone.now() + timedelta(days=7),
             created_by=self.organizer,
+            group=self.group,
             is_active=True,
             voting_open=True,
             voting_deadline=timezone.now() + timedelta(days=7),
         )
         self.client.login(username='organizer', password='testpass123')
         response = self.client.get(
-            reverse('event_detail', kwargs={'pk': event.pk})
+            reverse('event_detail', kwargs={'slug': event.group.slug, 'pk': event.pk})
         )
         self.assertContains(response, 'End Voting')
 
@@ -488,13 +529,14 @@ class EventDetailVotingStatusTest(TestCase):
             title='Paused Event',
             date=timezone.now() + timedelta(days=7),
             created_by=self.organizer,
+            group=self.group,
             is_active=True,
             voting_open=False,
             voting_deadline=timezone.now() + timedelta(days=7),
         )
         self.client.login(username='organizer', password='testpass123')
         response = self.client.get(
-            reverse('event_detail', kwargs={'pk': event.pk})
+            reverse('event_detail', kwargs={'slug': event.group.slug, 'pk': event.pk})
         )
         self.assertContains(response, 'Resume Voting')
 
@@ -503,13 +545,14 @@ class EventDetailVotingStatusTest(TestCase):
             title='Open Event',
             date=timezone.now() + timedelta(days=7),
             created_by=self.organizer,
+            group=self.group,
             is_active=True,
             voting_open=True,
             voting_deadline=timezone.now() + timedelta(days=7),
         )
         self.client.login(username='regular', password='testpass123')
         response = self.client.get(
-            reverse('event_detail', kwargs={'pk': event.pk})
+            reverse('event_detail', kwargs={'slug': event.group.slug, 'pk': event.pk})
         )
         self.assertNotContains(response, 'End Voting')
         self.assertNotContains(response, 'Resume Voting')
@@ -519,6 +562,7 @@ class EventDetailVotingStatusTest(TestCase):
             title='Paused Event',
             date=timezone.now() + timedelta(days=7),
             created_by=self.organizer,
+            group=self.group,
             is_active=True,
             voting_open=False,
             voting_deadline=timezone.now() + timedelta(days=7),
@@ -526,7 +570,7 @@ class EventDetailVotingStatusTest(TestCase):
         EventAttendance.objects.create(user=self.regular, event=event)
         self.client.login(username='regular', password='testpass123')
         response = self.client.get(
-            reverse('event_detail', kwargs={'pk': event.pk})
+            reverse('event_detail', kwargs={'slug': event.group.slug, 'pk': event.pk})
         )
         self.assertNotContains(response, 'Vote for Games')
 
@@ -535,13 +579,14 @@ class EventDetailVotingStatusTest(TestCase):
             title='Open Event',
             date=timezone.now() + timedelta(days=7),
             created_by=self.organizer,
+            group=self.group,
             is_active=True,
             voting_open=True,
             voting_deadline=timezone.now() + timedelta(days=7),
         )
         self.client.login(username='regular', password='testpass123')
         response = self.client.get(
-            reverse('event_detail', kwargs={'pk': event.pk})
+            reverse('event_detail', kwargs={'slug': event.group.slug, 'pk': event.pk})
         )
         self.assertContains(response, 'Voting Open')
 
@@ -550,13 +595,14 @@ class EventDetailVotingStatusTest(TestCase):
             title='Paused Event',
             date=timezone.now() + timedelta(days=7),
             created_by=self.organizer,
+            group=self.group,
             is_active=True,
             voting_open=False,
             voting_deadline=timezone.now() + timedelta(days=7),
         )
         self.client.login(username='regular', password='testpass123')
         response = self.client.get(
-            reverse('event_detail', kwargs={'pk': event.pk})
+            reverse('event_detail', kwargs={'slug': event.group.slug, 'pk': event.pk})
         )
         self.assertContains(response, 'Voting Paused')
 
@@ -565,13 +611,14 @@ class EventDetailVotingStatusTest(TestCase):
             title='Past Event',
             date=timezone.now() - timedelta(days=1),
             created_by=self.organizer,
+            group=self.group,
             is_active=True,
             voting_open=True,
             voting_deadline=timezone.now() - timedelta(days=1),
         )
         self.client.login(username='regular', password='testpass123')
         response = self.client.get(
-            reverse('event_detail', kwargs={'pk': event.pk})
+            reverse('event_detail', kwargs={'slug': event.group.slug, 'pk': event.pk})
         )
         self.assertContains(response, 'Voting Closed')
 
@@ -581,13 +628,15 @@ class VotingDeadlineValidationTest(TestCase):
 
     def setUp(self):
         self.organizer = User.objects.create_user(
-            username='organizer', password='testpass123', is_organizer=True
+            username='organizer', password='testpass123', is_site_admin=True
         )
+        self.group = Group.objects.create(name='Deadline Group')
+        _make_organizer(self.organizer, self.group)
 
     def test_create_event_sets_voting_deadline_to_event_date(self):
         event_date = timezone.now() + timedelta(days=7)
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': 'Deadline Test',
             'date': event_date.strftime('%Y-%m-%d'),
             'time': event_date.strftime('%H:%M'),
@@ -602,7 +651,7 @@ class VotingDeadlineValidationTest(TestCase):
         event_date = timezone.now() + timedelta(days=7)
         deadline = timezone.now() + timedelta(days=5)
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': 'Custom Deadline',
             'date': event_date.strftime('%Y-%m-%d'),
             'time': event_date.strftime('%H:%M'),
@@ -617,7 +666,7 @@ class VotingDeadlineValidationTest(TestCase):
         event_date = timezone.now() + timedelta(days=7)
         deadline = timezone.now() + timedelta(days=10)
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': 'Bad Deadline',
             'date': event_date.strftime('%Y-%m-%d'),
             'time': event_date.strftime('%H:%M'),
@@ -631,7 +680,7 @@ class VotingDeadlineValidationTest(TestCase):
         event_date = timezone.now() + timedelta(days=7)
         deadline = timezone.now() - timedelta(hours=1)
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': 'Past Deadline',
             'date': event_date.strftime('%Y-%m-%d'),
             'time': event_date.strftime('%H:%M'),
@@ -647,13 +696,14 @@ class VotingDeadlineValidationTest(TestCase):
             title='Gap Event',
             date=event_date,
             created_by=self.organizer,
+            group=self.group,
             voting_deadline=event_date - timedelta(hours=2),
             voting_deadline_offset_minutes=120,
         )
         new_date = timezone.now() + timedelta(days=14, hours=19)
         self.client.login(username='organizer', password='testpass123')
         response = self.client.post(
-            reverse('event_edit', kwargs={'pk': event.pk}),
+            reverse('event_edit', kwargs={'slug': event.group.slug, 'pk': event.pk}),
             {
                 'title': 'Gap Event',
                 'date': new_date.strftime('%Y-%m-%d'),
@@ -674,12 +724,13 @@ class VotingDeadlineValidationTest(TestCase):
             title='Same Date Event',
             date=event_date,
             created_by=self.organizer,
+            group=self.group,
             voting_deadline=event_date,
         )
         new_date = timezone.now() + timedelta(days=14, hours=19)
         self.client.login(username='organizer', password='testpass123')
         response = self.client.post(
-            reverse('event_edit', kwargs={'pk': event.pk}),
+            reverse('event_edit', kwargs={'slug': event.group.slug, 'pk': event.pk}),
             {
                 'title': 'Same Date Event',
                 'date': new_date.strftime('%Y-%m-%d'),
@@ -699,13 +750,14 @@ class VotingDeadlineValidationTest(TestCase):
             title='Warn Event',
             date=event_date,
             created_by=self.organizer,
+            group=self.group,
             voting_deadline=event_date - timedelta(hours=2),
             voting_deadline_offset_minutes=120,
         )
         new_date = timezone.now() + timedelta(days=14, hours=20)
         self.client.login(username='organizer', password='testpass123')
         response = self.client.post(
-            reverse('event_edit', kwargs={'pk': event.pk}),
+            reverse('event_edit', kwargs={'slug': event.group.slug, 'pk': event.pk}),
             {
                 'title': 'Warn Event',
                 'date': new_date.strftime('%Y-%m-%d'),
@@ -727,12 +779,13 @@ class VotingDeadlineValidationTest(TestCase):
             title='Change Deadline',
             date=event_date,
             created_by=self.organizer,
+            group=self.group,
             voting_deadline=event_date,
         )
         new_deadline = timezone.now() + timedelta(days=5, hours=12)
         self.client.login(username='organizer', password='testpass123')
         response = self.client.post(
-            reverse('event_edit', kwargs={'pk': event.pk}),
+            reverse('event_edit', kwargs={'slug': event.group.slug, 'pk': event.pk}),
             {
                 'title': 'Change Deadline',
                 'date': event_date.strftime('%Y-%m-%d'),
@@ -754,11 +807,54 @@ class VotingDeadlineValidationTest(TestCase):
             title='Prepopulate',
             date=event_date,
             created_by=self.organizer,
+            group=self.group,
             voting_deadline=deadline,
         )
         self.client.login(username='organizer', password='testpass123')
         response = self.client.get(
-            reverse('event_edit', kwargs={'pk': event.pk})
+            reverse('event_edit', kwargs={'slug': event.group.slug, 'pk': event.pk})
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'type="date"')
+
+
+@tag("integration")
+class VotingToggleNotificationTest(TestCase):
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(
+            username='organizer', password='testpass123', is_site_admin=True
+        )
+        self.member = User.objects.create_user(
+            username='member', password='testpass123'
+        )
+        self.group = Group.objects.create(name='Notif Group')
+        _make_organizer(self.organizer, self.group)
+        _make_member(self.member, self.group)
+        self.event = Event.objects.create(
+            title='Toggle Notif Event',
+            date=timezone.now() + timedelta(days=7),
+            created_by=self.organizer,
+            group=self.group,
+            is_active=True,
+            voting_open=True,
+            voting_deadline=timezone.now() + timedelta(days=7),
+        )
+
+    def test_end_voting_sends_notification(self):
+        self.client.login(username='organizer', password='testpass123')
+        self.client.post(reverse('event_toggle_voting', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
+        self.assertTrue(Notification.objects.filter(
+            user=self.member,
+            notification_type='group_voting_ended',
+        ).exists())
+
+    def test_resume_voting_sends_notification(self):
+        self.event.voting_open = False
+        self.event.save()
+        self.client.login(username='organizer', password='testpass123')
+        self.client.post(reverse('event_toggle_voting', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
+        self.assertTrue(Notification.objects.filter(
+            user=self.member,
+            notification_type='group_voting_resumed',
+        ).exists())

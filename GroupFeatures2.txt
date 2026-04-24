@@ -1,0 +1,217 @@
+================================================================================
+GROUPS FEATURE — REMAINING GAPS (ALL DONE)
+================================================================================
+
+This document covers three medium-severity gaps identified after completing
+Phases 1-9 of GroupsFeature.txt. Each gap is functional (not cosmetic) but
+does not block any current user workflow.
+
+
+================================================================================
+GAP 1: Group-Scoped Games View (DONE)
+================================================================================
+
+SPEC REFERENCE:
+  Section 4 (URL Structure), Phase 6h
+
+CURRENT STATE:
+  /games/ shows a global list with "All Games" and "My Games" tabs.
+  There is no group-scoped view of games.
+  The model method Group.games() exists and returns the correct queryset,
+  but nothing in the URL config or views references it for a dedicated page.
+
+WHAT'S MISSING:
+  - URL pattern: /groups/<slug>/games/
+  - View function: group_games (or similar)
+  - Template: group_games.html
+  - Link from group_dashboard to the group's games
+
+SPEC REQUIREMENT (Section 4):
+  "/groups/<slug>/games/  —  games visible in this group (members' games,
+   read-only view)"
+
+DESIGN:
+
+  URL:
+    path('groups/<slug:slug>/games/', views.group_games, name='group_games'),
+
+  View:
+    - Resolve group from slug
+    - Check can_view_group(user, group)
+    - Query: group.games() (already exists on the model)
+    - Render read-only table: name, min/max players, complexity, owner
+    - No add/edit/delete buttons (games are managed globally)
+
+  Template (group_games.html):
+    - Extends base.html
+    - Shows group name as header with link back to dashboard
+    - Table of games owned by group members
+    - Each game links to the global game_detail page
+    - Empty state if no members own games
+
+  Integration points:
+    - group_dashboard.html: add "Games" button in the action bar
+    - The event_vote view already uses event.group.games() to scope the
+      dropdown, so the query logic is proven
+
+  Tests needed:
+    - Auth required
+    - Non-discoverable group hidden from non-members
+    - Shows only games owned by group members
+    - Member's games appear in all their groups
+    - Leaving a group removes your games from that group's view
+    - Disbanded group returns 403
+
+
+================================================================================
+GAP 2: Event URL Nesting Under Groups (DONE)
+================================================================================
+
+SPEC REFERENCE:
+  Section 4 (URL Structure), Phase 6h
+
+CURRENT STATE:
+  Event detail/edit/vote/results/rsvp/toggle URLs live at /events/<int:pk>/...
+  The group is derived from event.group FK at runtime.
+
+  Current URLs:
+    /events/<int:pk>/                event_detail
+    /events/<int:pk>/edit/           event_edit
+    /events/<int:pk>/rsvp/           event_rsvp
+    /events/<int:pk>/vote/           event_vote
+    /events/<int:pk>/results/        event_results
+    /events/<int:pk>/toggle-visibility/  event_toggle_visibility
+    /events/<int:pk>/toggle-voting/  event_toggle_voting
+
+SPEC REQUIREMENT (Section 4):
+  "/groups/<slug>/events/<int:pk>/"
+  "/groups/<slug>/events/<int:pk>/edit/"
+  "/groups/<slug>/events/<int:pk>/rsvp/"
+  "/groups/<slug>/events/<int:pk>/vote/"
+  "/groups/<slug>/events/<int:pk>/results/"
+  "/groups/<slug>/events/<int:pk>/toggle-visibility/"
+  "/groups/<slug>/events/<int:pk>/toggle-voting/"
+
+IMPACT OF CHANGE:
+  This is a large mechanical change. Every reverse() call and every URL
+  reference in templates and tests would need to include the group slug.
+
+  Files affected:
+    - club/urls.py          (7 URL patterns)
+    - club/views.py         (7 view signatures add slug param)
+    - Templates: event_detail.html, event_form.html, event_vote.html,
+      event_results.html, event_recurring_preview.html
+    - Tests: test_events.py (~90 reverse calls), test_voting.py (~18),
+      test_voting_toggle.py (~33), test_integration.py (~15)
+
+  Total reverse() calls to update: ~156
+
+ARGUMENTS FOR NESTING:
+  - Matches the spec exactly
+  - URL tells you which group an event belongs to
+  - Consistent with the /groups/<slug>/events/add/ pattern already in place
+
+ARGUMENTS FOR KEEPING FLAT:
+  - The group is derivable from event.group, so no data is lost
+  - Shorter URLs
+  - Simpler reverse() calls (no slug lookup needed)
+  - Events are already protected by group membership checks in the views
+  - Avoids a ~300-line mechanical change across test files
+
+RECOMMENDATION:
+  If nesting is desired, do it as a single focused phase:
+
+  PHASE A - Nest Event URLs
+  --------------------------
+  Aa. Add new nested URL patterns alongside existing flat ones (both work).
+  Ab. Update all templates to use the nested URLs.
+  Ac. Update all test reverse() calls to pass slug=event.group.slug.
+  Ad. Update all view signatures to accept slug (but derive from event.group).
+  Ae. Remove the old flat URL patterns.
+  Run: python manage.py test — STOP if any fail.
+
+  The key trick: views accept slug but ignore it for lookups (still use pk).
+  This avoids needing to verify slug matches pk — the slug is just for URL
+  structure. Views still fetch by pk and derive group from event.group.
+
+
+================================================================================
+GAP 3: Admin Confirmation Step for Demotion/Removal (DONE)
+================================================================================
+
+SPEC REFERENCE:
+  Section 6 (group_members_manage view), Phase 4b
+
+CURRENT STATE:
+  Promote, demote, and remove actions are single POST requests with no
+  confirmation interstitial. Clicking "Remove" or "Demote to Member"
+  immediately performs the action.
+
+  The manage page shows inline buttons for each member:
+    - Promote to Organizer / Promote to Admin / Demote to Member /
+      Demote to Organizer / Remove
+
+SPEC REQUIREMENT (Section 6):
+  "Promote/demote of another admin requires confirmation step."
+  "Removing an admin shows extra confirmation."
+  "Admin cannot remove themselves (disabled or hidden)."
+
+  The self-removal guard IS implemented. The confirmation step is not.
+
+DESIGN:
+
+  Two-phase POST pattern:
+    Phase 1: User clicks "Remove" or demote action on an admin.
+             View renders a confirmation page instead of performing the action.
+    Phase 2: User clicks "Confirm" on the confirmation page.
+             View performs the action.
+
+  Implementation approach:
+    - Add a hidden 'confirmed' field to the POST
+    - In the view, if action targets an admin and 'confirmed' is not set,
+      render a confirmation template instead of acting
+    - The confirmation page re-POSTs with confirmed=true
+
+  View change in group_members_manage:
+
+    if action in ('remove', 'demote_organizer', 'demote_member'):
+        if membership.role == 'admin' and not request.POST.get('confirmed'):
+            return render(request, 'club/group_admin_action_confirm.html', {
+                'group': group,
+                'target_membership': membership,
+                'action': action,
+            })
+        # proceed with action
+
+  New template: group_admin_action_confirm.html
+    - Shows: "Are you sure you want to [remove/demote] [username]?"
+    - Warning: "This user is a group admin."
+    - If removing: "Their votes and RSVPs for upcoming events will be deleted."
+    - Confirm / Cancel buttons
+
+  Tests needed:
+    - Demoting admin without confirmation renders confirm page (200)
+    - Demoting admin with confirmation performs demotion (302)
+    - Removing admin without confirmation renders confirm page
+    - Removing admin with confirmation performs removal
+    - Non-admin demotion/removal still works without confirmation
+    - Confirmation page shows correct warning text
+    - Confirmation page cancel link returns to manage page
+
+
+================================================================================
+PRIORITY RECOMMENDATION
+================================================================================
+
+  Gap 1 (group games view)    — Small, self-contained. ~50 lines.
+                                Does not affect existing code.
+
+  Gap 3 (admin confirmation)  — Small, contained to one view.
+                                ~30 lines view + ~30 lines template
+                                + ~40 lines tests.
+
+  Gap 2 (event URL nesting)   — Large mechanical change. ~300 lines
+                                across many files. Lowest priority since
+                                current flat URLs work correctly with
+                                group derivation. Only do this if strict
+                                URL consistency matters.

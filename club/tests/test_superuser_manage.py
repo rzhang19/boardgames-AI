@@ -16,14 +16,9 @@ def _build_formset_data(users, overrides=None):
     }
     for i, user in enumerate(users):
         data[f'form-{i}-id'] = str(user.pk)
-        data[f'form-{i}-is_organizer'] = 'on' if overrides and overrides.get(user.pk, {}).get('is_organizer', user.is_organizer) else ''
         data[f'form-{i}-is_site_admin'] = 'on' if overrides and overrides.get(user.pk, {}).get('is_site_admin', user.is_site_admin) else ''
     if overrides:
         for user_pk, vals in overrides.items():
-            if vals.get('is_organizer'):
-                for i, user in enumerate(users):
-                    if user.pk == user_pk:
-                        data[f'form-{i}-is_organizer'] = 'on'
             if vals.get('is_site_admin'):
                 for i, user in enumerate(users):
                     if user.pk == user_pk:
@@ -41,9 +36,6 @@ class ManageUsersAccessTest(TestCase):
         self.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123', is_site_admin=True
         )
-        self.organizer = User.objects.create_user(
-            username='organizer', password='testpass123', is_organizer=True
-        )
         self.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
@@ -58,11 +50,6 @@ class ManageUsersAccessTest(TestCase):
         response = self.client.get(reverse('manage_users'))
         self.assertEqual(response.status_code, 200)
 
-    def test_organizer_cannot_access_manage_users(self):
-        self.client.login(username='organizer', password='testpass123')
-        response = self.client.get(reverse('manage_users'))
-        self.assertEqual(response.status_code, 403)
-
     def test_regular_user_cannot_access_manage_users(self):
         self.client.login(username='regular', password='testpass123')
         response = self.client.get(reverse('manage_users'))
@@ -72,11 +59,6 @@ class ManageUsersAccessTest(TestCase):
         response = self.client.get(reverse('manage_users'))
         self.assertEqual(response.status_code, 302)
         self.assertIn('/login/', response.url)
-
-    def test_organizer_cannot_post_to_confirm(self):
-        self.client.login(username='organizer', password='testpass123')
-        response = self.client.post(reverse('manage_users_confirm'))
-        self.assertEqual(response.status_code, 403)
 
 
 @tag("integration")
@@ -90,27 +72,12 @@ class ManageUsersPreviewTest(TestCase):
             username='user1', password='testpass123'
         )
         self.user2 = User.objects.create_user(
-            username='user2', password='testpass123', is_organizer=True
+            username='user2', password='testpass123'
         )
         self.user3 = User.objects.create_user(
             username='user3', password='testpass123'
         )
         self.client.login(username='superuser', password='testpass123')
-
-    def test_preview_shows_organizer_promote(self):
-        data = _build_formset_data(
-            [self.user1, self.user2, self.user3],
-            {self.user1.pk: {'is_organizer': True}},
-        )
-        response = self.client.post(reverse('manage_users'), data)
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'user1')
-
-    def test_preview_shows_organizer_demote(self):
-        data = _build_formset_data([self.user1, self.user2, self.user3])
-        response = self.client.post(reverse('manage_users'), data)
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'user2')
 
     def test_preview_no_changes_shows_no_changes_message(self):
         data = {
@@ -120,7 +87,6 @@ class ManageUsersPreviewTest(TestCase):
             'form-MAX_NUM_FORMS': '1000',
             'form-0-id': str(self.user1.pk),
             'form-1-id': str(self.user2.pk),
-            'form-1-is_organizer': 'on',
             'form-2-id': str(self.user3.pk),
         }
         response = self.client.post(reverse('manage_users'), data)
@@ -139,35 +105,9 @@ class ManageUsersConfirmTest(TestCase):
             username='user1', password='testpass123'
         )
         self.user2 = User.objects.create_user(
-            username='user2', password='testpass123', is_organizer=True
+            username='user2', password='testpass123'
         )
         self.client.login(username='superuser', password='testpass123')
-
-    def test_confirm_applies_organizer_promote(self):
-        session = self.client.session
-        session['pending_role_changes'] = {
-            str(self.user1.pk): {'is_organizer': True, 'is_site_admin': False},
-        }
-        session.save()
-
-        response = self.client.post(reverse('manage_users_confirm'))
-        self.assertEqual(response.status_code, 302)
-
-        self.user1.refresh_from_db()
-        self.assertTrue(self.user1.is_organizer)
-
-    def test_confirm_applies_organizer_demote(self):
-        session = self.client.session
-        session['pending_role_changes'] = {
-            str(self.user2.pk): {'is_organizer': False, 'is_site_admin': False},
-        }
-        session.save()
-
-        response = self.client.post(reverse('manage_users_confirm'))
-        self.assertEqual(response.status_code, 302)
-
-        self.user2.refresh_from_db()
-        self.assertFalse(self.user2.is_organizer)
 
     def test_confirm_with_no_pending_changes_does_nothing(self):
         session = self.client.session
@@ -179,13 +119,13 @@ class ManageUsersConfirmTest(TestCase):
 
         self.user1.refresh_from_db()
         self.user2.refresh_from_db()
-        self.assertFalse(self.user1.is_organizer)
-        self.assertTrue(self.user2.is_organizer)
+        self.assertFalse(self.user1.is_site_admin)
+        self.assertFalse(self.user2.is_site_admin)
 
     def test_superuser_can_promote_site_admin(self):
         session = self.client.session
         session['pending_role_changes'] = {
-            str(self.user1.pk): {'is_organizer': False, 'is_site_admin': True},
+            str(self.user1.pk): {'is_site_admin': True},
         }
         session.save()
 
@@ -209,7 +149,7 @@ class ManageUsersCancelTest(TestCase):
     def test_cancel_clears_session_and_redirects(self):
         session = self.client.session
         session['pending_role_changes'] = {
-            str(self.user1.pk): {'is_organizer': True, 'is_site_admin': False},
+            str(self.user1.pk): {'is_site_admin': True},
         }
         session.save()
 
@@ -218,7 +158,7 @@ class ManageUsersCancelTest(TestCase):
         self.assertEqual(response.url, reverse('manage_users'))
 
         self.user1.refresh_from_db()
-        self.assertFalse(self.user1.is_organizer)
+        self.assertFalse(self.user1.is_site_admin)
 
     def test_cancel_on_form_page_redirects_to_dashboard(self):
         response = self.client.post(reverse('manage_users'), {
@@ -255,7 +195,7 @@ class SiteAdminRestrictionTest(TestCase):
         self.client.login(username='siteadmin', password='testpass123')
         session = self.client.session
         session['pending_role_changes'] = {
-            str(self.other_site_admin.pk): {'is_site_admin': False, 'is_organizer': False},
+            str(self.other_site_admin.pk): {'is_site_admin': False},
         }
         session.save()
 
@@ -267,25 +207,13 @@ class SiteAdminRestrictionTest(TestCase):
         self.client.login(username='superuser', password='testpass123')
         session = self.client.session
         session['pending_role_changes'] = {
-            str(self.other_site_admin.pk): {'is_site_admin': False, 'is_organizer': False},
+            str(self.other_site_admin.pk): {'is_site_admin': False},
         }
         session.save()
 
         self.client.post(reverse('manage_users_confirm'))
         self.other_site_admin.refresh_from_db()
         self.assertFalse(self.other_site_admin.is_site_admin)
-
-    def test_site_admin_can_promote_organizer(self):
-        self.client.login(username='siteadmin', password='testpass123')
-        session = self.client.session
-        session['pending_role_changes'] = {
-            str(self.regular.pk): {'is_organizer': True, 'is_site_admin': False},
-        }
-        session.save()
-
-        self.client.post(reverse('manage_users_confirm'))
-        self.regular.refresh_from_db()
-        self.assertTrue(self.regular.is_organizer)
 
 
 @tag("integration")
@@ -317,7 +245,6 @@ class UserAddTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(User.objects.filter(username='newuser').exists())
         new_user = User.objects.get(username='newuser')
-        self.assertFalse(new_user.is_organizer)
         self.assertFalse(new_user.is_site_admin)
 
     def test_add_user_sends_email(self):
@@ -535,8 +462,6 @@ class ForcedPasswordChangeTest(TestCase):
 
 @tag("integration")
 class AdminOrganizerEnforcementTest(TestCase):
-    """Tests for server-side enforcement that site admin implies organizer,
-    and that the Site Admin column is visible to site admins."""
 
     def setUp(self):
         self.superuser = User.objects.create_superuser(
@@ -544,125 +469,35 @@ class AdminOrganizerEnforcementTest(TestCase):
         )
         self.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123',
-            is_site_admin=True, is_organizer=True,
-        )
-        self.organizer = User.objects.create_user(
-            username='organizer', password='testpass123', is_organizer=True
+            is_site_admin=True,
         )
         self.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
 
-    def test_confirm_site_admin_forces_organizer(self):
-        """Given a regular user promoted to site admin without organizer checked,
-        When confirm is called,
-        Then is_organizer is forced to True."""
-        self.client.login(username='superuser', password='testpass123')
-        session = self.client.session
-        session['pending_role_changes'] = {
-            str(self.regular.pk): {'is_site_admin': True, 'is_organizer': False},
-        }
-        session.save()
-
-        self.client.post(reverse('manage_users_confirm'))
-        self.regular.refresh_from_db()
-        self.assertTrue(self.regular.is_site_admin)
-        self.assertTrue(self.regular.is_organizer)
-
-    def test_confirm_promoting_organizer_to_site_admin_keeps_organizer(self):
-        """Given an organizer promoted to site admin,
-        When confirm is called,
-        Then is_organizer stays True."""
-        self.client.login(username='superuser', password='testpass123')
-        session = self.client.session
-        session['pending_role_changes'] = {
-            str(self.organizer.pk): {'is_site_admin': True, 'is_organizer': True},
-        }
-        session.save()
-
-        self.client.post(reverse('manage_users_confirm'))
-        self.organizer.refresh_from_db()
-        self.assertTrue(self.organizer.is_site_admin)
-        self.assertTrue(self.organizer.is_organizer)
-
-    def test_superuser_demoting_site_admin_to_organizer(self):
-        """Given a site admin,
-        When superuser unchecks site admin but keeps organizer,
-        Then user becomes an organizer only."""
-        self.client.login(username='superuser', password='testpass123')
-        session = self.client.session
-        session['pending_role_changes'] = {
-            str(self.site_admin.pk): {'is_site_admin': False, 'is_organizer': True},
-        }
-        session.save()
-
-        self.client.post(reverse('manage_users_confirm'))
-        self.site_admin.refresh_from_db()
-        self.assertFalse(self.site_admin.is_site_admin)
-        self.assertTrue(self.site_admin.is_organizer)
-
     def test_superuser_demoting_site_admin_to_regular(self):
-        """Given a site admin,
-        When superuser unchecks both site admin and organizer,
-        Then user becomes a regular user."""
         self.client.login(username='superuser', password='testpass123')
         session = self.client.session
         session['pending_role_changes'] = {
-            str(self.site_admin.pk): {'is_site_admin': False, 'is_organizer': False},
+            str(self.site_admin.pk): {'is_site_admin': False},
         }
         session.save()
 
         self.client.post(reverse('manage_users_confirm'))
         self.site_admin.refresh_from_db()
         self.assertFalse(self.site_admin.is_site_admin)
-        self.assertFalse(self.site_admin.is_organizer)
-
-    def test_preview_enforces_admin_implies_organizer(self):
-        """Given form data promoting a regular user to site admin with organizer checked,
-        When preview is shown,
-        Then the user appears in both promote lists."""
-        self.client.login(username='superuser', password='testpass123')
-        data = _build_formset_data(
-            [self.regular],
-            {self.regular.pk: {'is_organizer': True, 'is_site_admin': True}},
-        )
-        response = self.client.post(reverse('manage_users'), data)
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Promote to Organizer')
-        self.assertContains(response, 'Promote to Site Admin')
-
-    def test_preview_no_false_changes_from_disabled_checkbox(self):
-        """Given a site admin row where the disabled organizer checkbox was not submitted,
-        When preview is calculated,
-        Then no changes are detected (enforcement corrects the missing value)."""
-        self.client.login(username='superuser', password='testpass123')
-        data = {
-            'form-TOTAL_FORMS': '1',
-            'form-INITIAL_FORMS': '1',
-            'form-MIN_NUM_FORMS': '0',
-            'form-MAX_NUM_FORMS': '1000',
-            'form-0-id': str(self.site_admin.pk),
-            'form-0-is_site_admin': 'on',
-        }
-        response = self.client.post(reverse('manage_users'), data)
-        self.assertContains(response, 'No changes')
 
     def test_site_admin_sees_site_admin_column(self):
-        """Given a site admin viewing manage users,
-        Then the Site Admin column header is visible."""
         self.client.login(username='siteadmin', password='testpass123')
         response = self.client.get(reverse('manage_users'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Site Admin')
 
     def test_site_admin_can_promote_to_site_admin_via_preview_and_confirm(self):
-        """Given a site admin promoting a regular user to site admin,
-        When the full flow completes,
-        Then the regular user becomes a site admin with organizer."""
         self.client.login(username='siteadmin', password='testpass123')
         data = _build_formset_data(
             [self.regular],
-            {self.regular.pk: {'is_organizer': True, 'is_site_admin': True}},
+            {self.regular.pk: {'is_site_admin': True}},
         )
         response = self.client.post(reverse('manage_users'), data)
         self.assertEqual(response.status_code, 200)
@@ -671,4 +506,3 @@ class AdminOrganizerEnforcementTest(TestCase):
         self.client.post(reverse('manage_users_confirm'))
         self.regular.refresh_from_db()
         self.assertTrue(self.regular.is_site_admin)
-        self.assertTrue(self.regular.is_organizer)

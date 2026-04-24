@@ -28,7 +28,7 @@
     {% endif %}
 
     {% if user.is_authenticated %}
-    <form method="post" action="{% url 'event_rsvp' event.pk %}">
+    <form method="post" action="{% url 'event_rsvp' event.group.slug event.pk %}">
         {% csrf_token %}
         {% if is_attending %}
         <button type="submit" class="btn btn-warning">Cancel RSVP</button>
@@ -40,14 +40,14 @@
 
     <div class="btn-group">
         {% if user.is_authenticated and is_attending and event.is_voting_open %}
-        <a href="{% url 'event_vote' event.pk %}" class="btn btn-primary btn-sm">Vote for Games</a>
+        <a href="{% url 'event_vote' event.group.slug event.pk %}" class="btn btn-primary btn-sm">Vote for Games</a>
         {% endif %}
 
-        <a href="{% url 'event_results' event.pk %}" class="btn btn-outline btn-sm">View Results</a>
+        <a href="{% url 'event_results' event.group.slug event.pk %}" class="btn btn-outline btn-sm">View Results</a>
 
-        {% if user.is_organizer or user.is_site_admin %}
+        {% if is_group_organizer %}
         {% if event.is_currently_active %}
-        <form method="post" action="{% url 'event_toggle_voting' event.pk %}" style="display:inline;">
+        <form method="post" action="{% url 'event_toggle_voting' event.group.slug event.pk %}" style="display:inline;">
             {% csrf_token %}
             {% if event.is_voting_open %}
             <button type="submit" class="btn btn-warning btn-sm">End Voting</button>
@@ -56,7 +56,7 @@
             {% endif %}
         </form>
         {% endif %}
-        <form method="post" action="{% url 'event_toggle_visibility' event.pk %}" style="display:inline;">
+        <form method="post" action="{% url 'event_toggle_visibility' event.group.slug event.pk %}" style="display:inline;">
             {% csrf_token %}
             <button type="submit" class="btn btn-neutral btn-sm">
                 {% if event.show_individual_votes %}
@@ -66,7 +66,7 @@
                 {% endif %}
             </button>
         </form>
-        <a href="{% url 'event_edit' event.pk %}" class="btn btn-primary btn-sm">Edit Event</a>
+        <a href="{% url 'event_edit' event.group.slug event.pk %}" class="btn btn-primary btn-sm">Edit Event</a>
         {% endif %}
     </div>
 </div>
@@ -84,5 +84,5 @@
     {% endif %}
 </div>
 
-<a href="{% url 'event_list' %}" class="btn btn-outline btn-sm">Back to Events</a>
+<a href="{% url 'group_event_list' event.group.slug %}" class="btn btn-outline btn-sm">Back to Events</a>
 {% endblock %}

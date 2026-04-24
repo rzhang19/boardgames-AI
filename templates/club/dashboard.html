@@ -4,18 +4,71 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
+{% if user.is_authenticated %}
+<div class="dashboard-grid">
+    <div class="card">
+        <h2>My Groups</h2>
+        {% if my_groups %}
+        <ul class="dashboard-list">
+            {% for group in my_groups %}
+            <li>
+                <a href="{% url 'group_dashboard' group.slug %}">{{ group.name }}</a>
+                <span class="badge badge-role-member">{{ group.member_count }} members</span>
+            </li>
+            {% endfor %}
+        </ul>
+        <a href="{% url 'group_list' %}" class="btn btn-outline btn-sm">View All</a>
+        {% else %}
+        <div class="empty-state">
+            <p>You haven't joined any groups yet.</p>
+            <a href="{% url 'group_list' %}" class="btn btn-primary btn-sm">Browse Groups</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2>My Games</h2>
+        {% if my_games %}
+        <ul class="dashboard-list">
+            {% for game in my_games %}
+            <li><a href="{% url 'game_detail' game.pk %}">{{ game.name }}</a></li>
+            {% endfor %}
+        </ul>
+        <div class="action-bar">
+            <a href="{% url 'game_list' %}?tab=my" class="btn btn-outline btn-sm">View All</a>
+            <a href="{% url 'game_add' %}" class="btn btn-primary btn-sm">Add Game</a>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>You haven't added any games yet.</p>
+            <a href="{% url 'game_add' %}" class="btn btn-primary btn-sm">Add a Game</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Upcoming Events</h2>
+        {% if upcoming_events %}
+        <ul class="dashboard-list">
+            {% for event in upcoming_events %}
+            <li>
+                <a href="{% url 'event_detail' event.group.slug event.pk %}">{{ event.title }}</a>
+                <span class="dashboard-meta">{{ event.date|date:"N j" }} &middot; {{ event.group.name }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        <a href="{% url 'event_list' %}" class="btn btn-outline btn-sm">View All</a>
+        {% else %}
+        <div class="empty-state">
+            <p>No upcoming events.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% else %}
 <div class="card">
     <h1>Board Game Club</h1>
-    {% if user.is_authenticated %}
-    <p>Welcome, <a href="{% url 'public_profile' user.username %}">{{ user.username }}</a>{% verified_badge user %}!
-        {% if user.is_site_admin %}
-        <span class="badge badge-admin">Site Admin</span>
-        {% elif user.is_organizer %}
-        <span class="badge">Organizer</span>
-        {% endif %}
-    </p>
-    {% else %}
-    <p>Welcome!</p>
-    {% endif %}
+    <p>Welcome! <a href="{% url 'login' %}">Log in</a> or <a href="{% url 'register' %}">register</a> to get started.</p>
 </div>
+{% endif %}
 {% endblock %}

@@ -125,18 +125,20 @@ class GameListDataLabelsTest(TestCase):
 class EventListDataLabelsTest(TestCase):
 
     def test_event_list_table_has_data_labels(self):
-        user = User.objects.create_user(username='org', password='testpass123', is_organizer=True)
+        user = User.objects.create_user(username='org', password='testpass123')
         self.client.login(username='org', password='testpass123')
 
-        from club.models import Event
+        from club.models import Event, Group
         from django.utils import timezone
         import datetime as dt
+        group = Group.objects.create(name='Test Group')
         event = Event.objects.create(
             title='Test Event',
             date=timezone.now() + dt.timedelta(days=7),
             location='Test Location',
             created_by=user,
             voting_deadline=timezone.now() + dt.timedelta(days=6),
+            group=group,
         )
 
         response = self.client.get(reverse('event_list'))
@@ -153,21 +155,23 @@ class EventResultsDataLabelsTest(TestCase):
         user = User.objects.create_user(username='voter', password='testpass123')
         self.client.login(username='voter', password='testpass123')
 
-        from club.models import Event, BoardGame, EventAttendance, Vote
+        from club.models import Event, BoardGame, EventAttendance, Vote, Group
         from django.utils import timezone
         import datetime as dt
+        group = Group.objects.create(name='Test Group')
         event = Event.objects.create(
             title='Result Event',
             date=timezone.now() + dt.timedelta(days=7),
             created_by=user,
             voting_open=False,
             voting_deadline=timezone.now() + dt.timedelta(days=6),
+            group=group,
         )
         game = BoardGame.objects.create(name='Test Game', owner=user)
         EventAttendance.objects.create(user=user, event=event)
         Vote.objects.create(user=user, event=event, board_game=game, rank=1)
 
-        response = self.client.get(reverse('event_results', kwargs={'pk': event.pk}))
+        response = self.client.get(reverse('event_results', kwargs={'slug': event.group.slug, 'pk': event.pk}))
         self.assertContains(response, 'data-label="Rank"')
         self.assertContains(response, 'data-label="Game"')
         self.assertContains(response, 'data-label="Score"')

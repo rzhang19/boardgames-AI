@@ -37,7 +37,7 @@
 {% endif %}
 
 <div class="btn-group">
-    <a href="{% url 'event_detail' event.pk %}" class="btn btn-neutral">Back to Event</a>
+    <a href="{% url 'event_detail' event.group.slug event.pk %}" class="btn btn-neutral">Back to Event</a>
 </div>
 
 {% else %}
@@ -58,7 +58,7 @@
 
     <div class="btn-group">
         <button type="submit" class="btn btn-primary">Submit Votes</button>
-        <a href="{% url 'event_detail' event.pk %}" class="btn btn-neutral">Back to Event</a>
+        <a href="{% url 'event_detail' event.group.slug event.pk %}" class="btn btn-neutral">Back to Event</a>
     </div>
 </form>
 {% endif %}

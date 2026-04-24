@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Join {{ group.name }}{% endblock %}
+
+{% block content %}
+<h1>Join {{ group.name }}</h1>
+
+{% if error %}
+<div class="card">
+    <div class="alert alert-danger">{{ error }}</div>
+    <a href="{% url 'group_list' %}" class="btn btn-neutral btn-sm">Browse Groups</a>
+</div>
+{% elif message %}
+<div class="card">
+    <div class="alert alert-info">{{ message }}</div>
+    <a href="{% url 'group_dashboard' group.slug %}" class="btn btn-outline btn-sm">View Group</a>
+</div>
+{% else %}
+<div class="card">
+    {% if group.description %}
+    <p>{{ group.description }}</p>
+    {% endif %}
+    <p>{{ group.member_count }} members</p>
+    <form method="post">{% csrf_token %}
+        <button type="submit" class="btn btn-primary">
+            {% if group.join_policy == 'request' %}Request to Join{% else %}Join Group{% endif %}
+        </button>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

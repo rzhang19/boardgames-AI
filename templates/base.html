@@ -12,6 +12,7 @@
         <a href="{% url 'dashboard' %}">Home</a>
         <button class="nav-hamburger" aria-label="Menu" onclick="document.querySelector('.nav-links').classList.toggle('nav-open')">&#9776;</button>
         <div class="nav-links">
+            <a href="{% url 'group_list' %}">Groups</a>
             {% if user.is_authenticated %}
             <a href="{% url 'game_list' %}">Games</a>
             {% endif %}

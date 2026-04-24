@@ -2,10 +2,18 @@ from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from club.models import BoardGame, Event, EventAttendance, Vote
+from club.models import BoardGame, Event, EventAttendance, Group, GroupMembership, Vote
 from club.borda import calculate_borda_scores
 
 User = get_user_model()
+
+
+def _make_organizer(user, group):
+    GroupMembership.objects.create(user=user, group=group, role='admin')
+
+
+def _make_member(user, group):
+    GroupMembership.objects.create(user=user, group=group, role='member')
 
 
 @tag("integration")
@@ -13,7 +21,7 @@ class VoteViewAccessTest(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='admin', password='testpass123', is_organizer=True
+            username='admin', password='testpass123', is_site_admin=True
         )
         self.attendee = User.objects.create_user(
             username='attendee', password='testpass123'
@@ -21,28 +29,31 @@ class VoteViewAccessTest(TestCase):
         self.non_attendee = User.objects.create_user(
             username='outsider', password='testpass123'
         )
+        self.group = Group.objects.create(name='Vote Group')
+        _make_organizer(self.admin, self.group)
+        _make_member(self.attendee, self.group)
         self.event = Event.objects.create(
             title='Vote Event', date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
-            created_by=self.admin
+            created_by=self.admin, group=self.group
         )
         EventAttendance.objects.create(user=self.attendee, event=self.event)
         self.game1 = BoardGame.objects.create(name='Catan', owner=self.admin)
         self.game2 = BoardGame.objects.create(name='Chess', owner=self.admin)
 
     def test_vote_page_requires_login(self):
-        response = self.client.get(reverse('event_vote', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertEqual(response.status_code, 302)
         self.assertIn('/login/', response.url)
 
     def test_non_attendee_cannot_vote(self):
         self.client.login(username='outsider', password='testpass123')
-        response = self.client.get(reverse('event_vote', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertEqual(response.status_code, 403)
 
     def test_attendee_can_access_vote_page(self):
         self.client.login(username='attendee', password='testpass123')
-        response = self.client.get(reverse('event_vote', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertEqual(response.status_code, 200)
 
 
@@ -51,15 +62,18 @@ class VoteSubmissionTest(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='admin', password='testpass123', is_organizer=True
+            username='admin', password='testpass123', is_site_admin=True
         )
         self.attendee = User.objects.create_user(
             username='attendee', password='testpass123'
         )
+        self.group = Group.objects.create(name='Submit Group')
+        _make_organizer(self.admin, self.group)
+        _make_member(self.attendee, self.group)
         self.event = Event.objects.create(
             title='Vote Event', date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
-            created_by=self.admin
+            created_by=self.admin, group=self.group
         )
         EventAttendance.objects.create(user=self.attendee, event=self.event)
         self.game1 = BoardGame.objects.create(name='Catan', owner=self.admin)
@@ -67,7 +81,7 @@ class VoteSubmissionTest(TestCase):
 
     def test_attendee_can_submit_votes(self):
         self.client.login(username='attendee', password='testpass123')
-        response = self.client.post(reverse('event_vote', kwargs={'pk': self.event.pk}), {
+        response = self.client.post(reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}), {
             'form-TOTAL_FORMS': '2',
             'form-INITIAL_FORMS': '0',
             'form-MIN_NUM_FORMS': '0',
@@ -82,7 +96,7 @@ class VoteSubmissionTest(TestCase):
 
     def test_submit_zero_votes_is_allowed(self):
         self.client.login(username='attendee', password='testpass123')
-        response = self.client.post(reverse('event_vote', kwargs={'pk': self.event.pk}), {
+        response = self.client.post(reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}), {
             'form-TOTAL_FORMS': '0',
             'form-INITIAL_FORMS': '0',
             'form-MIN_NUM_FORMS': '0',
@@ -90,13 +104,13 @@ class VoteSubmissionTest(TestCase):
         })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Vote.objects.filter(user=self.attendee, event=self.event).count(), 0)
-        self.assertEqual(response.url, reverse('event_detail', kwargs={'pk': self.event.pk}))
+        self.assertEqual(response.url, reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
 
     def test_submit_votes_replaces_existing_votes(self):
         Vote.objects.create(user=self.attendee, event=self.event,
                             board_game=self.game1, rank=1)
         self.client.login(username='attendee', password='testpass123')
-        response = self.client.post(reverse('event_vote', kwargs={'pk': self.event.pk}), {
+        response = self.client.post(reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}), {
             'form-TOTAL_FORMS': '1',
             'form-INITIAL_FORMS': '0',
             'form-MIN_NUM_FORMS': '0',
@@ -115,7 +129,7 @@ class VoteSubmissionTest(TestCase):
     def test_non_attendee_cannot_submit_votes(self):
         non_attendee = User.objects.create_user(username='outsider', password='testpass123')
         self.client.login(username='outsider', password='testpass123')
-        response = self.client.post(reverse('event_vote', kwargs={'pk': self.event.pk}), {
+        response = self.client.post(reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}), {
             'form-TOTAL_FORMS': '1',
             'form-INITIAL_FORMS': '0',
             'form-MIN_NUM_FORMS': '0',
@@ -132,12 +146,13 @@ class BordaCountTest(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='admin', password='testpass123', is_organizer=True
+            username='admin', password='testpass123', is_site_admin=True
         )
+        self.group = Group.objects.create(name='Borda Group')
         self.event = Event.objects.create(
             title='Borda Event', date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
-            created_by=self.admin
+            created_by=self.admin, group=self.group
         )
         self.game1 = BoardGame.objects.create(name='Catan', owner=self.admin)
         self.game2 = BoardGame.objects.create(name='Chess', owner=self.admin)
@@ -214,35 +229,40 @@ class EventResultsViewTest(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='admin', password='testpass123', is_organizer=True
+            username='admin', password='testpass123', is_site_admin=True
         )
         self.user = User.objects.create_user(
             username='voter', password='testpass123'
         )
+        self.group = Group.objects.create(name='Results Group')
+        _make_organizer(self.admin, self.group)
+        _make_member(self.user, self.group)
         self.event = Event.objects.create(
             title='Results Event', date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
-            created_by=self.admin
+            created_by=self.admin, group=self.group
         )
         EventAttendance.objects.create(user=self.user, event=self.event)
         self.game1 = BoardGame.objects.create(name='Catan', owner=self.admin)
         self.game2 = BoardGame.objects.create(name='Chess', owner=self.admin)
 
     def test_results_page_loads(self):
-        response = self.client.get(reverse('event_results', kwargs={'pk': self.event.pk}))
+        self.client.login(username='admin', password='testpass123')
+        response = self.client.get(reverse('event_results', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertEqual(response.status_code, 200)
 
     def test_results_displays_scores(self):
+        self.client.login(username='admin', password='testpass123')
         Vote.objects.create(user=self.user, event=self.event,
                             board_game=self.game1, rank=1)
         Vote.objects.create(user=self.user, event=self.event,
                             board_game=self.game2, rank=2)
-        response = self.client.get(reverse('event_results', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_results', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertContains(response, 'Catan')
         self.assertContains(response, 'Chess')
 
     def test_results_nonexistent_event_returns_404(self):
-        response = self.client.get(reverse('event_results', kwargs={'pk': 9999}))
+        response = self.client.get(reverse('event_results', kwargs={'slug': self.group.slug, 'pk': 9999}))
         self.assertEqual(response.status_code, 404)
 
 
@@ -251,27 +271,29 @@ class VoteVisibilityToggleTest(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='admin', password='testpass123', is_organizer=True
+            username='admin', password='testpass123', is_site_admin=True
         )
         self.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
+        self.group = Group.objects.create(name='Toggle Group')
+        _make_organizer(self.admin, self.group)
         self.event = Event.objects.create(
             title='Toggle Event', date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
-            created_by=self.admin
+            created_by=self.admin, group=self.group
         )
 
     def test_toggle_requires_admin(self):
         self.client.login(username='regular', password='testpass123')
         response = self.client.post(
-            reverse('event_toggle_visibility', kwargs={'pk': self.event.pk})
+            reverse('event_toggle_visibility', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
         )
         self.assertEqual(response.status_code, 403)
 
     def test_toggle_requires_login(self):
         response = self.client.post(
-            reverse('event_toggle_visibility', kwargs={'pk': self.event.pk})
+            reverse('event_toggle_visibility', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
         )
         self.assertEqual(response.status_code, 302)
         self.assertIn('/login/', response.url)
@@ -280,10 +302,10 @@ class VoteVisibilityToggleTest(TestCase):
         self.client.login(username='admin', password='testpass123')
         self.assertFalse(self.event.show_individual_votes)
         response = self.client.post(
-            reverse('event_toggle_visibility', kwargs={'pk': self.event.pk})
+            reverse('event_toggle_visibility', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
         )
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('event_detail', kwargs={'pk': self.event.pk}))
+        self.assertEqual(response.url, reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.event.refresh_from_db()
         self.assertTrue(self.event.show_individual_votes)
 
@@ -292,26 +314,28 @@ class VoteVisibilityToggleTest(TestCase):
         self.event.save()
         self.client.login(username='admin', password='testpass123')
         self.client.post(
-            reverse('event_toggle_visibility', kwargs={'pk': self.event.pk})
+            reverse('event_toggle_visibility', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
         )
         self.event.refresh_from_db()
         self.assertFalse(self.event.show_individual_votes)
 
     def test_results_show_individual_votes_when_enabled(self):
+        self.client.login(username='admin', password='testpass123')
         self.event.show_individual_votes = True
         self.event.save()
         EventAttendance.objects.create(user=self.regular, event=self.event)
         game = BoardGame.objects.create(name='Catan', owner=self.admin)
         Vote.objects.create(user=self.regular, event=self.event,
                             board_game=game, rank=1)
-        response = self.client.get(reverse('event_results', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_results', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertContains(response, 'regular')
 
     def test_results_hide_individual_votes_when_disabled(self):
+        self.client.login(username='admin', password='testpass123')
         self.assertFalse(self.event.show_individual_votes)
         EventAttendance.objects.create(user=self.regular, event=self.event)
         game = BoardGame.objects.create(name='Catan', owner=self.admin)
         Vote.objects.create(user=self.regular, event=self.event,
                             board_game=game, rank=1)
-        response = self.client.get(reverse('event_results', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_results', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertNotContains(response, 'regular')

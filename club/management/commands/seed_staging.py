@@ -7,6 +7,8 @@ from club.models import (
     BoardGame,
     Event,
     EventAttendance,
+    Group,
+    GroupMembership,
     User,
     Vote,
 )
@@ -19,19 +21,26 @@ class Command(BaseCommand):
         {
             'username': 'testuser',
             'password': 'Testpass123!',
-            'is_organizer': False,
             'is_site_admin': False,
         },
         {
             'username': 'testorganizer',
             'password': 'Testpass123!',
-            'is_organizer': True,
             'is_site_admin': False,
         },
         {
             'username': 'testadmin',
             'password': 'Testpass123!',
-            'is_organizer': False,
+            'is_site_admin': True,
+        },
+        {
+            'username': 'newtestadmin',
+            'password': 'Testpass123!',
+            'is_site_admin': False,
+        },
+        {
+            'username': 'testsiteadmin',
+            'password': 'Testpass123!',
             'is_site_admin': True,
         },
     ]
@@ -52,6 +61,9 @@ class Command(BaseCommand):
             EventAttendance.objects.filter(user__username__in=[u['username'] for u in self.TEST_USERS]).delete()
             Event.objects.filter(created_by__username__in=[u['username'] for u in self.TEST_USERS]).delete()
             BoardGame.objects.filter(owner__username__in=[u['username'] for u in self.TEST_USERS]).delete()
+            GroupMembership.objects.filter(user__username__in=[u['username'] for u in self.TEST_USERS]).delete()
+            Group.objects.filter(name='Workday Boardgames').delete()
+            Group.objects.filter(name='Public Board Games Group').delete()
             User.objects.filter(username__in=[u['username'] for u in self.TEST_USERS]).delete()
 
         users = {}
@@ -59,13 +71,32 @@ class Command(BaseCommand):
             user = User.objects.create_user(
                 username=user_data['username'],
                 password=user_data['password'],
-                is_organizer=user_data['is_organizer'],
                 is_site_admin=user_data['is_site_admin'],
                 email_verified=True,
             )
             users[user_data['username']] = user
-            role = 'site admin' if user_data['is_site_admin'] else ('organizer' if user_data['is_organizer'] else 'user')
+            role = 'site admin' if user_data['is_site_admin'] else 'user'
             self.stdout.write(f'  Created {user_data["username"]} ({role})')
+
+        private_group = Group.objects.create(
+            name='Workday Boardgames',
+            discoverable=False,
+            join_policy='invite_only',
+            created_by=users['testorganizer'],
+        )
+        GroupMembership.objects.create(user=users['testuser'], group=private_group, role='member')
+        GroupMembership.objects.create(user=users['testorganizer'], group=private_group, role='organizer')
+        GroupMembership.objects.create(user=users['testadmin'], group=private_group, role='admin')
+        self.stdout.write(f'  Created group: {private_group.name} (private)')
+
+        public_group = Group.objects.create(
+            name='Public Board Games Group',
+            discoverable=True,
+            join_policy='open',
+            created_by=users['newtestadmin'],
+        )
+        GroupMembership.objects.create(user=users['newtestadmin'], group=public_group, role='admin')
+        self.stdout.write(f'  Created group: {public_group.name} (public)')
 
         games = []
         for i, game_data in enumerate(self.GAMES):
@@ -85,6 +116,7 @@ class Command(BaseCommand):
             created_by=organizer,
             is_active=True,
             voting_deadline=now + timedelta(days=7, hours=19),
+            group=private_group,
         )
         self.stdout.write(f'  Created active event: {active_event.title}')
 
@@ -96,6 +128,7 @@ class Command(BaseCommand):
             created_by=organizer,
             is_active=False,
             voting_deadline=now - timedelta(days=7, hours=19),
+            group=private_group,
         )
         self.stdout.write(f'  Created past event: {past_event.title}')
 
@@ -116,9 +149,11 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f'\nSeed complete! Created {len(users)} users, {len(games)} games, '
-            f'2 events, and votes.\n'
+            f'2 groups, 2 events, and votes.\n'
             f'Login credentials:\n'
-            f'  testuser / Testpass123! (regular)\n'
-            f'  testorganizer / Testpass123! (organizer)\n'
-            f'  testadmin / Testpass123! (site admin)'
+            f'  testuser / Testpass123! (member of Workday Boardgames)\n'
+            f'  testorganizer / Testpass123! (organizer of Workday Boardgames)\n'
+            f'  testadmin / Testpass123! (site admin, admin of Workday Boardgames)\n'
+            f'  newtestadmin / Testpass123! (admin of Public Board Games Group)\n'
+            f'  testsiteadmin / Testpass123! (site admin, no group)'
         ))

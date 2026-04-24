@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% load club_tags %}
+
+{% block title %}Manage Members - {{ group.name }}{% endblock %}
+
+{% block content %}
+<h1>Manage Members &mdash; {{ group.name }}</h1>
+
+<div class="action-bar">
+    <a href="{% url 'group_members' group.slug %}" class="btn btn-outline btn-sm">Back to Members</a>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Joined</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for m in members %}
+        <tr>
+            <td data-label="Username">
+                <a href="{% url 'public_profile' m.user.username %}">{{ m.user.username }}</a>{% verified_badge m.user %}
+                {% if m.user == request.user %}<span class="text-muted">(you)</span>{% endif %}
+            </td>
+            <td data-label="Role">
+                <span class="badge badge-role-{{ m.role }}">{{ m.role }}</span>
+            </td>
+            <td data-label="Joined">{{ m.joined_at|date:"N j, Y" }}</td>
+            <td data-label="Actions">
+                {% if m.user != request.user %}
+                <div class="manage-actions">
+                    <form method="post" style="display:inline">{% csrf_token %}
+                        <input type="hidden" name="user_id" value="{{ m.user_id }}">
+                        {% if m.role == 'member' %}
+                        <button name="action" value="promote_organizer" class="btn btn-outline btn-sm">Promote to Organizer</button>
+                        {% elif m.role == 'organizer' %}
+                        <button name="action" value="promote_admin" class="btn btn-outline btn-sm">Promote to Admin</button>
+                        <button name="action" value="demote_member" class="btn btn-neutral btn-sm">Demote to Member</button>
+                        {% elif m.role == 'admin' %}
+                        <button name="action" value="demote_organizer" class="btn btn-neutral btn-sm">Demote to Organizer</button>
+                        {% endif %}
+                    </form>
+                    <form method="post" style="display:inline" class="form-danger">{% csrf_token %}
+                        <input type="hidden" name="user_id" value="{{ m.user_id }}">
+                        <button name="action" value="remove" class="btn btn-danger btn-sm">Remove</button>
+                    </form>
+                </div>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

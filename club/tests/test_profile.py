@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 
-from club.models import BoardGame, Event, EventAttendance
+from club.models import BoardGame, Event, EventAttendance, Group
 
 User = get_user_model()
 
@@ -103,6 +103,7 @@ class ProfilePrivacyTest(TestCase):
         self.owner = User.objects.create_user(
             username='owner', password='testpass123',
         )
+        self.group = Group.objects.create(name='Test Group')
         self.game = BoardGame.objects.create(
             name='Catan', owner=self.owner, complexity='medium',
         )
@@ -111,6 +112,7 @@ class ProfilePrivacyTest(TestCase):
             date=timezone.now() + timedelta(days=7),
             created_by=self.owner,
             voting_deadline=timezone.now() + timedelta(days=6),
+            group=self.group,
         )
         EventAttendance.objects.create(user=self.owner, event=self.event)
 

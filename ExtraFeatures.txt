@@ -50,7 +50,7 @@ AGENT: if any of these lines are marked with a "(DONE)" in between the number an
 24. Add a security feature where I can add a very specialized login at any time, such as if I need to go into the data and delete a certain group and NO ONE else can log in, for any reason. This log in could be like a password or like the login we currently have for staging. But I would need to be able to go in and edit.
 25. (DONE) Pre-release - add an access code to allow access to the current beta. Use hashing for access. This is similar to the login for staging, but only a password.
 26. (DONE) Allow organizers and admins to bulk add events.
-27. Separate out tests as unit tests and system tests, so that some may be run at certain times and not in all tests necessary.
+27. (DONE) Separate out tests as unit tests and system tests, so that some may be run at certain times and not in all tests necessary.
 28. Allow game expansions to be included as subinformation on an existing game. This can be feteched from BoardGameGeek as those expansions are marked as such on that site. Not sure how it's returned in the API, however.
 29. When group-owned games model and VotingFeature are implemented, allow games that get added per session to be added to a specific user's library OR to the group.
 30. Include a duration feature where the events can last a certain amount of time. We can ask a default duration upon group creation and even include a default defaulted value of like 2 hours. This can affect what users can do while an event is active.
@@ -58,3 +58,6 @@ AGENT: if any of these lines are marked with a "(DONE)" in between the number an
 31a. Based on the complexity feature, need to determine which complexity of duplicate games gets shown on event voting and voting results. It doesn't make sense to show all of the values among all the different players to own them, but we do want to display at least one, hopefully just one.
 32. Validate passwords, when reset, that they cannot be similar to the past 5 previous passwords they've used.
 33. Separate out admin settings from personal settings. Will require subtab features, most likely, when clicking on the Settings button on the top right.
+34. Look into implementing private events, outside of groups:
+34a. Will need some sort of "Friends" ability, or ability to friend someone else. Maybe send someone a link to friend them. Can users see other users, not in the same group?
+34b. Can create events only, set privacy, invite others to that event, specifically. Event is not tied to any group.

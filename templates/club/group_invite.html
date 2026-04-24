@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Invite - {{ group.name }}{% endblock %}
+
+{% block content %}
+<h1>Invite to {{ group.name }}</h1>
+
+<div class="card">
+    {% if invite %}
+    <p>Share this link to invite someone to the group:</p>
+    <div class="invite-link-box">
+        <input type="text" value="{{ request.scheme }}://{{ request.get_host }}/invite/{{ invite.token }}/" readonly id="invite-url" class="invite-link-input">
+        <button onclick="navigator.clipboard.writeText(document.getElementById('invite-url').value)" class="btn btn-primary btn-sm">Copy</button>
+    </div>
+    <p class="helptext">This invite link expires in 7 days.</p>
+    <form method="post">{% csrf_token %}
+        <button type="submit" class="btn btn-outline btn-sm">Generate New Link</button>
+    </form>
+    {% else %}
+    <p>Generate an invite link to share with people you want to join this group.</p>
+    <form method="post">{% csrf_token %}
+        <button type="submit" class="btn btn-primary">Generate Invite Link</button>
+    </form>
+    {% endif %}
+</div>
+
+<div class="action-bar">
+    <a href="{% url 'group_dashboard' group.slug %}" class="btn btn-neutral btn-sm">Back to Group</a>
+</div>
+{% endblock %}

@@ -5,9 +5,13 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
-from club.models import Event, EventAttendance, SiteSettings
+from club.models import Event, EventAttendance, Group, GroupMembership, Notification, SiteSettings
 
 User = get_user_model()
+
+
+def _make_organizer(user, group):
+    GroupMembership.objects.create(user=user, group=group, role='admin')
 
 
 @tag("integration")
@@ -15,17 +19,20 @@ class EventListViewTest(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='admin', password='testpass123', is_organizer=True
+            username='admin', password='testpass123', is_site_admin=True
         )
+        self.group = Group.objects.create(name='Test Group')
+        _make_organizer(self.admin, self.group)
         self.event1 = Event.objects.create(
             title='Friday Night', date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
-            location='Community Center', created_by=self.admin
+            location='Community Center', created_by=self.admin,
+            group=self.group
         )
         self.event2 = Event.objects.create(
             title='Saturday Bash', date='2026-06-01T12:00:00Z',
             voting_deadline='2026-06-01T12:00:00Z',
-            created_by=self.admin
+            created_by=self.admin, group=self.group
         )
 
     def test_event_list_displays_all_events(self):
@@ -40,34 +47,36 @@ class EventCreateViewTest(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='admin', password='testpass123', is_organizer=True
+            username='admin', password='testpass123', is_site_admin=True
         )
         self.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
         self.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123',
-            is_site_admin=True, is_organizer=False,
+            is_site_admin=True,
         )
+        self.group = Group.objects.create(name='Create Group')
+        _make_organizer(self.admin, self.group)
 
     def test_create_page_requires_login(self):
-        response = self.client.get(reverse('event_add'))
+        response = self.client.get(reverse('event_add', kwargs={'slug': self.group.slug}))
         self.assertEqual(response.status_code, 302)
         self.assertIn('/login/', response.url)
 
     def test_admin_can_access_create_page(self):
         self.client.login(username='admin', password='testpass123')
-        response = self.client.get(reverse('event_add'))
+        response = self.client.get(reverse('event_add', kwargs={'slug': self.group.slug}))
         self.assertEqual(response.status_code, 200)
 
     def test_regular_user_cannot_access_create_page(self):
         self.client.login(username='regular', password='testpass123')
-        response = self.client.get(reverse('event_add'))
+        response = self.client.get(reverse('event_add', kwargs={'slug': self.group.slug}))
         self.assertEqual(response.status_code, 403)
 
     def test_admin_can_create_event_with_date_and_time(self):
         self.client.login(username='admin', password='testpass123')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': 'Game Night',
             'date': '2026-07-01',
             'time': '18:00',
@@ -80,11 +89,11 @@ class EventCreateViewTest(TestCase):
         self.assertEqual(event.location, 'The Den')
         self.assertEqual(event.date.hour, 18)
         self.assertEqual(event.date.minute, 0)
-        self.assertEqual(response.url, reverse('event_detail', kwargs={'pk': event.pk}))
+        self.assertEqual(response.url, reverse('event_detail', kwargs={'slug': event.group.slug, 'pk': event.pk}))
 
     def test_create_event_with_date_only_defaults_time_to_midnight(self):
         self.client.login(username='admin', password='testpass123')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': 'Midnight Event',
             'date': '2026-08-01',
         })
@@ -97,7 +106,7 @@ class EventCreateViewTest(TestCase):
 
     def test_create_event_with_required_fields_only(self):
         self.client.login(username='admin', password='testpass123')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': 'Minimal Event',
             'date': '2026-08-01',
             'time': '18:00',
@@ -109,7 +118,7 @@ class EventCreateViewTest(TestCase):
 
     def test_create_event_without_title_fails(self):
         self.client.login(username='admin', password='testpass123')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': '',
             'date': '2026-08-01',
             'time': '18:00',
@@ -119,7 +128,7 @@ class EventCreateViewTest(TestCase):
 
     def test_create_event_without_date_fails(self):
         self.client.login(username='admin', password='testpass123')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': 'No Date Event',
             'date': '',
             'time': '18:00',
@@ -129,7 +138,7 @@ class EventCreateViewTest(TestCase):
 
     def test_regular_user_cannot_create_event(self):
         self.client.login(username='regular', password='testpass123')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': 'Sneaky Event',
             'date': '2026-08-01',
             'time': '18:00',
@@ -140,7 +149,7 @@ class EventCreateViewTest(TestCase):
     def test_cannot_create_event_with_past_date(self):
         self.client.login(username='admin', password='testpass123')
         past = (timezone.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': 'Past Event',
             'date': past,
         })
@@ -151,7 +160,7 @@ class EventCreateViewTest(TestCase):
     def test_can_create_event_with_future_date(self):
         self.client.login(username='admin', password='testpass123')
         future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': 'Future Event',
             'date': future,
         })
@@ -160,7 +169,7 @@ class EventCreateViewTest(TestCase):
 
     def test_create_event_form_html(self):
         self.client.login(username='admin', password='testpass123')
-        response = self.client.get(reverse('event_add'))
+        response = self.client.get(reverse('event_add', kwargs={'slug': self.group.slug}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'type="date"')
         self.assertContains(response, 'type="time"')
@@ -181,14 +190,15 @@ class EventCreateViewTest(TestCase):
         description_section = html[html.find('id="id_description"') - 200:html.find('id="id_description"') + 50]
         self.assertNotIn('required-asterisk', description_section)
 
-    def test_site_admin_without_organizer_can_access_create_page(self):
+    def test_site_admin_without_membership_cannot_access_create_page(self):
         self.client.login(username='siteadmin', password='testpass123')
-        response = self.client.get(reverse('event_add'))
-        self.assertEqual(response.status_code, 200)
+        response = self.client.get(reverse('event_add', kwargs={'slug': self.group.slug}))
+        self.assertEqual(response.status_code, 403)
 
-    def test_site_admin_without_organizer_can_create_event(self):
+    def test_site_admin_as_organizer_can_create_event(self):
+        _make_organizer(self.site_admin, self.group)
         self.client.login(username='siteadmin', password='testpass123')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': 'Admin Event',
             'date': '2026-09-01',
             'time': '18:00',
@@ -205,7 +215,7 @@ class EventCreateViewTest(TestCase):
         site_settings.default_voting_offset_minutes = 60
         site_settings.save()
         self.client.login(username='admin', password='testpass123')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': 'Offset Event',
             'date': '2026-07-01',
             'time': '18:00',
@@ -219,7 +229,7 @@ class EventCreateViewTest(TestCase):
 
     def test_create_event_with_zero_offset_sets_deadline_to_event_time(self):
         self.client.login(username='admin', password='testpass123')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': 'Zero Offset',
             'date': '2026-07-01',
             'time': '18:00',
@@ -232,7 +242,7 @@ class EventCreateViewTest(TestCase):
 
     def test_create_event_default_offset_is_zero_when_no_global_setting(self):
         self.client.login(username='admin', password='testpass123')
-        response = self.client.post(reverse('event_add'), {
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
             'title': 'Default Offset',
             'date': '2026-07-01',
             'time': '18:00',
@@ -247,36 +257,38 @@ class EventDetailViewTest(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='admin', password='testpass123', is_organizer=True
+            username='admin', password='testpass123', is_site_admin=True
         )
+        self.group = Group.objects.create(name='Detail Group')
+        _make_organizer(self.admin, self.group)
         self.event = Event.objects.create(
             title='Test Event', date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
             location='Hall', description='A test event',
-            created_by=self.admin
+            created_by=self.admin, group=self.group
         )
 
     def test_event_detail_displays_info(self):
-        response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Test Event')
         self.assertContains(response, 'Hall')
         self.assertContains(response, 'A test event')
 
     def test_event_detail_nonexistent_returns_404(self):
-        response = self.client.get(reverse('event_detail', kwargs={'pk': 9999}))
+        response = self.client.get(reverse('event_detail', kwargs={'slug': self.group.slug, 'pk': 9999}))
         self.assertEqual(response.status_code, 404)
 
     def test_event_detail_shows_attendees(self):
         user1 = User.objects.create_user(username='u1', password='testpass123')
         EventAttendance.objects.create(user=user1, event=self.event)
-        response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertContains(response, 'u1')
 
     def test_event_detail_shows_rsvp_for_authenticated_user(self):
         user = User.objects.create_user(username='attendee', password='testpass123')
         self.client.login(username='attendee', password='testpass123')
-        response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertContains(response, 'RSVP')
 
 
@@ -285,25 +297,28 @@ class EventRSVPTest(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='admin', password='testpass123', is_organizer=True
+            username='admin', password='testpass123', is_site_admin=True
         )
         self.user = User.objects.create_user(
             username='attendee', password='testpass123'
         )
+        self.group = Group.objects.create(name='RSVP Group')
+        _make_organizer(self.admin, self.group)
+        GroupMembership.objects.create(user=self.user, group=self.group, role='member')
         self.event = Event.objects.create(
             title='RSVP Event', date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
-            created_by=self.admin
+            created_by=self.admin, group=self.group
         )
 
     def test_rsvp_requires_login(self):
-        response = self.client.post(reverse('event_rsvp', kwargs={'pk': self.event.pk}))
+        response = self.client.post(reverse('event_rsvp', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertEqual(response.status_code, 302)
         self.assertIn('/login/', response.url)
 
     def test_user_can_rsvp(self):
         self.client.login(username='attendee', password='testpass123')
-        response = self.client.post(reverse('event_rsvp', kwargs={'pk': self.event.pk}))
+        response = self.client.post(reverse('event_rsvp', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertEqual(response.status_code, 302)
         self.assertTrue(
             EventAttendance.objects.filter(user=self.user, event=self.event).exists()
@@ -312,7 +327,7 @@ class EventRSVPTest(TestCase):
     def test_user_can_cancel_rsvp(self):
         EventAttendance.objects.create(user=self.user, event=self.event)
         self.client.login(username='attendee', password='testpass123')
-        response = self.client.post(reverse('event_rsvp', kwargs={'pk': self.event.pk}))
+        response = self.client.post(reverse('event_rsvp', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertEqual(response.status_code, 302)
         self.assertFalse(
             EventAttendance.objects.filter(user=self.user, event=self.event).exists()
@@ -320,13 +335,19 @@ class EventRSVPTest(TestCase):
 
     def test_rsvp_redirects_to_event_detail(self):
         self.client.login(username='attendee', password='testpass123')
-        response = self.client.post(reverse('event_rsvp', kwargs={'pk': self.event.pk}))
-        self.assertEqual(response.url, reverse('event_detail', kwargs={'pk': self.event.pk}))
+        response = self.client.post(reverse('event_rsvp', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
+        self.assertEqual(response.url, reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
 
     def test_rsvp_nonexistent_event_returns_404(self):
         self.client.login(username='attendee', password='testpass123')
-        response = self.client.post(reverse('event_rsvp', kwargs={'pk': 9999}))
+        response = self.client.post(reverse('event_rsvp', kwargs={'slug': self.group.slug, 'pk': 9999}))
         self.assertEqual(response.status_code, 404)
+
+    def test_non_member_cannot_rsvp(self):
+        outsider = User.objects.create_user(username='outsider', password='testpass123')
+        self.client.login(username='outsider', password='testpass123')
+        response = self.client.post(reverse('event_rsvp', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
+        self.assertEqual(response.status_code, 403)
 
 
 @tag("integration")
@@ -334,22 +355,26 @@ class EventEditViewTest(TestCase):
 
     def setUp(self):
         self.organizer = User.objects.create_user(
-            username='organizer', password='testpass123', is_organizer=True
+            username='organizer', password='testpass123', is_site_admin=True
         )
         self.other_organizer = User.objects.create_user(
-            username='other_org', password='testpass123', is_organizer=True
+            username='other_org', password='testpass123', is_site_admin=True
         )
         self.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
         self.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123',
-            is_site_admin=True, is_organizer=True,
+            is_site_admin=True,
         )
         self.site_admin_only = User.objects.create_user(
             username='siteadminonly', password='testpass123',
-            is_site_admin=True, is_organizer=False,
+            is_site_admin=True,
         )
+        self.group = Group.objects.create(name='Edit Group')
+        _make_organizer(self.organizer, self.group)
+        _make_organizer(self.other_organizer, self.group)
+        _make_organizer(self.site_admin_only, self.group)
         self.future_date = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
         self.event = Event.objects.create(
             title='Original Title',
@@ -358,36 +383,37 @@ class EventEditViewTest(TestCase):
             location='Original Location',
             description='Original Description',
             created_by=self.organizer,
+            group=self.group,
         )
 
     def test_edit_page_requires_login(self):
-        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertEqual(response.status_code, 302)
         self.assertIn('/login/', response.url)
 
     def test_organizer_can_access_edit_page(self):
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertEqual(response.status_code, 200)
 
     def test_other_organizer_can_access_edit_page(self):
         self.client.login(username='other_org', password='testpass123')
-        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertEqual(response.status_code, 200)
 
     def test_regular_user_cannot_access_edit_page(self):
         self.client.login(username='regular', password='testpass123')
-        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertEqual(response.status_code, 403)
 
-    def test_site_admin_can_access_edit_page(self):
-        self.client.login(username='siteadmin', password='testpass123')
-        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+    def test_site_admin_who_is_organizer_can_access_edit_page(self):
+        self.client.login(username='siteadminonly', password='testpass123')
+        response = self.client.get(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertEqual(response.status_code, 200)
 
     def test_edit_page_shows_pre_populated_form_and_edit_action(self):
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertContains(response, 'Original Title')
         self.assertContains(response, 'Original Location')
         self.assertContains(response, 'Original Description')
@@ -396,7 +422,7 @@ class EventEditViewTest(TestCase):
 
     def test_organizer_can_edit_event_title(self):
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+        response = self.client.post(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}), {
             'title': 'Updated Title',
             'date': self.future_date,
             'time': '',
@@ -410,7 +436,7 @@ class EventEditViewTest(TestCase):
     def test_organizer_can_edit_all_fields(self):
         self.client.login(username='organizer', password='testpass123')
         new_date = (timezone.now() + timedelta(days=14)).strftime('%Y-%m-%d')
-        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+        response = self.client.post(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}), {
             'title': 'Completely New Title',
             'date': new_date,
             'time': '19:30',
@@ -427,19 +453,19 @@ class EventEditViewTest(TestCase):
 
     def test_edit_redirects_to_event_detail(self):
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+        response = self.client.post(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}), {
             'title': 'Updated Title',
             'date': self.future_date,
             'time': '',
             'location': 'Original Location',
             'description': 'Original Description',
         })
-        self.assertRedirects(response, reverse('event_detail', kwargs={'pk': self.event.pk}))
+        self.assertRedirects(response, reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
 
     def test_cannot_edit_date_to_past(self):
         self.client.login(username='organizer', password='testpass123')
         past = (timezone.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+        response = self.client.post(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}), {
             'title': 'Original Title',
             'date': past,
             'time': '',
@@ -459,11 +485,12 @@ class EventEditViewTest(TestCase):
             location='Old Place',
             description='Old Desc',
             created_by=self.organizer,
+            group=self.group,
         )
         self.client.login(username='organizer', password='testpass123')
         date_str = past_event.date.strftime('%Y-%m-%d')
         time_str = past_event.date.strftime('%H:%M')
-        response = self.client.post(reverse('event_edit', kwargs={'pk': past_event.pk}), {
+        response = self.client.post(reverse('event_edit', kwargs={'slug': past_event.group.slug, 'pk': past_event.pk}), {
             'title': 'Updated Past Event',
             'date': date_str,
             'time': time_str,
@@ -478,12 +505,12 @@ class EventEditViewTest(TestCase):
 
     def test_edit_nonexistent_event_returns_404(self):
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.get(reverse('event_edit', kwargs={'pk': 9999}))
+        response = self.client.get(reverse('event_edit', kwargs={'slug': self.group.slug, 'pk': 9999}))
         self.assertEqual(response.status_code, 404)
 
     def test_edit_preserves_created_by(self):
         self.client.login(username='other_org', password='testpass123')
-        self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+        self.client.post(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}), {
             'title': 'Updated by Other',
             'date': self.future_date,
             'time': '',
@@ -495,7 +522,7 @@ class EventEditViewTest(TestCase):
 
     def test_regular_user_cannot_edit_event_via_post(self):
         self.client.login(username='regular', password='testpass123')
-        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+        response = self.client.post(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}), {
             'title': 'Hacked Title',
             'date': self.future_date,
             'time': '',
@@ -508,20 +535,20 @@ class EventEditViewTest(TestCase):
 
     def test_edit_page_shows_required_asterisks(self):
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
         asterisk_count = html.count('<span class="required-asterisk">')
         self.assertEqual(asterisk_count, 2)
 
-    def test_site_admin_without_organizer_can_access_edit_page(self):
-        self.client.login(username='siteadminonly', password='testpass123')
-        response = self.client.get(reverse('event_edit', kwargs={'pk': self.event.pk}))
-        self.assertEqual(response.status_code, 200)
+    def test_site_admin_without_membership_cannot_edit(self):
+        self.client.login(username='siteadmin', password='testpass123')
+        response = self.client.get(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
+        self.assertEqual(response.status_code, 403)
 
-    def test_site_admin_without_organizer_can_edit_event_via_post(self):
+    def test_site_admin_who_is_organizer_can_edit_event_via_post(self):
         self.client.login(username='siteadminonly', password='testpass123')
-        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+        response = self.client.post(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}), {
             'title': 'Admin Edited Title',
             'date': self.future_date,
             'time': '',
@@ -537,7 +564,7 @@ class EventEditViewTest(TestCase):
         self.event.save()
         new_date = (timezone.now() + timedelta(days=14)).strftime('%Y-%m-%d')
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+        response = self.client.post(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}), {
             'title': 'Original Title',
             'date': new_date,
             'time': '19:30',
@@ -555,7 +582,7 @@ class EventEditViewTest(TestCase):
         self.event.voting_deadline_offset_minutes = 0
         self.event.save()
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+        response = self.client.post(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}), {
             'title': 'Original Title',
             'date': self.future_date,
             'time': '18:00',
@@ -576,7 +603,7 @@ class EventEditViewTest(TestCase):
         self.event.voting_deadline_offset_minutes = 30
         self.event.save()
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.post(reverse('event_edit', kwargs={'pk': self.event.pk}), {
+        response = self.client.post(reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}), {
             'title': 'Original Title',
             'date': self.future_date,
             'time': '18:00',
@@ -596,41 +623,45 @@ class EventDetailEditButtonTest(TestCase):
 
     def setUp(self):
         self.organizer = User.objects.create_user(
-            username='organizer', password='testpass123', is_organizer=True
+            username='organizer', password='testpass123', is_site_admin=True
         )
         self.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
         self.site_admin_only = User.objects.create_user(
             username='siteadminonly', password='testpass123',
-            is_site_admin=True, is_organizer=False,
+            is_site_admin=True,
         )
+        self.group = Group.objects.create(name='Button Group')
+        _make_organizer(self.organizer, self.group)
+        _make_organizer(self.site_admin_only, self.group)
         self.event = Event.objects.create(
             title='Test Event',
             date=timezone.now() + timedelta(days=7),
             voting_deadline=timezone.now() + timedelta(days=7),
             created_by=self.organizer,
+            group=self.group,
         )
 
     def test_organizer_sees_edit_button_on_event_detail(self):
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
-        self.assertContains(response, reverse('event_edit', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
+        self.assertContains(response, reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertContains(response, 'Edit Event')
 
     def test_regular_user_does_not_see_edit_button(self):
         self.client.login(username='regular', password='testpass123')
-        response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertNotContains(response, 'Edit Event')
 
     def test_anonymous_user_does_not_see_edit_button(self):
-        response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertNotContains(response, 'Edit Event')
 
-    def test_site_admin_without_organizer_sees_edit_button_on_event_detail(self):
+    def test_site_admin_who_is_organizer_sees_edit_button_on_event_detail(self):
         self.client.login(username='siteadminonly', password='testpass123')
-        response = self.client.get(reverse('event_detail', kwargs={'pk': self.event.pk}))
-        self.assertContains(response, reverse('event_edit', kwargs={'pk': self.event.pk}))
+        response = self.client.get(reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
+        self.assertContains(response, reverse('event_edit', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertContains(response, 'Edit Event')
 
 
@@ -639,44 +670,47 @@ class RecurringEventAccessTest(TestCase):
 
     def setUp(self):
         self.organizer = User.objects.create_user(
-            username='organizer', password='testpass123', is_organizer=True
+            username='organizer', password='testpass123', is_site_admin=True
         )
         self.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
         self.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123',
-            is_site_admin=True, is_organizer=False,
+            is_site_admin=True,
         )
+        self.group = Group.objects.create(name='Recurring Group')
+        _make_organizer(self.organizer, self.group)
 
     def test_recurring_page_requires_login(self):
-        response = self.client.get(reverse('event_add_recurring'))
+        response = self.client.get(reverse('event_add_recurring', kwargs={'slug': self.group.slug}))
         self.assertEqual(response.status_code, 302)
         self.assertIn('/login/', response.url)
 
     def test_organizer_can_access_recurring_page(self):
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.get(reverse('event_add_recurring'))
+        response = self.client.get(reverse('event_add_recurring', kwargs={'slug': self.group.slug}))
         self.assertEqual(response.status_code, 200)
 
     def test_regular_user_cannot_access_recurring_page(self):
         self.client.login(username='regular', password='testpass123')
-        response = self.client.get(reverse('event_add_recurring'))
+        response = self.client.get(reverse('event_add_recurring', kwargs={'slug': self.group.slug}))
         self.assertEqual(response.status_code, 403)
 
-    def test_site_admin_can_access_recurring_page(self):
+    def test_site_admin_who_is_organizer_can_access_recurring_page(self):
+        _make_organizer(self.site_admin, self.group)
         self.client.login(username='siteadmin', password='testpass123')
-        response = self.client.get(reverse('event_add_recurring'))
+        response = self.client.get(reverse('event_add_recurring', kwargs={'slug': self.group.slug}))
         self.assertEqual(response.status_code, 200)
 
     def test_preview_page_requires_login(self):
-        response = self.client.get(reverse('event_add_recurring_preview'))
+        response = self.client.get(reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}))
         self.assertEqual(response.status_code, 302)
         self.assertIn('/login/', response.url)
 
     def test_regular_user_cannot_access_preview_page(self):
         self.client.login(username='regular', password='testpass123')
-        response = self.client.get(reverse('event_add_recurring_preview'))
+        response = self.client.get(reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}))
         self.assertEqual(response.status_code, 403)
 
 
@@ -685,13 +719,15 @@ class RecurringEventFormValidationTest(TestCase):
 
     def setUp(self):
         self.organizer = User.objects.create_user(
-            username='organizer', password='testpass123', is_organizer=True
+            username='organizer', password='testpass123', is_site_admin=True
         )
+        self.group = Group.objects.create(name='Validation Group')
+        _make_organizer(self.organizer, self.group)
         self.client.login(username='organizer', password='testpass123')
 
     def test_start_date_in_past_fails(self):
         past = (timezone.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-        response = self.client.post(reverse('event_add_recurring'), {
+        response = self.client.post(reverse('event_add_recurring', kwargs={'slug': self.group.slug}), {
             'title': 'Past Recurring',
             'start_date': past,
             'end_type': 'count',
@@ -702,7 +738,7 @@ class RecurringEventFormValidationTest(TestCase):
 
     def test_occurrence_count_below_minimum_fails(self):
         future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
-        response = self.client.post(reverse('event_add_recurring'), {
+        response = self.client.post(reverse('event_add_recurring', kwargs={'slug': self.group.slug}), {
             'title': 'Too Few',
             'start_date': future,
             'end_type': 'count',
@@ -713,7 +749,7 @@ class RecurringEventFormValidationTest(TestCase):
 
     def test_occurrence_count_above_maximum_fails(self):
         future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
-        response = self.client.post(reverse('event_add_recurring'), {
+        response = self.client.post(reverse('event_add_recurring', kwargs={'slug': self.group.slug}), {
             'title': 'Too Many',
             'start_date': future,
             'end_type': 'count',
@@ -725,7 +761,7 @@ class RecurringEventFormValidationTest(TestCase):
     def test_end_date_before_start_date_fails(self):
         start = (timezone.now() + timedelta(days=14)).strftime('%Y-%m-%d')
         end = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
-        response = self.client.post(reverse('event_add_recurring'), {
+        response = self.client.post(reverse('event_add_recurring', kwargs={'slug': self.group.slug}), {
             'title': 'Bad Range',
             'start_date': start,
             'end_type': 'end_date',
@@ -737,7 +773,7 @@ class RecurringEventFormValidationTest(TestCase):
     def test_end_date_in_past_fails(self):
         future = (timezone.now() + timedelta(days=30)).strftime('%Y-%m-%d')
         past = (timezone.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-        response = self.client.post(reverse('event_add_recurring'), {
+        response = self.client.post(reverse('event_add_recurring', kwargs={'slug': self.group.slug}), {
             'title': 'Past End',
             'start_date': future,
             'end_type': 'end_date',
@@ -748,7 +784,7 @@ class RecurringEventFormValidationTest(TestCase):
 
     def test_missing_title_fails(self):
         future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
-        response = self.client.post(reverse('event_add_recurring'), {
+        response = self.client.post(reverse('event_add_recurring', kwargs={'slug': self.group.slug}), {
             'title': '',
             'start_date': future,
             'end_type': 'count',
@@ -758,7 +794,7 @@ class RecurringEventFormValidationTest(TestCase):
         self.assertFalse(Event.objects.exists())
 
     def test_missing_start_date_fails(self):
-        response = self.client.post(reverse('event_add_recurring'), {
+        response = self.client.post(reverse('event_add_recurring', kwargs={'slug': self.group.slug}), {
             'title': 'No Date',
             'start_date': '',
             'end_type': 'count',
@@ -769,7 +805,7 @@ class RecurringEventFormValidationTest(TestCase):
 
     def test_valid_count_redirects_to_preview(self):
         future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
-        response = self.client.post(reverse('event_add_recurring'), {
+        response = self.client.post(reverse('event_add_recurring', kwargs={'slug': self.group.slug}), {
             'title': 'Weekly Game Night',
             'start_date': future,
             'time': '18:00',
@@ -780,19 +816,19 @@ class RecurringEventFormValidationTest(TestCase):
             'voting_deadline_offset_minutes': '60',
         })
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('event_add_recurring_preview'))
+        self.assertEqual(response.url, reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}))
 
     def test_valid_end_date_redirects_to_preview(self):
         start = (timezone.now() + timedelta(days=3)).strftime('%Y-%m-%d')
         end = (timezone.now() + timedelta(days=24)).strftime('%Y-%m-%d')
-        response = self.client.post(reverse('event_add_recurring'), {
+        response = self.client.post(reverse('event_add_recurring', kwargs={'slug': self.group.slug}), {
             'title': 'Weekly Game Night',
             'start_date': start,
             'end_type': 'end_date',
             'end_date': end,
         })
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('event_add_recurring_preview'))
+        self.assertEqual(response.url, reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}))
 
 
 @tag("system")
@@ -800,8 +836,10 @@ class RecurringEventPreviewTest(TestCase):
 
     def setUp(self):
         self.organizer = User.objects.create_user(
-            username='organizer', password='testpass123', is_organizer=True
+            username='organizer', password='testpass123', is_site_admin=True
         )
+        self.group = Group.objects.create(name='Preview Group')
+        _make_organizer(self.organizer, self.group)
         self.client.login(username='organizer', password='testpass123')
 
     def _post_valid_form(self, **kwargs):
@@ -817,11 +855,11 @@ class RecurringEventPreviewTest(TestCase):
             'voting_deadline_offset_minutes': '60',
         }
         defaults.update(kwargs)
-        return self.client.post(reverse('event_add_recurring'), defaults)
+        return self.client.post(reverse('event_add_recurring', kwargs={'slug': self.group.slug}), defaults)
 
     def test_preview_shows_all_computed_dates(self):
         self._post_valid_form()
-        response = self.client.get(reverse('event_add_recurring_preview'))
+        response = self.client.get(reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}))
         self.assertEqual(response.status_code, 200)
         dates = response.context['dates']
         self.assertEqual(len(dates), 4)
@@ -830,18 +868,18 @@ class RecurringEventPreviewTest(TestCase):
 
     def test_preview_shows_event_details(self):
         self._post_valid_form()
-        response = self.client.get(reverse('event_add_recurring_preview'))
+        response = self.client.get(reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}))
         self.assertContains(response, 'Weekly Game Night')
         self.assertContains(response, 'The Den')
 
     def test_preview_without_session_redirects_to_form(self):
-        response = self.client.get(reverse('event_add_recurring_preview'))
+        response = self.client.get(reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}))
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('event_add_recurring'))
+        self.assertEqual(response.url, reverse('event_add_recurring', kwargs={'slug': self.group.slug}))
 
     def test_preview_with_skip_dates_creates_only_checked_events(self):
         self._post_valid_form(occurrence_count='4')
-        response = self.client.post(reverse('event_add_recurring_preview'), {
+        response = self.client.post(reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}), {
             'submit': 'Create Events',
             'selected_dates': ['0', '2'],
         })
@@ -850,7 +888,7 @@ class RecurringEventPreviewTest(TestCase):
 
     def test_preview_creates_events_with_correct_fields(self):
         self._post_valid_form()
-        response = self.client.post(reverse('event_add_recurring_preview'), {
+        response = self.client.post(reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}), {
             'submit': 'Create Events',
             'selected_dates': ['0', '1', '2', '3'],
         })
@@ -869,7 +907,7 @@ class RecurringEventPreviewTest(TestCase):
 
     def test_preview_clears_session_after_creation(self):
         self._post_valid_form()
-        self.client.post(reverse('event_add_recurring_preview'), {
+        self.client.post(reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}), {
             'submit': 'Create Events',
             'selected_dates': ['0', '1', '2', '3'],
         })
@@ -879,11 +917,11 @@ class RecurringEventPreviewTest(TestCase):
 
     def test_preview_cancel_clears_session_and_redirects(self):
         self._post_valid_form()
-        response = self.client.post(reverse('event_add_recurring_preview'), {
+        response = self.client.post(reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}), {
             'cancel': 'Cancel',
         })
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('event_list'))
+        self.assertEqual(response.url, reverse('group_event_list', kwargs={'slug': self.group.slug}))
         session = self.client.session
         self.assertNotIn('recurring_event_form_data', session)
         self.assertNotIn('recurring_event_dates', session)
@@ -891,24 +929,24 @@ class RecurringEventPreviewTest(TestCase):
 
     def test_preview_skip_all_dates_fails(self):
         self._post_valid_form(occurrence_count='2')
-        response = self.client.post(reverse('event_add_recurring_preview'), {
+        response = self.client.post(reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}), {
             'submit': 'Create Events',
         })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Event.objects.filter(title='Weekly Game Night').count(), 0)
 
-    def test_preview_redirects_to_event_list_after_creation(self):
+    def test_preview_redirects_to_group_event_list_after_creation(self):
         self._post_valid_form()
-        response = self.client.post(reverse('event_add_recurring_preview'), {
+        response = self.client.post(reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}), {
             'submit': 'Create Events',
             'selected_dates': ['0', '1', '2', '3'],
         })
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('event_list'))
+        self.assertEqual(response.url, reverse('group_event_list', kwargs={'slug': self.group.slug}))
 
     def test_weekly_dates_are_seven_days_apart(self):
         self._post_valid_form(occurrence_count='3')
-        response = self.client.get(reverse('event_add_recurring_preview'))
+        response = self.client.get(reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}))
         dates = response.context['dates']
         self.assertEqual(len(dates), 3)
         for i in range(1, len(dates)):
@@ -919,13 +957,13 @@ class RecurringEventPreviewTest(TestCase):
         start = (timezone.now() + timedelta(days=1)).strftime('%Y-%m-%d')
         end = (timezone.now() + timedelta(days=22)).strftime('%Y-%m-%d')
         self._post_valid_form(end_type='end_date', end_date=end, start_date=start)
-        response = self.client.get(reverse('event_add_recurring_preview'))
+        response = self.client.get(reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}))
         dates = response.context['dates']
         self.assertEqual(len(dates), 4)
 
     def test_preview_has_select_all_checkbox(self):
         self._post_valid_form()
-        response = self.client.get(reverse('event_add_recurring_preview'))
+        response = self.client.get(reverse('event_add_recurring_preview', kwargs={'slug': self.group.slug}))
         self.assertContains(response, 'select-all-toggle')
 
 
@@ -934,19 +972,88 @@ class RecurringEventButtonTest(TestCase):
 
     def setUp(self):
         self.organizer = User.objects.create_user(
-            username='organizer', password='testpass123', is_organizer=True
+            username='organizer', password='testpass123', is_site_admin=True
         )
         self.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
+        self.group = Group.objects.create(name='Button Group')
+        _make_organizer(self.organizer, self.group)
 
     def test_organizer_sees_recurring_event_button(self):
         self.client.login(username='organizer', password='testpass123')
-        response = self.client.get(reverse('event_list'))
-        self.assertContains(response, reverse('event_add_recurring'))
+        response = self.client.get(reverse('group_event_list', kwargs={'slug': self.group.slug}))
+        self.assertContains(response, reverse('event_add_recurring', kwargs={'slug': self.group.slug}))
         self.assertContains(response, 'Create Recurring Event')
 
     def test_regular_user_does_not_see_recurring_event_button(self):
+        GroupMembership.objects.create(user=self.regular, group=self.group, role='member')
         self.client.login(username='regular', password='testpass123')
-        response = self.client.get(reverse('event_list'))
+        response = self.client.get(reverse('group_event_list', kwargs={'slug': self.group.slug}))
         self.assertNotContains(response, 'Create Recurring Event')
+
+
+@tag("integration")
+class EventCreationNotificationTest(TestCase):
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(
+            username='organizer', password='testpass123', is_site_admin=True
+        )
+        self.member = User.objects.create_user(
+            username='member', password='testpass123'
+        )
+        self.group = Group.objects.create(name='Notif Group')
+        _make_organizer(self.organizer, self.group)
+        GroupMembership.objects.create(user=self.member, group=self.group, role='member')
+
+    def test_create_event_sends_notification_to_members(self):
+        self.client.login(username='organizer', password='testpass123')
+        future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        response = self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
+            'title': 'Notif Event',
+            'date': future,
+            'time': '18:00',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Notification.objects.filter(
+            user=self.member,
+            notification_type='group_event_created',
+        ).exists())
+        notif = Notification.objects.get(user=self.member, notification_type='group_event_created')
+        self.assertIn('Notif Event', notif.message)
+
+    def test_create_event_does_not_notify_creator(self):
+        self.client.login(username='organizer', password='testpass123')
+        future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        self.client.post(reverse('event_add', kwargs={'slug': self.group.slug}), {
+            'title': 'Notif Event',
+            'date': future,
+            'time': '18:00',
+        })
+        self.assertFalse(Notification.objects.filter(
+            user=self.organizer,
+            notification_type='group_event_created',
+        ).exists())
+
+    def test_edit_event_sends_notification_to_members(self):
+        event = Event.objects.create(
+            title='Original',
+            date=timezone.now() + timedelta(days=7),
+            voting_deadline=timezone.now() + timedelta(days=7),
+            created_by=self.organizer,
+            group=self.group,
+        )
+        self.client.login(username='organizer', password='testpass123')
+        future = (timezone.now() + timedelta(days=14)).strftime('%Y-%m-%d')
+        self.client.post(reverse('event_edit', kwargs={'slug': event.group.slug, 'pk': event.pk}), {
+            'title': 'Updated',
+            'date': future,
+            'time': '',
+            'location': '',
+            'description': '',
+        })
+        self.assertTrue(Notification.objects.filter(
+            user=self.member,
+            notification_type='group_event_updated',
+        ).exists())

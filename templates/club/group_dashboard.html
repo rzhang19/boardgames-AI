@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% load club_tags %}
+
+{% block title %}{{ group.name }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    {% if group.is_disbanded %}
+    <div class="alert alert-warning">
+        This group has been disbanded and is in a 30-day grace period.
+        Contact a site admin to restore it before it is permanently deleted.
+    </div>
+    {% endif %}
+
+    <div class="group-dashboard-header">
+        {% if group.image %}
+        <img src="{{ group.image.url }}" alt="{{ group.name }}" class="group-thumbnail">
+        {% endif %}
+        <div>
+            <h1>{{ group.name }}</h1>
+            {% if group.description %}
+            <p class="group-card-desc">{{ group.description }}</p>
+            {% endif %}
+            <div class="group-card-meta">
+                <span>{{ group.member_count }} members</span>
+                {% if not group.discoverable %}
+                <span class="badge badge-private">Private</span>
+                {% elif group.join_policy == 'open' %}
+                <span class="badge badge-public">Public</span>
+                {% elif group.join_policy == 'request' %}
+                <span class="badge badge-semi-public">Request to Join</span>
+                {% else %}
+                <span class="badge badge-private">Invite Only</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if is_member %}
+    <div class="action-bar">
+        <a href="{% url 'group_event_list' group.slug %}" class="btn btn-primary btn-sm">Events</a>
+        <a href="{% url 'group_games' group.slug %}" class="btn btn-outline btn-sm">Games</a>
+        <a href="{% url 'group_members' group.slug %}" class="btn btn-outline btn-sm">Members</a>
+        {% if is_admin %}
+        <a href="{% url 'group_members_manage' group.slug %}" class="btn btn-outline btn-sm">Manage Members</a>
+        <a href="{% url 'group_settings' group.slug %}" class="btn btn-outline btn-sm">Settings</a>
+        <a href="{% url 'group_invite_create' group.slug %}" class="btn btn-outline btn-sm">Invite</a>
+        <a href="{% url 'group_join_request_manage' group.slug %}" class="btn btn-outline btn-sm">Join Requests</a>
+        {% endif %}
+        <a href="{% url 'group_leave' group.slug %}" class="btn btn-neutral btn-sm">Leave Group</a>
+    </div>
+    {% elif not group.is_disbanded %}
+    <div class="action-bar">
+        {% if group.join_policy == 'invite_only' %}
+        <span class="text-muted">This group is invite only.</span>
+        {% else %}
+        <a href="{% url 'group_join' group.slug %}" class="btn btn-primary btn-sm">
+            {% if group.join_policy == 'request' %}Request to Join{% else %}Join Group{% endif %}
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% if is_member and upcoming_events %}
+<div class="card">
+    <h2>Upcoming Events</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in upcoming_events %}
+            <tr>
+                <td data-label="Title"><a href="{% url 'event_detail' event.group.slug event.pk %}">{{ event.title }}</a></td>
+                <td data-label="Date">{{ event.date|date:"N j, Y" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if is_member %}
+<div class="card">
+    <h2>Members</h2>
+    <ul class="dashboard-list">
+        {% for m in members %}
+        <li>
+            <a href="{% url 'public_profile' m.user.username %}">{{ m.user.username }}</a>{% verified_badge m.user %}
+            <span class="badge badge-role-{{ m.role }}">{{ m.role }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+{% endblock %}

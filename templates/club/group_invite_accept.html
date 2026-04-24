@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Accept Invite{% endblock %}
+
+{% block content %}
+<h1>Group Invite</h1>
+
+{% if error %}
+<div class="card">
+    <div class="alert alert-danger">{{ error }}</div>
+    <a href="{% url 'dashboard' %}" class="btn btn-neutral btn-sm">Go Home</a>
+</div>
+{% endif %}
+{% endblock %}

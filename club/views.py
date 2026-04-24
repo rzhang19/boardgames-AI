@@ -3,6 +3,7 @@ from datetime import datetime, time as dt_time
 from django.conf import settings
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth import views as auth_views
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import PermissionDenied
 from django.core.mail import send_mail
@@ -16,13 +17,46 @@ from django.utils import timezone
 from .bgg import fetch_bgg_game, fetch_bgg_weight, search_bgg, weight_to_complexity
 from .borda import calculate_borda_scores
 from .forms import (
-    BetaAccessForm, BoardGameForm, EventForm, RecurringEventForm, SetPasswordForm, SettingsForm,
+    BetaAccessForm, BoardGameForm, EventForm, GroupCreateForm, GroupSettingsForm,
+    RecurringEventForm, SetPasswordForm, SettingsForm, SuccessorPickForm,
     UserAddForm, UserManageForm, RegistrationForm, VerifiedIconForm, VoteForm,
 )
-from .models import BoardGame, Event, EventAttendance, Notification, SiteSettings, VerifiedIcon, Vote
-from .notifications import generate_missing_complexity_notifications, generate_missing_max_players_notifications
+from .models import BoardGame, Event, EventAttendance, Group, GroupCreationLog, GroupInvite, GroupJoinRequest, GroupMembership, Notification, SiteSettings, VerifiedIcon, Vote
+from .notifications import (
+    generate_missing_complexity_notifications,
+    generate_missing_max_players_notifications,
+    notify_group_demoted_member,
+    notify_group_demoted_organizer,
+    notify_group_event_created,
+    notify_group_event_updated,
+    notify_group_grace_period,
+    notify_group_invite_created,
+    notify_group_join_approved,
+    notify_group_join_rejected,
+    notify_group_member_joined,
+    notify_group_member_left,
+    notify_group_join_request,
+    notify_group_promoted_admin,
+    notify_group_promoted_organizer,
+    notify_group_removed,
+    notify_group_restored,
+    notify_group_settings_changed,
+    notify_group_voting_ended,
+    notify_group_voting_resumed,
+)
+from .permissions import (
+    can_create_event,
+    can_create_group,
+    can_delete_group,
+    can_edit_group_settings,
+    can_restore_group,
+    can_view_group,
+    is_group_admin,
+    is_group_member,
+    is_group_organizer,
+)
 from .timezone_utils import is_valid_timezone
-from .utils import parse_bgg_link, resize_profile_picture
+from .utils import parse_bgg_link, resize_group_image, resize_profile_picture
 
 User = get_user_model()
 
@@ -112,36 +146,22 @@ def manage_users(request):
                 if form.has_changed():
                     user_obj = form.instance
                     changes[str(user_obj.pk)] = {
-                        'is_organizer': form.cleaned_data.get('is_organizer', False),
                         'is_site_admin': form.cleaned_data.get('is_site_admin', False),
                     }
 
-            for uid in changes:
-                if changes[uid].get('is_site_admin'):
-                    changes[uid]['is_organizer'] = True
-
-            promote_organizer_ids = []
-            demote_organizer_ids = []
             promote_site_admin_ids = []
             demote_site_admin_ids = []
             actual_changes = {}
 
             for uid, role_changes in changes.items():
                 user = User.objects.get(pk=uid)
-                if (user.is_organizer == role_changes['is_organizer']
-                        and user.is_site_admin == role_changes['is_site_admin']):
+                if user.is_site_admin == role_changes['is_site_admin']:
                     continue
                 actual_changes[uid] = role_changes
-                if user.is_organizer != role_changes['is_organizer']:
-                    if role_changes['is_organizer']:
-                        promote_organizer_ids.append(uid)
-                    else:
-                        demote_organizer_ids.append(uid)
-                if user.is_site_admin != role_changes['is_site_admin']:
-                    if role_changes['is_site_admin']:
-                        promote_site_admin_ids.append(uid)
-                    else:
-                        demote_site_admin_ids.append(uid)
+                if role_changes['is_site_admin']:
+                    promote_site_admin_ids.append(uid)
+                else:
+                    demote_site_admin_ids.append(uid)
 
             if not actual_changes:
                 formset = UserFormSet(queryset=queryset)
@@ -154,8 +174,6 @@ def manage_users(request):
             request.session['pending_role_changes'] = actual_changes
 
             return render(request, 'club/manage_users_confirm.html', {
-                'promote_organizer_users': User.objects.filter(pk__in=promote_organizer_ids),
-                'demote_organizer_users': User.objects.filter(pk__in=demote_organizer_ids),
                 'promote_site_admin_users': User.objects.filter(pk__in=promote_site_admin_ids),
                 'demote_site_admin_users': User.objects.filter(pk__in=demote_site_admin_ids),
             })
@@ -186,8 +204,6 @@ def manage_users_confirm(request):
         }
 
     for user_id, role_changes in changes.items():
-        if role_changes.get('is_site_admin'):
-            role_changes['is_organizer'] = True
         User.objects.filter(pk=user_id).update(**role_changes)
 
     return redirect('manage_users')
@@ -334,7 +350,32 @@ def beta_access(request):
 
 
 def dashboard(request):
-    return render(request, 'club/dashboard.html')
+    if not request.user.is_authenticated:
+        return render(request, 'club/dashboard.html')
+
+    from django.db.models import Q as _Q
+
+    memberships = GroupMembership.objects.filter(
+        user=request.user,
+        group__disbanded_at__isnull=True,
+    ).select_related('group').order_by('-is_favorite', 'group__name')
+    my_groups = [m.group for m in memberships]
+
+    my_games = BoardGame.objects.filter(
+        owner=request.user,
+    ).order_by('name')[:5]
+
+    upcoming_events = Event.objects.filter(
+        group__membership__user=request.user,
+        group__disbanded_at__isnull=True,
+        date__gte=timezone.now(),
+    ).select_related('created_by', 'group').order_by('date')[:5]
+
+    return render(request, 'club/dashboard.html', {
+        'my_groups': my_groups,
+        'my_games': my_games,
+        'upcoming_events': upcoming_events,
+    })
 
 
 def public_profile(request, username):
@@ -435,7 +476,7 @@ def user_settings(request):
                         [user.email],
                     )
 
-            if request.user.is_organizer or request.user.is_site_admin:
+            if request.user.is_site_admin:
                 offset_hours = request.POST.get('default_voting_offset_hours', '0')
                 offset_mins = request.POST.get('default_voting_offset_minutes_field', '0')
                 try:
@@ -696,17 +737,79 @@ def game_delete(request, pk):
 
 
 def event_list(request):
-    events = Event.objects.select_related('created_by').all()
+    if not request.user.is_authenticated:
+        groups = Group.objects.filter(discoverable=True, disbanded_at__isnull=True)
+    else:
+        groups = list(Group.objects.filter(
+            Q(discoverable=True) | Q(membership__user=request.user),
+            disbanded_at__isnull=True,
+        ).distinct())
+
+        if request.user.is_authenticated:
+            fav_ids = set(
+                GroupMembership.objects.filter(
+                    user=request.user, is_favorite=True,
+                ).values_list('group_id', flat=True)
+            )
+            groups.sort(key=lambda g: (0 if g.id in fav_ids else 1, g.name))
+
+    event_groups = []
+    for group in groups:
+        group_events = Event.objects.filter(
+            group=group,
+        ).select_related('created_by').order_by('date')
+        is_organizer = (
+            request.user.is_authenticated
+            and is_group_organizer(request.user, group)
+        )
+        event_groups.append({
+            'group': group,
+            'events': group_events,
+            'is_organizer': is_organizer,
+        })
+
     return render(request, 'club/event_list.html', {
-        'events': events,
+        'event_groups': event_groups,
         'time_midnight': dt_time(0, 0),
     })
 
 
-def event_add(request):
+def group_event_list(request, slug):
+    group = get_object_or_404(Group, slug=slug)
+    if not can_view_group(request.user, group):
+        raise PermissionDenied
+    is_organizer = (
+        request.user.is_authenticated
+        and is_group_organizer(request.user, group)
+    )
+    events = Event.objects.filter(group=group).select_related('created_by')
+    return render(request, 'club/event_list.html', {
+        'event_groups': [{'group': group, 'events': events, 'is_organizer': is_organizer}],
+        'time_midnight': dt_time(0, 0),
+        'group': group,
+    })
+
+
+def group_games(request, slug):
+    group = get_object_or_404(Group, slug=slug)
     if not request.user.is_authenticated:
         return redirect('/login/')
-    if not (request.user.is_organizer or request.user.is_site_admin):
+    if not can_view_group(request.user, group):
+        raise PermissionDenied
+    if group.is_disbanded:
+        raise PermissionDenied
+    games = group.games().select_related('owner').order_by('name')
+    return render(request, 'club/group_games.html', {
+        'group': group,
+        'games': games,
+    })
+
+
+def event_add(request, slug):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    group = get_object_or_404(Group, slug=slug)
+    if not can_create_event(request.user, group):
         raise PermissionDenied
     if request.method == 'POST':
         form = EventForm(request.POST)
@@ -714,6 +817,7 @@ def event_add(request):
             event = form.save(commit=False)
             event.date = form.cleaned_data['date']
             event.created_by = request.user
+            event.group = group
             offset = form.cleaned_data.get('voting_deadline_offset_minutes') or 0
             event.voting_deadline_offset_minutes = offset
             custom_deadline = form.cleaned_data.get('voting_deadline')
@@ -722,7 +826,8 @@ def event_add(request):
             else:
                 event.voting_deadline = event.date - timezone.timedelta(minutes=offset)
             event.save()
-            return redirect('event_detail', pk=event.pk)
+            notify_group_event_created(group, event, request.user)
+            return redirect('event_detail', slug=event.group.slug, pk=event.pk)
     else:
         form = EventForm(initial={
             'voting_deadline_offset_minutes': SiteSettings.load().default_voting_offset_minutes,
@@ -731,6 +836,7 @@ def event_add(request):
         'form': form,
         'action': 'Create',
         'voting_offset': SiteSettings.load().default_voting_offset_minutes,
+        'group': group,
     })
 
 
@@ -753,10 +859,11 @@ def _compute_recurring_dates(start_dt, end_type, occurrence_count, end_date):
     return dates
 
 
-def event_add_recurring(request):
+def event_add_recurring(request, slug):
     if not request.user.is_authenticated:
         return redirect('/login/')
-    if not (request.user.is_organizer or request.user.is_site_admin):
+    group = get_object_or_404(Group, slug=slug)
+    if not can_create_event(request.user, group):
         raise PermissionDenied
 
     if request.method == 'POST':
@@ -774,6 +881,7 @@ def event_add_recurring(request):
                 return render(request, 'club/event_form_recurring.html', {
                     'form': form,
                     'voting_offset': SiteSettings.load().default_voting_offset_minutes,
+                    'group': group,
                 })
 
             date_list = []
@@ -801,7 +909,7 @@ def event_add_recurring(request):
 
             request.session['recurring_event_form_data'] = form_data
             request.session['recurring_event_dates'] = date_list
-            return redirect('event_add_recurring_preview')
+            return redirect('event_add_recurring_preview', slug=slug)
     else:
         form = RecurringEventForm(initial={
             'voting_deadline_offset_minutes': SiteSettings.load().default_voting_offset_minutes,
@@ -810,18 +918,20 @@ def event_add_recurring(request):
     return render(request, 'club/event_form_recurring.html', {
         'form': form,
         'voting_offset': SiteSettings.load().default_voting_offset_minutes,
+        'group': group,
     })
 
 
-def event_add_recurring_preview(request):
+def event_add_recurring_preview(request, slug):
     if not request.user.is_authenticated:
         return redirect('/login/')
-    if not (request.user.is_organizer or request.user.is_site_admin):
+    group = get_object_or_404(Group, slug=slug)
+    if not can_create_event(request.user, group):
         raise PermissionDenied
 
     form_data = request.session.get('recurring_event_dates')
     if not form_data:
-        return redirect('event_add_recurring')
+        return redirect('event_add_recurring', slug=slug)
 
     dates_data = request.session.get('recurring_event_dates', [])
     event_data = request.session.get('recurring_event_form_data', {})
@@ -841,7 +951,7 @@ def event_add_recurring_preview(request):
         if 'cancel' in request.POST:
             request.session.pop('recurring_event_form_data', None)
             request.session.pop('recurring_event_dates', None)
-            return redirect('event_list')
+            return redirect('group_event_list', slug=slug)
 
         checked_indices = request.POST.getlist('selected_dates')
         checked_indices = [int(i) for i in checked_indices]
@@ -855,6 +965,7 @@ def event_add_recurring_preview(request):
 
         offset = event_data.get('voting_deadline_offset_minutes', 0) or 0
         time_str = event_data.get('time', '')
+        first_event = None
 
         for idx in checked_indices:
             d = dates_data[idx]
@@ -866,6 +977,7 @@ def event_add_recurring_preview(request):
                 location=event_data.get('location', ''),
                 date=dt,
                 created_by=request.user,
+                group=group,
                 voting_deadline_offset_minutes=offset,
             )
             custom_vd_date = event_data.get('voting_deadline_date')
@@ -883,10 +995,16 @@ def event_add_recurring_preview(request):
             else:
                 event.voting_deadline = event.date - timezone.timedelta(minutes=offset)
             event.save()
+            first_event = first_event if first_event else event
+
+        if first_event:
+            notify_group_event_created(
+                group, first_event, request.user, count=len(checked_indices),
+            )
 
         request.session.pop('recurring_event_form_data', None)
         request.session.pop('recurring_event_dates', None)
-        return redirect('event_list')
+        return redirect('group_event_list', slug=slug)
 
     return render(request, 'club/event_recurring_preview.html', {
         'dates': dates,
@@ -894,12 +1012,12 @@ def event_add_recurring_preview(request):
     })
 
 
-def event_edit(request, pk):
+def event_edit(request, slug, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
-    if not (request.user.is_organizer or request.user.is_site_admin):
-        raise PermissionDenied
     event = get_object_or_404(Event, pk=pk)
+    if not is_group_organizer(request.user, event.group):
+        raise PermissionDenied
 
     if request.method == 'POST':
         form = EventForm(request.POST, instance=event)
@@ -914,7 +1032,8 @@ def event_edit(request, pk):
             else:
                 event.voting_deadline = event.date - timezone.timedelta(minutes=offset)
             event.save()
-            return redirect('event_detail', pk=event.pk)
+            notify_group_event_updated(event.group, event, request.user)
+            return redirect('event_detail', slug=event.group.slug, pk=event.pk)
     else:
         form = EventForm(instance=event, initial={
             'voting_deadline_offset_minutes': event.voting_deadline_offset_minutes,
@@ -923,20 +1042,23 @@ def event_edit(request, pk):
         'form': form,
         'action': 'Edit',
         'voting_offset': event.voting_deadline_offset_minutes,
+        'group': event.group,
     })
 
 
-def event_vote(request, pk):
+def event_vote(request, slug, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
     event = get_object_or_404(Event, pk=pk)
+    if not can_view_group(request.user, event.group):
+        raise PermissionDenied
     if not EventAttendance.objects.filter(user=request.user, event=event).exists():
         raise PermissionDenied
 
     event.sync_voting_status()
     event.refresh_from_db()
 
-    games = BoardGame.objects.all()
+    games = event.group.games()
 
     existing_votes = Vote.objects.filter(
         user=request.user, event=event
@@ -981,7 +1103,7 @@ def event_vote(request, pk):
                     board_game_id=int(game_id),
                     rank=int(rank),
                 )
-        return redirect('event_detail', pk=event.pk)
+        return redirect('event_detail', slug=event.group.slug, pk=event.pk)
 
     VoteFormSet = formset_factory(VoteForm, extra=max(0, 3 - len(vote_data)))
     initial = vote_data if vote_data else []
@@ -996,8 +1118,10 @@ def event_vote(request, pk):
     })
 
 
-def event_results(request, pk):
+def event_results(request, slug, pk):
     event = get_object_or_404(Event, pk=pk)
+    if not is_group_member(request.user, event.group):
+        raise PermissionDenied
     scores = calculate_borda_scores(event)
     game_map = {g.pk: g for g in BoardGame.objects.filter(pk__in=scores.keys())}
 
@@ -1030,42 +1154,46 @@ def event_results(request, pk):
     })
 
 
-def event_toggle_visibility(request, pk):
+def event_toggle_visibility(request, slug, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
-    if not (request.user.is_organizer or request.user.is_site_admin):
-        raise PermissionDenied
     event = get_object_or_404(Event, pk=pk)
+    if not is_group_admin(request.user, event.group):
+        raise PermissionDenied
     event.show_individual_votes = not event.show_individual_votes
     event.save()
-    return redirect('event_detail', pk=event.pk)
+    return redirect('event_detail', slug=event.group.slug, pk=event.pk)
 
 
-def event_toggle_voting(request, pk):
+def event_toggle_voting(request, slug, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
-    if not (request.user.is_organizer or request.user.is_site_admin):
-        raise PermissionDenied
     event = get_object_or_404(Event, pk=pk)
+    if not is_group_organizer(request.user, event.group):
+        raise PermissionDenied
     event.sync_voting_status()
     event.refresh_from_db()
 
     if event.is_voting_open:
         event.voting_open = False
         event.save()
+        notify_group_voting_ended(event.group, event, request.user)
     else:
         if not event.is_active:
-            return redirect('event_detail', pk=event.pk)
+            return redirect('event_detail', slug=event.group.slug, pk=event.pk)
         if timezone.now() >= event.voting_deadline:
-            return redirect('event_detail', pk=event.pk)
+            return redirect('event_detail', slug=event.group.slug, pk=event.pk)
         event.voting_open = True
         event.save()
+        notify_group_voting_resumed(event.group, event, request.user)
 
-    return redirect('event_detail', pk=event.pk)
+    return redirect('event_detail', slug=event.group.slug, pk=event.pk)
 
 
-def event_detail(request, pk):
+def event_detail(request, slug, pk):
     event = get_object_or_404(Event, pk=pk)
+    if not can_view_group(request.user, event.group):
+        raise PermissionDenied
     event.sync_voting_status()
     event.refresh_from_db()
     attendees = EventAttendance.objects.filter(event=event).select_related('user')
@@ -1079,19 +1207,26 @@ def event_detail(request, pk):
         and event.is_currently_active
         and timezone.now() < event.voting_deadline
     )
+    is_group_organizer_user = (
+        request.user.is_authenticated
+        and is_group_organizer(request.user, event.group)
+    )
     return render(request, 'club/event_detail.html', {
         'event': event,
         'attendees': attendees,
         'is_attending': is_attending,
         'time_midnight': dt_time(0, 0),
         'can_resume': can_resume,
+        'is_group_organizer': is_group_organizer_user,
     })
 
 
-def event_rsvp(request, pk):
+def event_rsvp(request, slug, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
     event = get_object_or_404(Event, pk=pk)
+    if not is_group_member(request.user, event.group):
+        raise PermissionDenied
     attendance = EventAttendance.objects.filter(
         user=request.user, event=event
     )
@@ -1099,7 +1234,7 @@ def event_rsvp(request, pk):
         attendance.delete()
     else:
         EventAttendance.objects.create(user=request.user, event=event)
-    return redirect('event_detail', pk=event.pk)
+    return redirect('event_detail', slug=event.group.slug, pk=event.pk)
 
 
 def _admin_required(request):
@@ -1200,3 +1335,500 @@ def notification_delete_selected(request):
             is_read=True,
         ).delete()
     return redirect('notification_list')
+
+
+@login_required
+def group_list(request):
+    from django.db.models import Q
+    tab = request.GET.get('tab', 'my')
+    query = request.GET.get('q', '')
+
+    memberships = GroupMembership.objects.filter(
+        user=request.user,
+    ).select_related('group').order_by('-is_favorite', 'group__name')
+
+    my_groups = [m.group for m in memberships]
+    member_group_ids = {m.group_id for m in memberships}
+    favorite_group_ids = {m.group_id for m in memberships if m.is_favorite}
+
+    if tab == 'my':
+        groups = my_groups
+    elif tab == 'all':
+        groups = list(Group.objects.filter(
+            Q(discoverable=True) | Q(membership__user=request.user),
+        ).filter(
+            disbanded_at__isnull=True,
+        ).distinct().order_by('name'))
+    elif tab == 'pending':
+        groups = []
+    else:
+        groups = my_groups
+
+    if query:
+        from django.utils.text import slugify
+        q_lower = query.lower()
+        groups = [g for g in groups if q_lower in g.name.lower()]
+
+    pending_requests = GroupJoinRequest.objects.filter(
+        user=request.user,
+        status='pending',
+        expires_at__gt=timezone.now(),
+    ).select_related('group') if tab == 'pending' else []
+
+    return render(request, 'club/group_list.html', {
+        'groups': groups,
+        'tab': tab,
+        'query': query,
+        'my_groups': my_groups,
+        'pending_requests': pending_requests,
+        'member_group_ids': member_group_ids,
+        'favorite_group_ids': favorite_group_ids,
+    })
+
+
+@login_required
+def group_create(request):
+    if not can_create_group(request.user):
+        from django.contrib import messages
+        messages.error(request, 'You have reached your group creation limit. Contact a site admin for more.')
+        return redirect('group_list')
+    if request.method == 'POST':
+        form = GroupCreateForm(request.POST, request.FILES)
+        if form.is_valid():
+            group = form.save(commit=False)
+            group.created_by = request.user
+            if group.image:
+                buffer = resize_group_image(group.image)
+                group.image.save(
+                    group.image.name,
+                    buffer,
+                    save=False,
+                )
+            group.save()
+            GroupMembership.objects.create(
+                user=request.user,
+                group=group,
+                role='admin',
+            )
+            GroupCreationLog.objects.create(
+                user=request.user,
+                group=group,
+            )
+            return redirect('group_dashboard', slug=group.slug)
+    else:
+        form = GroupCreateForm()
+    return render(request, 'club/group_create.html', {'form': form})
+
+
+def group_dashboard(request, slug):
+    group = get_object_or_404(Group, slug=slug)
+    if not can_view_group(request.user, group):
+        raise PermissionDenied
+
+    is_member = group.is_member(request.user) if request.user.is_authenticated else False
+    is_admin_user = group.is_admin(request.user) if request.user.is_authenticated else False
+
+    members = GroupMembership.objects.filter(
+        group=group,
+    ).select_related('user', 'user__verified_icon').order_by('-role', 'joined_at')
+
+    upcoming_events = Event.objects.filter(
+        group=group,
+        date__gte=timezone.now(),
+    ).order_by('date')[:5]
+
+    return render(request, 'club/group_dashboard.html', {
+        'group': group,
+        'is_member': is_member,
+        'is_admin': is_admin_user,
+        'members': members,
+        'upcoming_events': upcoming_events,
+    })
+
+
+@login_required
+def group_settings(request, slug):
+    group = get_object_or_404(Group, slug=slug)
+    if not can_edit_group_settings(request.user, group):
+        raise PermissionDenied
+    if group.is_disbanded:
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        form = GroupSettingsForm(request.POST, request.FILES, instance=group, user=request.user)
+        if form.is_valid():
+            group = form.save(commit=False)
+            if 'image' in request.FILES:
+                buffer = resize_group_image(request.FILES['image'])
+                group.image.save(
+                    request.FILES['image'].name,
+                    buffer,
+                    save=False,
+                )
+            group.save()
+            notify_group_settings_changed(group, request.user)
+            return redirect('group_dashboard', slug=group.slug)
+    else:
+        form = GroupSettingsForm(instance=group, user=request.user)
+    return render(request, 'club/group_settings.html', {'form': form, 'group': group})
+
+
+@login_required
+def group_favorite(request, slug):
+    group = get_object_or_404(Group, slug=slug)
+    membership = get_object_or_404(GroupMembership, user=request.user, group=group)
+    if request.method == 'POST':
+        membership.is_favorite = not membership.is_favorite
+        membership.save(update_fields=['is_favorite'])
+    return redirect('group_list')
+
+
+def group_delete(request, slug):
+    if not request.user.is_authenticated:
+        return redirect('/login/?next=' + request.path)
+    if not can_delete_group(request.user):
+        raise PermissionDenied
+
+    group = get_object_or_404(Group, slug=slug)
+
+    if request.method == 'POST':
+        typed_name = request.POST.get('confirm_name', '')
+        if typed_name == group.name:
+            group.delete()
+            return redirect('group_list')
+        return render(request, 'club/group_delete_confirm.html', {
+            'group': group,
+            'error': 'Group name does not match.',
+        })
+
+    return render(request, 'club/group_delete_confirm.html', {'group': group})
+
+
+def group_restore(request, slug):
+    if not request.user.is_authenticated:
+        return redirect('/login/?next=' + request.path)
+    if not can_restore_group(request.user):
+        raise PermissionDenied
+
+    group = get_object_or_404(Group, slug=slug)
+
+    if not group.is_disbanded:
+        return redirect('group_dashboard', slug=group.slug)
+
+    if request.method == 'POST':
+        group.disbanded_at = None
+        group.save(update_fields=['disbanded_at'])
+        if not GroupMembership.objects.filter(group=group).exists():
+            GroupMembership.objects.create(
+                user=request.user,
+                group=group,
+                role='admin',
+            )
+        notify_group_restored(group, request.user)
+        return redirect('group_dashboard', slug=group.slug)
+
+    return render(request, 'club/group_restore_confirm.html', {'group': group})
+
+
+def group_members(request, slug):
+    group = get_object_or_404(Group, slug=slug)
+    if not can_view_group(request.user, group):
+        raise PermissionDenied
+
+    members = GroupMembership.objects.filter(
+        group=group,
+    ).select_related('user', 'user__verified_icon').order_by(
+        '-role', 'joined_at',
+    )
+
+    is_admin_user = group.is_admin(request.user) if request.user.is_authenticated else False
+
+    return render(request, 'club/group_members.html', {
+        'group': group,
+        'members': members,
+        'is_admin': is_admin_user,
+    })
+
+
+@login_required
+def group_members_manage(request, slug):
+    group = get_object_or_404(Group, slug=slug)
+    if not is_group_admin(request.user, group):
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        user_id = request.POST.get('user_id')
+        action = request.POST.get('action')
+        membership = GroupMembership.objects.filter(
+            user_id=user_id, group=group,
+        ).first()
+
+        if membership and membership.user != request.user:
+            requires_confirm = (
+                membership.role == 'admin'
+                and action in ('remove', 'demote_organizer', 'demote_member')
+                and not request.POST.get('confirmed')
+            )
+            if requires_confirm:
+                action_labels = {
+                    'remove': 'remove',
+                    'demote_organizer': 'demote to organizer',
+                    'demote_member': 'demote to member',
+                }
+                return render(request, 'club/group_admin_action_confirm.html', {
+                    'group': group,
+                    'target_membership': membership,
+                    'action': action,
+                    'action_label': action_labels[action],
+                })
+            if action == 'promote_organizer':
+                membership.role = 'organizer'
+                membership.save(update_fields=['role'])
+                notify_group_promoted_organizer(membership.user, group, request.user)
+            elif action == 'promote_admin':
+                membership.role = 'admin'
+                membership.save(update_fields=['role'])
+                notify_group_promoted_admin(membership.user, group, request.user)
+            elif action == 'demote_member':
+                membership.role = 'member'
+                membership.save(update_fields=['role'])
+                notify_group_demoted_member(membership.user, group, request.user)
+            elif action == 'demote_organizer':
+                membership.role = 'organizer'
+                membership.save(update_fields=['role'])
+                notify_group_demoted_organizer(membership.user, group, request.user)
+            elif action == 'remove':
+                notify_group_removed(membership.user, group, request.user)
+                _clean_remove_member(membership.user, group)
+                membership.delete()
+                if group.membership.count() == 0:
+                    group.disbanded_at = timezone.now()
+                    group.save(update_fields=['disbanded_at'])
+                    notify_group_grace_period(group)
+
+    members = GroupMembership.objects.filter(
+        group=group,
+    ).select_related('user', 'user__verified_icon').order_by(
+        '-role', 'joined_at',
+    )
+
+    return render(request, 'club/group_members_manage.html', {
+        'group': group,
+        'members': members,
+    })
+
+
+@login_required
+def group_join(request, slug):
+    group = get_object_or_404(Group, slug=slug)
+
+    if group.is_disbanded:
+        return render(request, 'club/group_join.html', {
+            'group': group,
+            'error': 'This group has been disbanded.',
+        })
+
+    if group.is_member(request.user):
+        return redirect('group_dashboard', slug=group.slug)
+
+    if group.membership.count() >= group.max_members:
+        return render(request, 'club/group_join.html', {
+            'group': group,
+            'error': 'This group is full.',
+        })
+
+    if request.method == 'POST':
+        if group.join_policy == 'open':
+            GroupMembership.objects.create(
+                user=request.user,
+                group=group,
+                role='member',
+            )
+            notify_group_member_joined(group, request.user, method='open join')
+            return redirect('group_dashboard', slug=group.slug)
+        elif group.join_policy == 'request':
+            if not GroupJoinRequest.objects.filter(
+                user=request.user, group=group, status='pending',
+            ).exists():
+                GroupJoinRequest.objects.create(
+                    user=request.user,
+                    group=group,
+                    expires_at=timezone.now() + __import__('datetime').timedelta(days=7),
+                )
+                notify_group_join_request(group, request.user)
+            return render(request, 'club/group_join.html', {
+                'group': group,
+                'message': 'Your join request has been submitted.',
+            })
+        else:
+            raise PermissionDenied
+
+    return render(request, 'club/group_join.html', {'group': group})
+
+
+@login_required
+def group_leave(request, slug):
+    group = get_object_or_404(Group, slug=slug)
+    membership = get_object_or_404(
+        GroupMembership, user=request.user, group=group,
+    )
+
+    if membership.role == 'admin':
+        other_admins = GroupMembership.objects.filter(
+            group=group, role='admin',
+        ).exclude(user=request.user).exists()
+
+        if not other_admins:
+            other_members = GroupMembership.objects.filter(
+                group=group,
+            ).exclude(user=request.user)
+            if other_members.exists():
+                if request.method == 'POST':
+                    form = SuccessorPickForm(
+                        request.POST, members=other_members,
+                    )
+                    if form.is_valid():
+                        successor_id = form.cleaned_data['successor']
+                        GroupMembership.objects.filter(
+                            user_id=successor_id, group=group,
+                        ).update(role='admin')
+                        notify_group_member_left(group, request.user)
+                        _clean_remove_member(request.user, group)
+                        membership.delete()
+                        return redirect('group_list')
+                else:
+                    form = SuccessorPickForm(members=other_members)
+                return render(request, 'club/group_leave_confirm.html', {
+                    'group': group,
+                    'form': form,
+                    'members': other_members,
+                    'needs_successor': True,
+                })
+
+    if request.method == 'POST':
+        notify_group_member_left(group, request.user)
+        _clean_remove_member(request.user, group)
+        membership.delete()
+        if group.membership.count() == 0:
+            group.disbanded_at = timezone.now()
+            group.save(update_fields=['disbanded_at'])
+            notify_group_grace_period(group)
+        return redirect('group_list')
+
+    remaining = GroupMembership.objects.filter(group=group).count()
+    return render(request, 'club/group_leave_confirm.html', {
+        'group': group,
+        'needs_successor': False,
+        'is_last_member': remaining == 1,
+    })
+
+
+@login_required
+def group_join_request_manage(request, slug):
+    group = get_object_or_404(Group, slug=slug)
+    if not is_group_admin(request.user, group):
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        request_id = request.POST.get('request_id')
+        action = request.POST.get('action')
+        join_request = GroupJoinRequest.objects.filter(
+            pk=request_id, group=group, status='pending',
+        ).first()
+
+        if join_request:
+            try:
+                if action == 'approve':
+                    join_request.approve()
+                    notify_group_join_approved(join_request.user, group, request.user)
+                    notify_group_member_joined(group, join_request.user, method='join request')
+                elif action == 'reject':
+                    join_request.reject()
+                    notify_group_join_rejected(join_request.user, group, request.user)
+            except ValueError:
+                pass
+
+    requests = GroupJoinRequest.objects.filter(
+        group=group, status='pending', expires_at__gt=timezone.now(),
+    ).select_related('user').order_by('-created_at')
+
+    return render(request, 'club/group_join_request_manage.html', {
+        'group': group,
+        'requests': requests,
+    })
+
+
+def _clean_remove_member(user, group):
+    from .models import EventAttendance
+    upcoming_events = Event.objects.filter(
+        group=group,
+        date__gte=timezone.now(),
+    )
+    EventAttendance.objects.filter(
+        user=user,
+        event__in=upcoming_events,
+    ).delete()
+    Vote.objects.filter(
+        user=user,
+        event__in=upcoming_events,
+    ).delete()
+
+
+@login_required
+def group_invite_create(request, slug):
+    group = get_object_or_404(Group, slug=slug)
+    if not is_group_admin(request.user, group):
+        raise PermissionDenied
+
+    if group.is_disbanded:
+        raise PermissionDenied
+
+    invite = None
+    if request.method == 'POST':
+        invite = GroupInvite.objects.create(
+            group=group,
+            created_by=request.user,
+            expires_at=timezone.now() + __import__('datetime').timedelta(days=7),
+        )
+        notify_group_invite_created(group, request.user)
+
+    return render(request, 'club/group_invite.html', {
+        'group': group,
+        'invite': invite,
+    })
+
+
+def group_invite_accept(request, token):
+    invite = GroupInvite.objects.filter(token=token).first()
+
+    if not invite:
+        return render(request, 'club/group_invite_accept.html', {
+            'error': 'This invite link is invalid.',
+        })
+
+    if invite.used:
+        return render(request, 'club/group_invite_accept.html', {
+            'error': 'This invite has already been used.',
+        })
+
+    if not invite.is_valid():
+        return render(request, 'club/group_invite_accept.html', {
+            'error': 'This invite has expired.',
+        })
+
+    if invite.group.is_disbanded:
+        return render(request, 'club/group_invite_accept.html', {
+            'error': 'This group has been disbanded.',
+        })
+
+    if not request.user.is_authenticated:
+        return redirect(f'/login/?next=/invite/{token}/')
+
+    try:
+        invite.use(request.user)
+        notify_group_member_joined(invite.group, request.user, method='invite')
+        return redirect('group_dashboard', slug=invite.group.slug)
+    except ValueError as e:
+        return render(request, 'club/group_invite_accept.html', {
+            'error': str(e),
+        })

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% load club_tags %}
+
+{% block title %}Join Requests - {{ group.name }}{% endblock %}
+
+{% block content %}
+<h1>Join Requests &mdash; {{ group.name }}</h1>
+
+<div class="action-bar">
+    <a href="{% url 'group_dashboard' group.slug %}" class="btn btn-outline btn-sm">Back to Group</a>
+</div>
+
+{% if requests %}
+<table>
+    <thead>
+        <tr>
+            <th>Username</th>
+            <th>Requested</th>
+            <th>Expires</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in requests %}
+        <tr>
+            <td data-label="Username">
+                <a href="{% url 'public_profile' r.user.username %}">{{ r.user.username }}</a>{% verified_badge r.user %}
+            </td>
+            <td data-label="Requested">{{ r.created_at|date:"N j, Y" }}</td>
+            <td data-label="Expires">{{ r.expires_at|date:"N j, Y" }}</td>
+            <td data-label="Actions">
+                <form method="post" style="display:inline">{% csrf_token %}
+                    <input type="hidden" name="request_id" value="{{ r.pk }}">
+                    <button name="action" value="approve" class="btn btn-success btn-sm">Approve</button>
+                    <button name="action" value="reject" class="btn btn-neutral btn-sm">Reject</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    <p>No pending join requests.</p>
+</div>
+{% endif %}
+{% endblock %}

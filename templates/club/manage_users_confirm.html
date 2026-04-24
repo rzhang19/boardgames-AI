@@ -9,24 +9,6 @@
     <form method="post" action="{% url 'manage_users_confirm' %}">
         {% csrf_token %}
 
-        {% if promote_organizer_users %}
-        <h2>Promote to Organizer</h2>
-        <ul>
-            {% for user in promote_organizer_users %}
-            <li>{{ user.username }}</li>
-            {% endfor %}
-        </ul>
-        {% endif %}
-
-        {% if demote_organizer_users %}
-        <h2>Remove Organizer</h2>
-        <ul>
-            {% for user in demote_organizer_users %}
-            <li>{{ user.username }}</li>
-            {% endfor %}
-        </ul>
-        {% endif %}
-
         {% if promote_site_admin_users %}
         <h2>Promote to Site Admin</h2>
         <ul>

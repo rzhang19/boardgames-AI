@@ -6,6 +6,7 @@ from PIL import Image
 
 
 MAX_PROFILE_SIZE = 300
+MAX_GROUP_IMAGE_SIZE = 600
 MAX_FILE_SIZE = 2 * 1024 * 1024
 
 BGG_URL_PATTERN = re.compile(
@@ -52,9 +53,17 @@ def parse_bgg_link(value):
 
 
 def resize_profile_picture(image_field):
+    return _resize_image(image_field, MAX_PROFILE_SIZE)
+
+
+def resize_group_image(image_field):
+    return _resize_image(image_field, MAX_GROUP_IMAGE_SIZE)
+
+
+def _resize_image(image_field, max_size):
     img = Image.open(image_field)
     img = img.convert('RGB')
-    img = img.resize((MAX_PROFILE_SIZE, MAX_PROFILE_SIZE), Image.LANCZOS)
+    img.thumbnail((max_size, max_size), Image.LANCZOS)
     buffer = io.BytesIO()
     img.save(buffer, format='JPEG', quality=85)
     buffer.seek(0)

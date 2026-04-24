@@ -2,7 +2,7 @@ from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
 
-from club.models import BoardGame, Event, EventAttendance, Vote
+from club.models import BoardGame, Event, EventAttendance, Group, Vote
 
 User = get_user_model()
 
@@ -159,8 +159,9 @@ class EventModelTest(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username='adminuser', password='testpass123', is_organizer=True
+            username='adminuser', password='testpass123', is_site_admin=True
         )
+        self.group = Group.objects.create(name='Test Group')
 
     def test_create_event_with_all_fields(self):
         from django.utils import timezone
@@ -172,6 +173,7 @@ class EventModelTest(TestCase):
             location='Community Center',
             description='Weekly game night',
             created_by=self.admin,
+            group=self.group,
         )
         self.assertEqual(event.title, 'Friday Game Night')
         self.assertEqual(event.date, event_date)
@@ -187,6 +189,7 @@ class EventModelTest(TestCase):
             date=event_date,
             voting_deadline=event_date,
             created_by=self.admin,
+            group=self.group,
         )
         self.assertEqual(event.location, '')
         self.assertEqual(event.description, '')
@@ -197,6 +200,7 @@ class EventModelTest(TestCase):
             date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin,
+            group=self.group,
         )
         self.assertEqual(str(event), 'Board Game Bash')
 
@@ -206,6 +210,7 @@ class EventModelTest(TestCase):
             date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin,
+            group=self.group,
         )
         self.assertFalse(event.show_individual_votes)
 
@@ -215,6 +220,7 @@ class EventModelTest(TestCase):
             date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin,
+            group=self.group,
         )
         self.assertTrue(event.is_active)
 
@@ -230,13 +236,15 @@ class EventAttendanceModelTest(TestCase):
             username='user2', password='testpass123'
         )
         self.admin = User.objects.create_user(
-            username='eventadmin', password='testpass123', is_organizer=True
+            username='eventadmin', password='testpass123', is_site_admin=True
         )
+        self.group = Group.objects.create(name='Attendance Group')
         self.event = Event.objects.create(
             title='Test Event',
             date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin,
+            group=self.group,
         )
 
     def test_create_event_attendance(self):
@@ -265,6 +273,7 @@ class EventAttendanceModelTest(TestCase):
             date='2026-06-01T18:00:00Z',
             voting_deadline='2026-06-01T18:00:00Z',
             created_by=self.admin,
+            group=self.group,
         )
         EventAttendance.objects.create(
             user=self.user1,
@@ -299,19 +308,22 @@ class VoteModelTest(TestCase):
             username='voter2', password='testpass123'
         )
         self.admin = User.objects.create_user(
-            username='voteadmin', password='testpass123', is_organizer=True
+            username='voteadmin', password='testpass123', is_site_admin=True
         )
+        self.group = Group.objects.create(name='Vote Group')
         self.event = Event.objects.create(
             title='Vote Event',
             date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
             created_by=self.admin,
+            group=self.group,
         )
         self.event2 = Event.objects.create(
             title='Other Event',
             date='2026-06-01T18:00:00Z',
             voting_deadline='2026-06-01T18:00:00Z',
             created_by=self.admin,
+            group=self.group,
         )
         self.game1 = BoardGame.objects.create(
             name='Catan', owner=self.user1

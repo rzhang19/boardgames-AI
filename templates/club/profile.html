@@ -82,7 +82,7 @@
         <tbody>
             {% for att in attendances %}
             <tr>
-                <td data-label="Title"><a href="{% url 'event_detail' att.event.pk %}">{{ att.event.title }}</a></td>
+                <td data-label="Title"><a href="{% url 'event_detail' att.event.group.slug att.event.pk %}">{{ att.event.title }}</a></td>
                 <td data-label="Date">{{ att.event.date|date:"N j, Y" }}</td>
             </tr>
             {% endfor %}

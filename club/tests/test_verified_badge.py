@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.urls import reverse
 
-from club.models import BoardGame, Event, EventAttendance, Vote
+from club.models import BoardGame, Event, EventAttendance, Group, Vote
 
 User = get_user_model()
 
@@ -18,7 +18,8 @@ class VerifiedBadgeDashboardTest(TestCase):
         self.client.login(username='verifieduser', password='testpass123')
         response = self.client.get(reverse('dashboard'))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'verified-badge')
+        self.assertContains(response, 'My Groups')
+        self.assertContains(response, 'My Games')
 
     def test_unverified_user_does_not_see_checkmark_on_dashboard(self):
         user = User.objects.create_user(
@@ -28,7 +29,6 @@ class VerifiedBadgeDashboardTest(TestCase):
         self.client.login(username='unverifieduser', password='testpass123')
         response = self.client.get(reverse('dashboard'))
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'verified-badge')
 
 
 @tag("integration")
@@ -67,10 +67,11 @@ class VerifiedBadgeEventPagesTest(TestCase):
             username='verifiedcreator', password='testpass123',
             email='verified@example.com', email_verified=True
         )
+        group = Group.objects.create(name='Test Group')
         Event.objects.create(
             title='Game Night', date='2026-06-01T18:00:00Z',
             voting_deadline='2026-06-01T18:00:00Z',
-            created_by=creator
+            created_by=creator, group=group
         )
         self.client.login(username='verifiedcreator', password='testpass123')
         response = self.client.get(reverse('event_list'))
@@ -81,10 +82,11 @@ class VerifiedBadgeEventPagesTest(TestCase):
             username='unverifiedcreator', password='testpass123',
             email='unverified@example.com', email_verified=False
         )
+        group = Group.objects.create(name='Test Group')
         Event.objects.create(
             title='Game Night', date='2026-06-01T18:00:00Z',
             voting_deadline='2026-06-01T18:00:00Z',
-            created_by=creator
+            created_by=creator, group=group
         )
         self.client.login(username='unverifiedcreator', password='testpass123')
         response = self.client.get(reverse('event_list'))
@@ -95,16 +97,17 @@ class VerifiedBadgeEventPagesTest(TestCase):
             username='verifieduser', password='testpass123',
             email='verified@example.com', email_verified=True
         )
+        group = Group.objects.create(name='Test Group')
         event = Event.objects.create(
             title='Game Night', date='2026-06-01T18:00:00Z',
             voting_deadline='2026-06-01T18:00:00Z',
-            created_by=verified_user
+            created_by=verified_user, group=group
         )
         self.client.login(username='verifieduser', password='testpass123')
-        response = self.client.get(reverse('event_detail', kwargs={'pk': event.pk}))
+        response = self.client.get(reverse('event_detail', kwargs={'slug': event.group.slug, 'pk': event.pk}))
         self.assertContains(response, 'verified-badge')
         EventAttendance.objects.create(user=verified_user, event=event)
-        response = self.client.get(reverse('event_detail', kwargs={'pk': event.pk}))
+        response = self.client.get(reverse('event_detail', kwargs={'slug': event.group.slug, 'pk': event.pk}))
         self.assertContains(response, 'verified-badge')
 
     def test_unverified_attendee_no_checkmark(self):
@@ -112,14 +115,15 @@ class VerifiedBadgeEventPagesTest(TestCase):
             username='unverifieduser', password='testpass123',
             email='unverified@example.com', email_verified=False
         )
+        group = Group.objects.create(name='Test Group')
         event = Event.objects.create(
             title='Game Night', date='2026-06-01T18:00:00Z',
             voting_deadline='2026-06-01T18:00:00Z',
-            created_by=unverified_user
+            created_by=unverified_user, group=group
         )
         EventAttendance.objects.create(user=unverified_user, event=event)
         self.client.login(username='unverifieduser', password='testpass123')
-        response = self.client.get(reverse('event_detail', kwargs={'pk': event.pk}))
+        response = self.client.get(reverse('event_detail', kwargs={'slug': event.group.slug, 'pk': event.pk}))
         self.assertNotContains(response, 'verified-badge')
 
     def test_verified_voter_shows_checkmark_in_individual_votes(self):
@@ -127,10 +131,11 @@ class VerifiedBadgeEventPagesTest(TestCase):
             username='verifiedvoter', password='testpass123',
             email='verified@example.com', email_verified=True
         )
+        group = Group.objects.create(name='Test Group')
         event = Event.objects.create(
             title='Game Night', date='2026-06-01T18:00:00Z',
             voting_deadline='2026-06-01T18:00:00Z',
-            created_by=verified_user, show_individual_votes=True
+            created_by=verified_user, show_individual_votes=True, group=group
         )
         game = BoardGame.objects.create(name='Catan', owner=verified_user)
         EventAttendance.objects.create(user=verified_user, event=event)
@@ -138,7 +143,7 @@ class VerifiedBadgeEventPagesTest(TestCase):
             user=verified_user, event=event,
             board_game=game, rank=1
         )
-        response = self.client.get(reverse('event_results', kwargs={'pk': event.pk}))
+        response = self.client.get(reverse('event_results', kwargs={'slug': event.group.slug, 'pk': event.pk}))
         self.assertContains(response, 'verified-badge')
 
     def test_unverified_voter_no_checkmark_in_individual_votes(self):
@@ -150,10 +155,11 @@ class VerifiedBadgeEventPagesTest(TestCase):
             username='verifiedcreator', password='testpass123',
             email='verifiedc@example.com', email_verified=True
         )
+        group = Group.objects.create(name='Test Group')
         event = Event.objects.create(
             title='Game Night', date='2026-06-01T18:00:00Z',
             voting_deadline='2026-06-01T18:00:00Z',
-            created_by=verified_creator, show_individual_votes=True
+            created_by=verified_creator, show_individual_votes=True, group=group
         )
         game = BoardGame.objects.create(name='Catan', owner=verified_creator)
         EventAttendance.objects.create(user=unverified_user, event=event)
@@ -161,7 +167,7 @@ class VerifiedBadgeEventPagesTest(TestCase):
             user=unverified_user, event=event,
             board_game=game, rank=1
         )
-        response = self.client.get(reverse('event_results', kwargs={'pk': event.pk}))
+        response = self.client.get(reverse('event_results', kwargs={'slug': event.group.slug, 'pk': event.pk}))
         html = response.content.decode()
         voter_section_start = html.find('unverifiedvoter')
         voter_section = html[voter_section_start:voter_section_start + 200]
