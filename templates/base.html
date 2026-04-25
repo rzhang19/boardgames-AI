@@ -44,10 +44,13 @@
         </div>
         {% endif %}
     </nav>
+    {% if is_view_only %}
+    <div class="view-only-banner">Welcome, View Only Visitor</div>
+    {% endif %}
     <main>
         {% block content %}{% endblock %}
     </main>
-    {% if user.is_authenticated and not user.timezone_detected %}
+    {% if user.is_authenticated and not user.timezone_detected and not is_view_only %}
     <script>
     (function() {
         try {
@@ -60,6 +63,20 @@
                 xhr.send('timezone=' + encodeURIComponent(tz) + '&next=' + encodeURIComponent(window.location.pathname));
             }
         } catch(e) {}
+    })();
+    </script>
+    {% endif %}
+    {% if is_view_only %}
+    <script>
+    (function() {
+        document.addEventListener('submit', function(e) {
+            var action = e.target.getAttribute('action') || '';
+            if (action.indexOf('/logout/') !== -1 || action.indexOf('/login/') !== -1) {
+                return;
+            }
+            e.preventDefault();
+            alert('This edit action is not available in view-only mode.');
+        });
     })();
     </script>
     {% endif %}

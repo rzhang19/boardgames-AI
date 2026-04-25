@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
@@ -54,17 +55,22 @@ class Command(BaseCommand):
     ]
 
     def handle(self, *args, **options):
-        existing = User.objects.filter(username__in=[u['username'] for u in self.TEST_USERS]).count()
+        view_only_username = settings.VIEW_ONLY_USERNAME
+        all_usernames = [u['username'] for u in self.TEST_USERS]
+        if settings.VIEW_ONLY_PASSWORD:
+            all_usernames.append(view_only_username)
+
+        existing = User.objects.filter(username__in=all_usernames).count()
         if existing:
             self.stdout.write(self.style.WARNING('Test data already exists. Clearing and re-seeding...'))
-            Vote.objects.filter(user__username__in=[u['username'] for u in self.TEST_USERS]).delete()
-            EventAttendance.objects.filter(user__username__in=[u['username'] for u in self.TEST_USERS]).delete()
-            Event.objects.filter(created_by__username__in=[u['username'] for u in self.TEST_USERS]).delete()
-            BoardGame.objects.filter(owner__username__in=[u['username'] for u in self.TEST_USERS]).delete()
-            GroupMembership.objects.filter(user__username__in=[u['username'] for u in self.TEST_USERS]).delete()
+            Vote.objects.filter(user__username__in=all_usernames).delete()
+            EventAttendance.objects.filter(user__username__in=all_usernames).delete()
+            Event.objects.filter(created_by__username__in=all_usernames).delete()
+            BoardGame.objects.filter(owner__username__in=all_usernames).delete()
+            GroupMembership.objects.filter(user__username__in=all_usernames).delete()
             Group.objects.filter(name='Workday Boardgames').delete()
             Group.objects.filter(name='Public Board Games Group').delete()
-            User.objects.filter(username__in=[u['username'] for u in self.TEST_USERS]).delete()
+            User.objects.filter(username__in=all_usernames).delete()
 
         users = {}
         for user_data in self.TEST_USERS:
@@ -77,6 +83,21 @@ class Command(BaseCommand):
             users[user_data['username']] = user
             role = 'site admin' if user_data['is_site_admin'] else 'user'
             self.stdout.write(f'  Created {user_data["username"]} ({role})')
+
+        if settings.VIEW_ONLY_PASSWORD:
+            viewer = User.objects.create_user(
+                username=view_only_username,
+                password=settings.VIEW_ONLY_PASSWORD,
+                is_view_only=True,
+                email_verified=True,
+            )
+            users[view_only_username] = viewer
+            self.stdout.write(f'  Created {view_only_username} (view-only visitor)')
+        else:
+            self.stdout.write(self.style.WARNING(
+                '  VIEW_ONLY_PASSWORD not set \u2014 skipping view-only user. '
+                'Set it in .env to enable.'
+            ))
 
         private_group = Group.objects.create(
             name='Workday Boardgames',
@@ -96,6 +117,11 @@ class Command(BaseCommand):
             created_by=users['newtestadmin'],
         )
         GroupMembership.objects.create(user=users['newtestadmin'], group=public_group, role='admin')
+        if view_only_username in users:
+            GroupMembership.objects.create(
+                user=users[view_only_username], group=public_group, role='member',
+            )
+            self.stdout.write(f'  {view_only_username} joined {public_group.name}')
         self.stdout.write(f'  Created group: {public_group.name} (public)')
 
         games = []
@@ -133,10 +159,14 @@ class Command(BaseCommand):
         self.stdout.write(f'  Created past event: {past_event.title}')
 
         for user in users.values():
+            if getattr(user, 'is_view_only', False):
+                continue
             EventAttendance.objects.create(user=user, event=active_event)
             self.stdout.write(f'  {user.username} RSVP\'d to {active_event.title}')
 
         for user in users.values():
+            if getattr(user, 'is_view_only', False):
+                continue
             user_games = games[:5]
             for rank, game in enumerate(user_games, start=1):
                 Vote.objects.create(
@@ -147,6 +177,11 @@ class Command(BaseCommand):
                 )
             self.stdout.write(f'  {user.username} voted for {len(user_games)} games')
 
+        viewer_line = ''
+        if view_only_username in users:
+            viewer_line = (
+                f'  {view_only_username} / [env var] (view-only visitor)\n'
+            )
         self.stdout.write(self.style.SUCCESS(
             f'\nSeed complete! Created {len(users)} users, {len(games)} games, '
             f'2 groups, 2 events, and votes.\n'
@@ -155,5 +190,6 @@ class Command(BaseCommand):
             f'  testorganizer / Testpass123! (organizer of Workday Boardgames)\n'
             f'  testadmin / Testpass123! (site admin, admin of Workday Boardgames)\n'
             f'  newtestadmin / Testpass123! (admin of Public Board Games Group)\n'
-            f'  testsiteadmin / Testpass123! (site admin, no group)'
+            f'  testsiteadmin / Testpass123! (site admin, no group)\n'
+            f'{viewer_line}'
         ))

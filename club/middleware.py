@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib.auth.hashers import check_password
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
+from django.http import HttpResponseForbidden
 from django.shortcuts import redirect
 from django.utils import timezone
 
@@ -64,4 +65,24 @@ class TimezoneMiddleware:
                 timezone.activate(_zoneinfo.ZoneInfo('UTC'))
         else:
             timezone.deactivate()
+        return self.get_response(request)
+
+
+class ViewOnlyMiddleware:
+
+    EXEMPT_PATHS = ('/logout/', '/login/')
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if (
+            request.user.is_authenticated
+            and getattr(request.user, 'is_view_only', False)
+            and request.method == 'POST'
+            and not request.path.startswith(self.EXEMPT_PATHS)
+        ):
+            return HttpResponseForbidden(
+                'This action is not available in view-only mode.'
+            )
         return self.get_response(request)

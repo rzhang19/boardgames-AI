@@ -17,3 +17,12 @@ def unread_notification_count(request):
         'unread_notification_count': count,
         'notification_badge_display': badge_display,
     }
+
+
+def view_only_status(request):
+    return {
+        'is_view_only': (
+            request.user.is_authenticated
+            and getattr(request.user, 'is_view_only', False)
+        ),
+    }

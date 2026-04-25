@@ -54,6 +54,7 @@ MIDDLEWARE = [
     'club.middleware.BetaAccessMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'club.middleware.ViewOnlyMiddleware',
     'club.middleware.MustChangePasswordMiddleware',
     'club.middleware.TimezoneMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -73,6 +74,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'club.context_processors.unread_notification_count',
+                'club.context_processors.view_only_status',
             ],
         },
     },
@@ -150,6 +152,9 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'webmaster@localhost')
 REQUIRE_EMAIL_VERIFICATION = os.environ.get('REQUIRE_EMAIL_VERIFICATION', 'False').lower() in ('true', '1', 'yes')
 
 BETA_ACCESS_CODE_HASH = os.environ.get('BETA_ACCESS_CODE_HASH', '')
+
+VIEW_ONLY_USERNAME = os.environ.get('VIEW_ONLY_USERNAME', 'testviewer')
+VIEW_ONLY_PASSWORD = os.environ.get('VIEW_ONLY_PASSWORD', '')
 
 if os.environ.get('SECURE_PROXY_SSL_HEADER', 'False').lower() in ('true', '1', 'yes'):
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
