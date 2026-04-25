@@ -36,6 +36,7 @@ Thumbs.db
 
 # Nonsensitive Setup text files (for AI purposes)
 AGENTS.md
+AGENTS.md.txt
 ExtraFeatures.txt
 Model.txt
 Structure.txt
