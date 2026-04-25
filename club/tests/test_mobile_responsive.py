@@ -155,10 +155,11 @@ class EventResultsDataLabelsTest(TestCase):
         user = User.objects.create_user(username='voter', password='testpass123')
         self.client.login(username='voter', password='testpass123')
 
-        from club.models import Event, BoardGame, EventAttendance, Vote, Group
+        from club.models import Event, BoardGame, EventAttendance, Vote, Group, GroupMembership
         from django.utils import timezone
         import datetime as dt
         group = Group.objects.create(name='Test Group')
+        GroupMembership.objects.create(user=user, group=group, role='member')
         event = Event.objects.create(
             title='Result Event',
             date=timezone.now() + dt.timedelta(days=7),

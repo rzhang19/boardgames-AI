@@ -3,7 +3,7 @@ from django.core.files.base import ContentFile
 from django.test import TestCase, tag
 from django.urls import reverse
 
-from club.models import BoardGame, Event, EventAttendance, Group, VerifiedIcon, Vote
+from club.models import BoardGame, Event, EventAttendance, Group, GroupMembership, VerifiedIcon, Vote
 
 User = get_user_model()
 
@@ -233,6 +233,7 @@ class VerifiedBadgeCustomIconRenderingTest(TestCase):
             username='iconvoter', password='testpass123',
             email_verified=True, verified_icon=self.icon,
         )
+        GroupMembership.objects.create(user=voter, group=self.group, role='member')
         event = Event.objects.create(
             title='Game Night', date='2026-06-01T18:00:00Z',
             voting_deadline='2026-06-01T18:00:00Z',
@@ -241,6 +242,7 @@ class VerifiedBadgeCustomIconRenderingTest(TestCase):
         game = BoardGame.objects.create(name='Catan', owner=voter)
         EventAttendance.objects.create(user=voter, event=event)
         Vote.objects.create(user=voter, event=event, board_game=game, rank=1)
+        self.client.login(username='iconvoter', password='testpass123')
         response = self.client.get(reverse('event_results', kwargs={'slug': event.group.slug, 'pk': event.pk}))
         self.assertContains(response, 'verified-badge')
 

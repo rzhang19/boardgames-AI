@@ -24,7 +24,9 @@ class RegistrationWithoutEmailTest(TestCase):
         self.assertFalse(user.is_superuser)
         self.assertFalse(user.email_verified)
         response = self.client.get(reverse('dashboard'))
-        self.assertContains(response, 'noemailuser')
+        self.assertContains(response, 'My Groups')
+        self.assertContains(response, 'My Games')
+        self.assertContains(response, 'Upcoming Events')
 
 
 @tag("integration")

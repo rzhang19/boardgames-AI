@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.urls import reverse
 
-from club.models import BoardGame, Event, EventAttendance, Group, Vote
+from club.models import BoardGame, Event, EventAttendance, Group, GroupMembership, Vote
 
 User = get_user_model()
 
@@ -132,6 +132,7 @@ class VerifiedBadgeEventPagesTest(TestCase):
             email='verified@example.com', email_verified=True
         )
         group = Group.objects.create(name='Test Group')
+        GroupMembership.objects.create(user=verified_user, group=group, role='member')
         event = Event.objects.create(
             title='Game Night', date='2026-06-01T18:00:00Z',
             voting_deadline='2026-06-01T18:00:00Z',
@@ -143,6 +144,7 @@ class VerifiedBadgeEventPagesTest(TestCase):
             user=verified_user, event=event,
             board_game=game, rank=1
         )
+        self.client.login(username='verifiedvoter', password='testpass123')
         response = self.client.get(reverse('event_results', kwargs={'slug': event.group.slug, 'pk': event.pk}))
         self.assertContains(response, 'verified-badge')
 

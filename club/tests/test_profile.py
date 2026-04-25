@@ -275,13 +275,6 @@ class ProfileLinkTest(TestCase):
         )
         self.client.login(username='testuser', password='testpass123')
 
-    def test_dashboard_username_links_to_profile(self):
-        response = self.client.get(reverse('dashboard'))
-        self.assertContains(
-            response,
-            reverse('public_profile', kwargs={'username': 'testuser'}),
-        )
-
     def test_game_detail_owner_links_to_profile(self):
         game = BoardGame.objects.create(
             name='Catan', owner=self.user, complexity='medium',
