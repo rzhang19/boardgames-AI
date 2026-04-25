@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser, UserManager
 from django.core.validators import RegexValidator
 from django.db import models
+from django.db.models import Q
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -146,8 +147,9 @@ class Group(models.Model):
 
     def games(self):
         return BoardGame.objects.filter(
-            owner__membership__group=self,
-            owner__membership__role__in=['admin', 'organizer', 'member'],
+            Q(owner__membership__group=self,
+              owner__membership__role__in=['admin', 'organizer', 'member'])
+            | Q(group=self)
         )
 
     def can_change_max_members(self, user):
@@ -324,7 +326,13 @@ class BoardGame(models.Model):
 
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    owner = models.ForeignKey(
+        User, on_delete=models.CASCADE, null=True, blank=True,
+    )
+    group = models.ForeignKey(
+        Group, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='owned_games',
+    )
     min_players = models.PositiveIntegerField(null=True, blank=True)
     max_players = models.PositiveIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

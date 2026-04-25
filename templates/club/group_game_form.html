@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action }}{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1>{{ action }}</h1>
+
+    <div class="bgg-search-section">
+        <h2>Search BoardGameGeek</h2>
+        <div class="bgg-search-bar">
+            <input type="text" id="bgg-search-input" placeholder="Search for a game...">
+            <button type="button" id="bgg-search-btn" class="btn btn-primary btn-sm">Search</button>
+            <button type="button" id="bgg-clear-btn" class="btn btn-neutral btn-sm" style="display:none;">Clear</button>
+        </div>
+        <div id="bgg-search-results" class="bgg-results-list" style="display:none;"></div>
+        <div id="bgg-image-preview" class="bgg-image-preview" style="display:none;"></div>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="field-group">
+            <h2>Game Details</h2>
+            <div class="form-grid">
+                <label for="id_name">Name:<span class="required-asterisk">*</span></label>
+                <div class="input-cell">
+                    {{ form.name }}
+                </div>
+                {% if form.name.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.name.errors }}</div>
+                {% endif %}
+
+                <label for="id_description">Description:</label>
+                <div class="input-cell">
+                    {{ form.description }}
+                </div>
+                {% if form.description.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.description.errors }}</div>
+                {% endif %}
+
+                <label for="id_bgg_link_input">BGG Link:</label>
+                <div class="input-cell">
+                    {{ form.bgg_link_input }}
+                    <div id="bgg-link-warning" class="bgg-link-warning" style="display:none; color: #856404; background-color: #fff3cd; border: 1px solid #ffc107; padding: 6px 10px; border-radius: 4px; margin-top: 4px; font-size: 0.85em;">
+                        No BoardGameGeek link set. You can search for this game above or paste a link manually.
+                    </div>
+                </div>
+                {% if form.bgg_link_input.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.bgg_link_input.errors }}</div>
+                {% endif %}
+
+                <label for="id_min_players">Min Players:<span class="required-asterisk">*</span></label>
+                <div class="input-cell">
+                    {{ form.min_players }}
+                </div>
+                {% if form.min_players.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.min_players.errors }}</div>
+                {% endif %}
+
+                <label for="id_max_players">Max Players:<span class="required-asterisk">*</span></label>
+                <div class="input-cell">
+                    {{ form.max_players }}
+                    <label class="inline-checkbox">
+                        <input type="checkbox" id="id_max_players_unlimited" name="max_players_unlimited" {% if form.max_players_unlimited.value %}checked{% elif game and game.max_players == 0 %}checked{% endif %}>
+                        Unlimited
+                    </label>
+                </div>
+                {% if form.max_players.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.max_players.errors }}</div>
+                {% endif %}
+
+                <label for="id_complexity">Complexity:<span class="required-asterisk">*</span></label>
+                <div class="input-cell">
+                    {{ form.complexity }}
+                </div>
+                {% if form.complexity.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.complexity.errors }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        {{ form.bgg_id }}
+        <div id="bgg-complexity-suggestion" class="bgg-suggestion" style="display:none; color: #666; font-size: 0.9em; margin-top: -10px;"></div>
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">{{ action }}</button>
+            <a href="{% url 'group_games' group.slug %}" class="btn btn-neutral">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<style>
+    input.player-count-input {
+        width: 5rem;
+    }
+    .inline-checkbox {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        white-space: nowrap;
+        font-size: 0.875rem;
+        font-weight: 400;
+    }
+</style>
+
+<script>
+(function() {
+    var searchInput = document.getElementById('bgg-search-input');
+    var searchBtn = document.getElementById('bgg-search-btn');
+    var clearBtn = document.getElementById('bgg-clear-btn');
+    var resultsDiv = document.getElementById('bgg-search-results');
+    var imagePreview = document.getElementById('bgg-image-preview');
+    var bggIdField = document.getElementById('id_bgg_id');
+    var nameField = document.getElementById('id_name');
+    var descField = document.getElementById('id_description');
+    var minField = document.getElementById('id_min_players');
+    var maxField = document.getElementById('id_max_players');
+    var complexityField = document.getElementById('id_complexity');
+    var bggSuggestionDiv = document.getElementById('bgg-complexity-suggestion');
+    var bggLinkInput = document.getElementById('id_bgg_link_input');
+    var bggLinkWarning = document.getElementById('bgg-link-warning');
+
+    function getCookie(name) {
+        var cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            var cookies = document.cookie.split(';');
+            for (var i = 0; i < cookies.length; i++) {
+                var cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    function updateBggLinkWarning() {
+        if (!bggLinkWarning) return;
+        var hasBggId = bggIdField && bggIdField.value;
+        var hasBggLink = bggLinkInput && bggLinkInput.value.trim();
+        if (!hasBggId && !hasBggLink) {
+            bggLinkWarning.style.display = 'block';
+        } else {
+            bggLinkWarning.style.display = 'none';
+        }
+    }
+
+    if (bggLinkInput) {
+        bggLinkInput.addEventListener('input', updateBggLinkWarning);
+    }
+    updateBggLinkWarning();
+
+    var debounceTimer = null;
+    var currentController = null;
+
+    function performSearch() {
+        var query = searchInput.value.trim();
+        if (query.length < 3) {
+            resultsDiv.style.display = 'none';
+            resultsDiv.innerHTML = '';
+            return;
+        }
+
+        if (currentController) {
+            currentController.abort();
+        }
+        currentController = new AbortController();
+
+        resultsDiv.innerHTML = '<p>Searching...</p>';
+        resultsDiv.style.display = 'block';
+
+        fetch('{% url "bgg_search" %}?q=' + encodeURIComponent(query), {signal: currentController.signal})
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                resultsDiv.innerHTML = '';
+                if (data.length === 0) {
+                    resultsDiv.innerHTML = '<p>No results found.</p>';
+                    return;
+                }
+                data.forEach(function(item) {
+                    var div = document.createElement('div');
+                    div.className = 'bgg-result-item';
+                    div.textContent = item.name;
+                    div.setAttribute('data-bgg-id', item.id);
+                    div.addEventListener('click', function() {
+                        selectGame(item.id, item.name);
+                    });
+                    resultsDiv.appendChild(div);
+                });
+            })
+            .catch(function(err) {
+                if (err.name === 'AbortError') return;
+                resultsDiv.innerHTML = '<p>Search failed. Please try again.</p>';
+            });
+    }
+
+    searchInput.addEventListener('input', function() {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(performSearch, 400);
+    });
+
+    searchBtn.addEventListener('click', function() {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        performSearch();
+    });
+
+    searchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (debounceTimer) clearTimeout(debounceTimer);
+            performSearch();
+        }
+    });
+
+    function selectGame(bggId, gameName) {
+        resultsDiv.innerHTML = '<p>Loading game data...</p>';
+
+        fetch('{% url "bgg_import" bgg_id=0 %}'.replace('/0/', '/' + bggId + '/'))
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    resultsDiv.innerHTML = '<p>' + data.error + '</p>';
+                    return;
+                }
+                if (nameField) {
+                    nameField.value = data.name || '';
+                }
+                if (descField) {
+                    descField.value = data.description || '';
+                }
+                if (minField) {
+                    minField.value = data.min_players || '';
+                }
+                if (maxField) {
+                    maxField.value = data.max_players || '';
+                }
+                if (bggIdField) {
+                    bggIdField.value = data.bgg_id || bggId;
+                }
+                if (bggLinkInput && data.bgg_link) {
+                    bggLinkInput.value = data.bgg_link;
+                }
+                if (data.image_url) {
+                    imagePreview.innerHTML = '<img src="' + data.image_url + '" alt="' + (data.name || '') + '">';
+                    imagePreview.style.display = 'block';
+                }
+                if (complexityField && data.suggested_complexity) {
+                    complexityField.value = data.suggested_complexity;
+                    if (bggSuggestionDiv) {
+                        bggSuggestionDiv.textContent = 'BGG suggests: ' + data.suggested_complexity.replace('_', ' ');
+                        bggSuggestionDiv.style.display = 'block';
+                    }
+                }
+                resultsDiv.style.display = 'none';
+                searchInput.value = '';
+                clearBtn.style.display = 'inline-block';
+                updateBggLinkWarning();
+            })
+            .catch(function() {
+                resultsDiv.innerHTML = '<p>Failed to load game data.</p>';
+            });
+    }
+
+    var unlimitedCb = document.getElementById('id_max_players_unlimited');
+
+    function updateMaxField() {
+        if (!maxField || !unlimitedCb) return;
+        if (unlimitedCb.checked) {
+            maxField.disabled = true;
+            maxField.value = '';
+            maxField.removeAttribute('min');
+        } else {
+            maxField.disabled = false;
+            var minVal = minField ? parseInt(minField.value, 10) : 1;
+            if (!isNaN(minVal) && minVal >= 1) {
+                maxField.setAttribute('min', minVal);
+            }
+        }
+    }
+
+    function updateMaxMin() {
+        if (!maxField || !minField || (unlimitedCb && unlimitedCb.checked)) return;
+        var minVal = parseInt(minField.value, 10);
+        if (!isNaN(minVal) && minVal >= 1) {
+            maxField.setAttribute('min', minVal);
+            var currentMax = parseInt(maxField.value, 10);
+            if (!isNaN(currentMax) && currentMax < minVal) {
+                maxField.value = minVal;
+            }
+        }
+    }
+
+    if (unlimitedCb) unlimitedCb.addEventListener('change', updateMaxField);
+    if (minField) minField.addEventListener('change', updateMaxMin);
+    updateMaxField();
+
+    clearBtn.addEventListener('click', function() {
+        if (bggIdField) bggIdField.value = '';
+        if (bggLinkInput) bggLinkInput.value = '';
+        imagePreview.innerHTML = '';
+        imagePreview.style.display = 'none';
+        if (bggSuggestionDiv) bggSuggestionDiv.style.display = 'none';
+        clearBtn.style.display = 'none';
+        updateBggLinkWarning();
+    });
+})();
+</script>
+{% endblock %}

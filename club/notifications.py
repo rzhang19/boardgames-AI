@@ -249,6 +249,28 @@ def notify_group_restored(group, actor):
 # Existing notification functions (unchanged)
 # ---------------------------------------------------------------------------
 
+def notify_group_game_added(group, game, actor):
+    _notify_group_members(
+        group,
+        f'New game added to "{group.name}": {game.name}',
+        f'/groups/{group.slug}/games/',
+        'View Games',
+        'group_game_added',
+        exclude_user=actor,
+    )
+
+
+def notify_group_game_deleted(group, game_name, actor):
+    _notify_group_members(
+        group,
+        f'Game removed from "{group.name}": {game_name}',
+        f'/groups/{group.slug}/games/',
+        'View Games',
+        'group_game_deleted',
+        exclude_user=actor,
+    )
+
+
 def generate_missing_complexity_notifications(user):
     games = BoardGame.objects.filter(owner=user, complexity__isnull=True)
     existing_urls = set(

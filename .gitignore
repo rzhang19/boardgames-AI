@@ -48,9 +48,13 @@ GroupsFeature.txt
 VotingFeature.txt
 Instructions.txt
 GroupOwnedGamesFeature.txt
+GroupFeatures2.txt
 
 # Deploy history
 scripts/.deploy_history_*
 
 # Local testing/Debugs
 debugs/
+
+# Scripts
+untrack.bat

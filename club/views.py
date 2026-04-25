@@ -27,6 +27,8 @@ from .notifications import (
     generate_missing_max_players_notifications,
     notify_group_demoted_member,
     notify_group_demoted_organizer,
+    notify_group_game_added,
+    notify_group_game_deleted,
     notify_group_event_created,
     notify_group_event_updated,
     notify_group_grace_period,
@@ -675,11 +677,45 @@ def game_add(request):
     return render(request, 'club/game_form.html', {'form': form, 'action': 'Add'})
 
 
+def group_game_add(request, slug):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    group = get_object_or_404(Group, slug=slug)
+    if group.is_disbanded:
+        raise PermissionDenied
+    if not is_group_organizer(request.user, group):
+        raise PermissionDenied
+    if request.method == 'POST':
+        form = BoardGameForm(request.POST)
+        if form.is_valid():
+            game = form.save(commit=False)
+            game.group = group
+            _process_bgg_link(game, form)
+            game.save()
+            notify_group_game_added(group, game, request.user)
+            return redirect('game_detail', pk=game.pk)
+    else:
+        form = BoardGameForm()
+    return render(request, 'club/group_game_form.html', {
+        'form': form,
+        'action': 'Add Group Game',
+        'group': group,
+    })
+
+
 def game_detail(request, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
     game = get_object_or_404(BoardGame, pk=pk)
-    return render(request, 'club/game_detail.html', {'game': game})
+    can_edit = (
+        game.owner == request.user
+        or request.user.is_superuser
+        or (game.group and is_group_organizer(request.user, game.group))
+    )
+    return render(request, 'club/game_detail.html', {
+        'game': game,
+        'can_edit_game': can_edit,
+    })
 
 
 def game_edit(request, pk):
@@ -689,7 +725,13 @@ def game_edit(request, pk):
     is_superuser_editing_others = (
         request.user.is_superuser and game.owner != request.user
     )
-    if game.owner != request.user and not is_superuser_editing_others:
+    is_group_organizer_editing = (
+        game.group
+        and is_group_organizer(request.user, game.group)
+    )
+    if (game.owner != request.user
+            and not is_superuser_editing_others
+            and not is_group_organizer_editing):
         raise PermissionDenied
     if request.method == 'POST':
         form = BoardGameForm(request.POST, instance=game)
@@ -725,10 +767,20 @@ def game_delete(request, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
     game = get_object_or_404(BoardGame, pk=pk)
-    if game.owner != request.user and not request.user.is_superuser:
+    is_group_organizer_deleting = (
+        game.group
+        and is_group_organizer(request.user, game.group)
+    )
+    if (game.owner != request.user
+            and not request.user.is_superuser
+            and not is_group_organizer_deleting):
         raise PermissionDenied
     if request.method == 'POST':
+        deleted_game_group = game.group
+        deleted_game_name = game.name
         game.delete()
+        if deleted_game_group:
+            notify_group_game_deleted(deleted_game_group, deleted_game_name, request.user)
         return redirect('game_list')
     return render(request, 'club/game_confirm_delete.html', {
         'game': game,
@@ -798,10 +850,31 @@ def group_games(request, slug):
         raise PermissionDenied
     if group.is_disbanded:
         raise PermissionDenied
-    games = group.games().select_related('owner').order_by('name')
+    is_organizer = is_group_organizer(request.user, group)
+    all_games = group.games()
+    total_count = all_games.count()
+    games = all_games.select_related('owner', 'group').order_by('name')
+
+    show_group_owned = request.GET.get('group_owned', '1') != '0'
+    selected_owners = request.GET.getlist('owner')
+
+    if not show_group_owned:
+        games = games.filter(owner__isnull=False)
+    if selected_owners:
+        games = games.filter(owner__username__in=selected_owners)
+
+    member_owners = User.objects.filter(
+        boardgame__in=group.games().filter(owner__isnull=False),
+    ).distinct().order_by('username')
+
     return render(request, 'club/group_games.html', {
         'group': group,
         'games': games,
+        'is_organizer': is_organizer,
+        'member_owners': member_owners,
+        'show_group_owned': show_group_owned,
+        'selected_owners': selected_owners,
+        'total_count': total_count,
     })
 
 
@@ -1427,6 +1500,10 @@ def group_dashboard(request, slug):
 
     is_member = group.is_member(request.user) if request.user.is_authenticated else False
     is_admin_user = group.is_admin(request.user) if request.user.is_authenticated else False
+    is_organizer_user = (
+        request.user.is_authenticated
+        and is_group_organizer(request.user, group)
+    )
 
     members = GroupMembership.objects.filter(
         group=group,
@@ -1441,6 +1518,7 @@ def group_dashboard(request, slug):
         'group': group,
         'is_member': is_member,
         'is_admin': is_admin_user,
+        'is_organizer': is_organizer_user,
         'members': members,
         'upcoming_events': upcoming_events,
     })

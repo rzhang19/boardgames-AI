@@ -40,6 +40,9 @@
     <div class="action-bar">
         <a href="{% url 'group_event_list' group.slug %}" class="btn btn-primary btn-sm">Events</a>
         <a href="{% url 'group_games' group.slug %}" class="btn btn-outline btn-sm">Games</a>
+        {% if is_organizer %}
+        <a href="{% url 'group_game_add' group.slug %}" class="btn btn-outline btn-sm">Add Group Game</a>
+        {% endif %}
         <a href="{% url 'group_members' group.slug %}" class="btn btn-outline btn-sm">Members</a>
         {% if is_admin %}
         <a href="{% url 'group_members_manage' group.slug %}" class="btn btn-outline btn-sm">Manage Members</a>

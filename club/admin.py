@@ -15,8 +15,8 @@ class VerifiedIconAdmin(admin.ModelAdmin):
 
 @admin.register(BoardGame)
 class BoardGameAdmin(admin.ModelAdmin):
-    list_display = ('name', 'owner', 'complexity', 'bgg_weight', 'min_players', 'max_players', 'created_at')
-    list_filter = ('owner', 'complexity')
+    list_display = ('name', 'owner', 'group', 'complexity', 'bgg_weight', 'min_players', 'max_players', 'created_at')
+    list_filter = ('owner', 'group', 'complexity')
     search_fields = ('name',)
 
 

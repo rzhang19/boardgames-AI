@@ -12,6 +12,10 @@
     <p class="alert alert-warning">This game belongs to {{ game.owner.username }}.</p>
     {% endif %}
 
+    {% if game.group %}
+    <p class="alert alert-warning">This is a group-owned game for "{{ game.group.name }}".</p>
+    {% endif %}
+
     <form method="post">
         {% csrf_token %}
         <div class="btn-group">

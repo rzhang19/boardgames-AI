@@ -30,6 +30,7 @@ urlpatterns = [
     path('groups/<slug:slug>/leave/', views.group_leave, name='group_leave'),
     path('groups/<slug:slug>/join-requests/', views.group_join_request_manage, name='group_join_request_manage'),
     path('groups/<slug:slug>/games/', views.group_games, name='group_games'),
+    path('groups/<slug:slug>/games/add/', views.group_game_add, name='group_game_add'),
     path('groups/<slug:slug>/invite/', views.group_invite_create, name='group_invite_create'),
     path('invite/<str:token>/', views.group_invite_accept, name='group_invite_accept'),
     path('games/', views.game_list, name='game_list'),

@@ -11,7 +11,13 @@
 
     <h1>{{ game.name }}</h1>
 
-    <p><strong>Owner:</strong> <a href="{% url 'public_profile' game.owner.username %}">{{ game.owner.username }}</a>{% verified_badge game.owner %}</p>
+    <p><strong>Owner:</strong>
+        {% if game.group %}
+            <a href="{% url 'group_dashboard' game.group.slug %}">{{ game.group.name }}</a> (Group)
+        {% else %}
+            <a href="{% url 'public_profile' game.owner.username %}">{{ game.owner.username }}</a>{% verified_badge game.owner %}
+        {% endif %}
+    </p>
 
     {% if game.description %}
     <p><strong>Description:</strong> {{ game.description }}</p>
@@ -40,7 +46,7 @@
     {% endif %}
 
     <div class="btn-group">
-        {% if user == game.owner or user.is_superuser %}
+        {% if can_edit_game %}
         <a href="{% url 'game_edit' game.pk %}" class="btn btn-primary btn-sm">Edit</a>
         <a href="{% url 'game_delete' game.pk %}" class="btn btn-danger btn-sm">Delete</a>
         {% endif %}

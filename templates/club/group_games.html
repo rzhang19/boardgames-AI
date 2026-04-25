@@ -11,7 +11,35 @@
             <p class="group-card-meta">Games owned by group members</p>
         </div>
     </div>
+    {% if is_organizer %}
+    <div class="action-bar">
+        <a href="{% url 'group_game_add' group.slug %}" class="btn btn-primary btn-sm">Add Group Game</a>
+    </div>
+    {% endif %}
 </div>
+
+<form method="get" class="filter-bar">
+    <div class="filter-group">
+        <label class="inline-checkbox">
+            <input type="checkbox" name="group_owned" value="1" {% if show_group_owned %}checked{% endif %} onchange="this.value = this.checked ? '1' : '0'; this.form.submit();">
+            Group-owned Games
+        </label>
+    </div>
+    {% if member_owners %}
+    <div class="filter-group">
+        <label>Owners</label>
+        {% for owner in member_owners %}
+        <label class="inline-checkbox" style="display: block; margin-left: 1rem;">
+            <input type="checkbox" name="owner" value="{{ owner.username }}" {% if owner.username in selected_owners or not selected_owners %}checked{% endif %} onchange="this.form.submit();">
+            {{ owner.username }}
+        </label>
+        {% endfor %}
+    </div>
+    {% endif %}
+    <div class="filter-actions">
+        <a href="{% url 'group_games' group.slug %}" class="btn btn-neutral btn-sm">Clear Filters</a>
+    </div>
+</form>
 
 {% if games %}
 <table>
@@ -43,14 +71,24 @@
                     -
                 {% endif %}
             </td>
-            <td data-label="Owner"><a href="{% url 'public_profile' game.owner.username %}">{{ game.owner.username }}</a>{% verified_badge game.owner %}</td>
+            <td data-label="Owner">
+                {% if game.group %}
+                    <a href="{% url 'group_dashboard' game.group.slug %}">{{ game.group.name }}</a> (Group)
+                {% else %}
+                    <a href="{% url 'public_profile' game.owner.username %}">{{ game.owner.username }}</a>{% verified_badge game.owner %}
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
 {% else %}
 <div class="empty-state">
+    {% if total_count == 0 %}
     <p>No members have added games yet.</p>
+    {% else %}
+    <p>No games match the current filters.</p>
+    {% endif %}
 </div>
 {% endif %}
 {% endblock %}
