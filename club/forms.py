@@ -1,11 +1,14 @@
 from datetime import datetime, time as dt_time
 
 from django import forms
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.hashers import check_password
+from django.db.models import Q
 from django.utils import timezone
 
-from .models import BoardGame, Event, Group, GroupMembership, VerifiedIcon, Vote
+from .models import BoardGame, Event, Group, GroupMembership, PasswordHistory, VerifiedIcon, Vote
 from .timezone_utils import get_timezone_choices, is_valid_timezone
 from .utils import MAX_FILE_SIZE, parse_bgg_link, validate_image_size
 
@@ -56,10 +59,48 @@ class SetPasswordForm(forms.Form):
         widget=forms.PasswordInput,
     )
 
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+
     def clean(self):
         cleaned_data = super().clean()
         if cleaned_data.get('new_password1') != cleaned_data.get('new_password2'):
             raise forms.ValidationError('Passwords do not match.')
+
+        if self.user:
+            new_password = cleaned_data.get('new_password1')
+            if new_password:
+                history = PasswordHistory.objects.filter(
+                    user=self.user
+                ).order_by('-created_at')[:5]
+                for record in history:
+                    if check_password(new_password, record.password):
+                        raise forms.ValidationError(
+                            'Password cannot be one of the last 5 passwords you used.'
+                        )
+
+        return cleaned_data
+
+
+class PasswordResetForm(forms.Form):
+    email_or_username = forms.CharField(
+        label='Email or Username',
+        widget=forms.TextInput(attrs={'autofocus': True}),
+    )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        email_or_username = cleaned_data.get('email_or_username', '').strip()
+        if not email_or_username:
+            raise forms.ValidationError('Please enter your email or username.')
+
+        user = User.objects.filter(Q(email=email_or_username) | Q(username=email_or_username)).first()
+        if not user:
+            raise forms.ValidationError('No account found with that email or username.')
+        if not user.email:
+            raise forms.ValidationError('This account has no email address. Please contact an admin.')
+        cleaned_data['user'] = user
         return cleaned_data
 
 

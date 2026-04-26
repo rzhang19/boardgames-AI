@@ -18,10 +18,10 @@ from .bgg import fetch_bgg_game, fetch_bgg_weight, search_bgg, weight_to_complex
 from .borda import calculate_borda_scores
 from .forms import (
     BetaAccessForm, BoardGameForm, EventForm, GroupCreateForm, GroupSettingsForm,
-    RecurringEventForm, SetPasswordForm, SettingsForm, SuccessorPickForm,
+    PasswordResetForm, RecurringEventForm, SetPasswordForm, SettingsForm, SuccessorPickForm,
     UserAddForm, UserManageForm, RegistrationForm, VerifiedIconForm, VoteForm,
 )
-from .models import BoardGame, Event, EventAttendance, Group, GroupCreationLog, GroupInvite, GroupJoinRequest, GroupMembership, Notification, SiteSettings, VerifiedIcon, Vote
+from .models import BoardGame, Event, EventAttendance, Group, GroupCreationLog, GroupInvite, GroupJoinRequest, GroupMembership, Notification, PasswordHistory, SiteSettings, VerifiedIcon, Vote
 from .notifications import (
     generate_missing_complexity_notifications,
     generate_missing_max_players_notifications,
@@ -57,6 +57,20 @@ from .permissions import (
     is_group_member,
     is_group_organizer,
 )
+
+
+def save_password_history(user, password):
+    PasswordHistory.objects.create(user=user, password=password)
+    history = PasswordHistory.objects.filter(user=user).order_by('-created_at')[5:]
+    for record in history:
+        record.delete()
+
+
+def is_protected_user(user):
+    protected = getattr(settings, 'PROTECTED_USERNAMES', '')
+    if not protected:
+        return False
+    return user.username in [u.strip() for u in protected.split(',') if u.strip()]
 from .timezone_utils import is_valid_timezone
 from .utils import parse_bgg_link, resize_group_image, resize_profile_picture
 
@@ -227,10 +241,13 @@ def user_add(request):
             if temp_pw:
                 user.set_password(temp_pw)
                 user.must_change_password = True
+                user.email_verified = False
+                user.save()
+                save_password_history(user, user.password)
             else:
                 user.set_unusable_password()
-            user.email_verified = False
-            user.save()
+                user.email_verified = False
+                user.save()
             if user.email:
                 signer = TimestampSigner()
                 token = signer.sign(user.pk)
@@ -276,18 +293,26 @@ def user_set_password(request, token):
 
     user = get_object_or_404(User, pk=user_pk)
 
+    if is_protected_user(user):
+        return render(request, 'registration/set_password.html', {
+            'form': None,
+            'protected': True,
+        })
+
     if request.method == 'POST':
-        form = SetPasswordForm(request.POST)
+        form = SetPasswordForm(request.POST, user=user)
         if form.is_valid():
+            old_password = user.password
             user.password = make_password(form.cleaned_data['new_password1'])
             user.email_verified = True
             user.save()
+            save_password_history(user, old_password)
             return render(request, 'registration/set_password.html', {
                 'form': None,
                 'success': True,
             })
     else:
-        form = SetPasswordForm()
+        form = SetPasswordForm(user=user)
 
     return render(request, 'registration/set_password.html', {
         'form': form,
@@ -301,8 +326,14 @@ def forced_password_change(request):
     if not request.user.must_change_password:
         return redirect('dashboard')
 
+    if is_protected_user(request.user):
+        return render(request, 'club/forced_password_change.html', {
+            'form': None,
+            'protected': True,
+        })
+
     if request.method == 'POST':
-        form = SetPasswordForm(request.POST)
+        form = SetPasswordForm(request.POST, user=request.user)
         if form.is_valid():
             new_pw = form.cleaned_data['new_password1']
             if check_password(new_pw, request.user.password):
@@ -311,13 +342,15 @@ def forced_password_change(request):
                     'Your new password must be different from your temporary password.',
                 )
             else:
+                old_password = request.user.password
                 request.user.set_password(new_pw)
                 request.user.must_change_password = False
                 request.user.save()
+                save_password_history(request.user, old_password)
                 login(request, request.user)
                 return redirect('dashboard')
     else:
-        form = SetPasswordForm()
+        form = SetPasswordForm(user=request.user)
 
     return render(request, 'club/forced_password_change.html', {'form': form})
 
@@ -349,6 +382,68 @@ def beta_access(request):
         form = BetaAccessForm()
 
     return render(request, 'club/beta_access.html', {'form': form})
+
+
+def password_reset(request):
+    if request.method == 'POST':
+        form = PasswordResetForm(request.POST)
+        if form.is_valid():
+            user = form.cleaned_data['user']
+            if is_protected_user(user):
+                return render(request, 'registration/password_reset.html', {
+                    'form': form,
+                    'protected': True,
+                })
+            signer = TimestampSigner()
+            token = signer.sign(user.pk)
+            reset_url = request.build_absolute_uri(f'/password_reset/{token}/')
+            send_mail(
+                'Password Reset - Board Game Club',
+                f'Reset your password here: {reset_url}',
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+            )
+            return render(request, 'registration/password_reset_sent.html', {
+                'email': user.email,
+            })
+    else:
+        form = PasswordResetForm()
+    return render(request, 'registration/password_reset.html', {'form': form})
+
+
+def password_reset_form(request, token):
+    signer = TimestampSigner()
+    try:
+        user_pk = signer.unsign(token, max_age=3600)
+    except Exception:
+        return render(request, 'registration/password_reset_form.html', {
+            'form': None,
+            'invalid_token': True,
+        })
+
+    user = get_object_or_404(User, pk=user_pk)
+
+    if is_protected_user(user):
+        return render(request, 'registration/password_reset_form.html', {
+            'form': None,
+            'protected': True,
+        })
+
+    if request.method == 'POST':
+        form = SetPasswordForm(request.POST, user=user)
+        if form.is_valid():
+            old_password = user.password
+            user.password = make_password(form.cleaned_data['new_password1'])
+            user.save()
+            save_password_history(user, old_password)
+            return render(request, 'registration/password_reset_done.html')
+    else:
+        form = SetPasswordForm(user=user)
+
+    return render(request, 'registration/password_reset_form.html', {
+        'form': form,
+        'invalid_token': False,
+    })
 
 
 def dashboard(request):

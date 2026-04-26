@@ -477,3 +477,138 @@ class UsernameValidationTest(TestCase):
         })
         self.assertEqual(response.status_code, 302)
         self.assertTrue(User.objects.filter(username='abcd').exists())
+
+
+@tag("integration")
+class PasswordHistoryTest(TestCase):
+
+    def test_password_history_stored_on_forced_change(self):
+        user = User.objects.create_user(
+            username='historytester',
+            password='TempPassword123',
+            must_change_password=True,
+        )
+        self.client.login(username='historytester', password='TempPassword123')
+        response = self.client.post(reverse('forced_password_change'), {
+            'new_password1': 'NewPassword456',
+            'new_password2': 'NewPassword456',
+        })
+        self.assertEqual(response.status_code, 302)
+        from club.models import PasswordHistory
+        self.assertTrue(PasswordHistory.objects.filter(user=user).exists())
+
+    def test_password_history_limits_to_five(self):
+        user = User.objects.create_user(
+            username='historylimit',
+            password='Pass1',
+            must_change_password=True,
+        )
+        from club.models import PasswordHistory
+        from django.contrib.auth.hashers import make_password
+        self.client.login(username='historylimit', password='Pass1')
+        for i in range(6):
+            self.client.post(reverse('forced_password_change'), {
+                'new_password1': f'Pass{i+2}',
+                'new_password2': f'Pass{i+2}',
+            })
+            user.refresh_from_db()
+            user.must_change_password = True
+            user.save()
+            self.client.login(username='historylimit', password=f'Pass{i+2}')
+        history_count = PasswordHistory.objects.filter(user=user).count()
+        self.assertLessEqual(history_count, 5)
+
+    def test_can_use_different_password(self):
+        user = User.objects.create_user(
+            username='differentpass',
+            password='OldPassword123',
+            must_change_password=True,
+        )
+        self.client.login(username='differentpass', password='OldPassword123')
+        response = self.client.post(reverse('forced_password_change'), {
+            'new_password1': 'FreshPassword456',
+            'new_password2': 'FreshPassword456',
+        })
+        self.assertEqual(response.status_code, 302)
+
+
+@tag("integration")
+class PasswordResetTest(TestCase):
+
+    def test_password_reset_page_loads(self):
+        response = self.client.get(reverse('password_reset'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_password_reset_with_valid_email_sends_link(self):
+        User.objects.create_user(
+            username='resetuser',
+            email='reset@example.com',
+            password='SomePassword123',
+        )
+        response = self.client.post(reverse('password_reset'), {
+            'email_or_username': 'reset@example.com',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'sent')
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_password_reset_form_valid_token(self):
+        user = User.objects.create_user(
+            username='formuser',
+            email='form@example.com',
+            password='OldPass123',
+        )
+        signer = TimestampSigner()
+        token = signer.sign(user.pk)
+        response = self.client.get(reverse('password_reset_form', kwargs={'token': token}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'New password')
+
+    def test_password_reset_with_invalid_token_fails(self):
+        response = self.client.get(reverse('password_reset_form', kwargs={'token': 'invalid'}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Invalid')
+
+    def test_password_reset_updates_password(self):
+        user = User.objects.create_user(
+            username='resetpass',
+            email='resetpass@example.com',
+            password='OriginalPass',
+        )
+        signer = TimestampSigner()
+        token = signer.sign(user.pk)
+        response = self.client.post(reverse('password_reset_form', kwargs={'token': token}), {
+            'new_password1': 'ResetPass123',
+            'new_password2': 'ResetPass123',
+        })
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertNotEqual(user.password, 'OriginalPass')
+
+
+@tag("integration")
+class ProtectedUserTest(TestCase):
+
+    @override_settings(PROTECTED_USERNAMES='protecteduser')
+    def test_protected_user_cannot_use_forced_password_change(self):
+        user = User.objects.create_user(
+            username='protecteduser',
+            password='TempPassword123',
+            must_change_password=True,
+        )
+        self.client.login(username='protecteduser', password='TempPassword123')
+        response = self.client.get(reverse('forced_password_change'))
+        self.assertContains(response, 'cannot have its password changed')
+
+    @override_settings(PROTECTED_USERNAMES='protecteduser')
+    def test_protected_user_cannot_use_password_reset(self):
+        User.objects.create_user(
+            username='protecteduser',
+            email='protected@example.com',
+            password='SomePassword123',
+        )
+        response = self.client.post(reverse('password_reset'), {
+            'email_or_username': 'protecteduser',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'cannot have its password reset')
