@@ -1,6 +1,6 @@
+import os
 from datetime import timedelta
 
-from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
@@ -19,31 +19,11 @@ class Command(BaseCommand):
     help = 'Seed the staging database with test data'
 
     TEST_USERS = [
-        {
-            'username': 'testuser',
-            'password': 'Testpass123!',
-            'is_site_admin': False,
-        },
-        {
-            'username': 'testorganizer',
-            'password': 'Testpass123!',
-            'is_site_admin': False,
-        },
-        {
-            'username': 'testadmin',
-            'password': 'Testpass123!',
-            'is_site_admin': True,
-        },
-        {
-            'username': 'newtestadmin',
-            'password': 'Testpass123!',
-            'is_site_admin': False,
-        },
-        {
-            'username': 'testsiteadmin',
-            'password': 'Testpass123!',
-            'is_site_admin': True,
-        },
+        {'username': 'testuser', 'is_site_admin': False},
+        {'username': 'testorganizer', 'is_site_admin': False},
+        {'username': 'testadmin', 'is_site_admin': True},
+        {'username': 'newtestadmin', 'is_site_admin': False},
+        {'username': 'testsiteadmin', 'is_site_admin': True},
     ]
 
     GAMES = [
@@ -73,17 +53,23 @@ class Command(BaseCommand):
             User.objects.filter(username__in=all_usernames).delete()
 
         users = {}
+        password = os.environ.get('SEED_USER_PASSWORD')
+        if not password:
+            self.stderr.write(self.style.ERROR(
+                'SEED_USER_PASSWORD environment variable is required. '
+                'Set it in your .env or .env.staging file.'
+            ))
+            return
         for user_data in self.TEST_USERS:
             user = User.objects.create_user(
                 username=user_data['username'],
-                password=user_data['password'],
+                password=password,
                 is_site_admin=user_data['is_site_admin'],
                 email_verified=True,
             )
             users[user_data['username']] = user
             role = 'site admin' if user_data['is_site_admin'] else 'user'
             self.stdout.write(f'  Created {user_data["username"]} ({role})')
-
         if settings.VIEW_ONLY_PASSWORD:
             viewer = User.objects.create_user(
                 username=view_only_username,
@@ -185,11 +171,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'\nSeed complete! Created {len(users)} users, {len(games)} games, '
             f'2 groups, 2 events, and votes.\n'
-            f'Login credentials:\n'
-            f'  testuser / Testpass123! (member of Workday Boardgames)\n'
-            f'  testorganizer / Testpass123! (organizer of Workday Boardgames)\n'
-            f'  testadmin / Testpass123! (site admin, admin of Workday Boardgames)\n'
-            f'  newtestadmin / Testpass123! (admin of Public Board Games Group)\n'
-            f'  testsiteadmin / Testpass123! (site admin, no group)\n'
-            f'{viewer_line}'
+            f'Login credentials (password from SEED_USER_PASSWORD env var):\n'
+            f'  testuser (member of Workday Boardgames)\n'
+            f'  testorganizer (organizer of Workday Boardgames)\n'
+            f'  testadmin (site admin, admin of Workday Boardgames)\n'
+            f'  newtestadmin (admin of Public Board Games Group)\n'
+            f'  testsiteadmin (site admin, no group)'
         ))

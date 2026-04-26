@@ -338,6 +338,33 @@ select:focus {
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
+.pw-toggle-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.pw-toggle-wrapper input {
+    padding-right: 40px;
+}
+
+.pw-toggle-btn {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.1rem;
+    padding: 0;
+    line-height: 1;
+    opacity: 0.6;
+    color: var(--text);
+}
+
+.pw-toggle-btn:hover {
+    opacity: 1;
+}
+
 input[type="checkbox"] {
     width: auto;
     margin-right: 6px;

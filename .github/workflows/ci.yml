@@ -12,6 +12,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check for sensitive files
+        run: |
+          for f in .env .env.staging; do
+            if [ -f "$f" ]; then
+              echo "::error::$f is tracked - remove it and ensure it is in .gitignore"
+              exit 1
+            fi
+          done
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

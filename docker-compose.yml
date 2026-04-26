@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-boardgameclub}
       POSTGRES_USER: ${POSTGRES_USER:-boardgameclub}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -31,7 +31,7 @@ services:
     environment:
       POSTGRES_DB: ${STAGING_POSTGRES_DB:-boardgameclub_staging}
       POSTGRES_USER: ${STAGING_POSTGRES_USER:-boardgameclub}
-      POSTGRES_PASSWORD: ${STAGING_POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${STAGING_POSTGRES_PASSWORD:?STAGING_POSTGRES_PASSWORD must be set in .env.staging}
     volumes:
       - staging_postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
