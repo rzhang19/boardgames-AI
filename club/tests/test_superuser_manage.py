@@ -62,7 +62,7 @@ class ManageUsersAccessTest(TestCase):
 
 
 @tag("integration")
-class ManageUsersPreviewTest(TestCase):
+class ManageUsersPageTest(TestCase):
 
     def setUp(self):
         self.superuser = User.objects.create_superuser(
@@ -71,101 +71,16 @@ class ManageUsersPreviewTest(TestCase):
         self.user1 = User.objects.create_user(
             username='user1', password='testpass123'
         )
-        self.user2 = User.objects.create_user(
-            username='user2', password='testpass123'
-        )
-        self.user3 = User.objects.create_user(
-            username='user3', password='testpass123'
-        )
         self.client.login(username='superuser', password='testpass123')
 
-    def test_preview_no_changes_shows_no_changes_message(self):
-        data = {
-            'form-TOTAL_FORMS': '3',
-            'form-INITIAL_FORMS': '3',
-            'form-MIN_NUM_FORMS': '0',
-            'form-MAX_NUM_FORMS': '1000',
-            'form-0-id': str(self.user1.pk),
-            'form-1-id': str(self.user2.pk),
-            'form-2-id': str(self.user3.pk),
-        }
-        response = self.client.post(reverse('manage_users'), data)
+    def test_manage_users_shows_user_list(self):
+        response = self.client.get(reverse('manage_users'))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'No changes')
+        self.assertContains(response, 'user1')
 
-
-@tag("integration")
-class ManageUsersConfirmTest(TestCase):
-
-    def setUp(self):
-        self.superuser = User.objects.create_superuser(
-            username='superuser', password='testpass123'
-        )
-        self.user1 = User.objects.create_user(
-            username='user1', password='testpass123'
-        )
-        self.user2 = User.objects.create_user(
-            username='user2', password='testpass123'
-        )
-        self.client.login(username='superuser', password='testpass123')
-
-    def test_confirm_with_no_pending_changes_does_nothing(self):
-        session = self.client.session
-        session['pending_role_changes'] = {}
-        session.save()
-
-        response = self.client.post(reverse('manage_users_confirm'))
-        self.assertEqual(response.status_code, 302)
-
-        self.user1.refresh_from_db()
-        self.user2.refresh_from_db()
-        self.assertFalse(self.user1.is_site_admin)
-        self.assertFalse(self.user2.is_site_admin)
-
-    def test_superuser_can_promote_site_admin(self):
-        session = self.client.session
-        session['pending_role_changes'] = {
-            str(self.user1.pk): {'is_site_admin': True},
-        }
-        session.save()
-
-        self.client.post(reverse('manage_users_confirm'))
-        self.user1.refresh_from_db()
-        self.assertTrue(self.user1.is_site_admin)
-
-
-@tag("integration")
-class ManageUsersCancelTest(TestCase):
-
-    def setUp(self):
-        self.superuser = User.objects.create_superuser(
-            username='superuser', password='testpass123'
-        )
-        self.user1 = User.objects.create_user(
-            username='user1', password='testpass123'
-        )
-        self.client.login(username='superuser', password='testpass123')
-
-    def test_cancel_clears_session_and_redirects(self):
-        session = self.client.session
-        session['pending_role_changes'] = {
-            str(self.user1.pk): {'is_site_admin': True},
-        }
-        session.save()
-
-        response = self.client.get(reverse('manage_users_cancel'))
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('manage_users'))
-
-        self.user1.refresh_from_db()
-        self.assertFalse(self.user1.is_site_admin)
-
-    def test_cancel_on_form_page_redirects_to_dashboard(self):
-        response = self.client.post(reverse('manage_users'), {
-            'cancel': 'true',
-        })
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('dashboard'))
+    def test_manage_users_shows_ids(self):
+        response = self.client.get(reverse('manage_users'))
+        self.assertContains(response, str(self.user1.pk))
 
 
 @tag("integration")
@@ -477,32 +392,22 @@ class AdminOrganizerEnforcementTest(TestCase):
 
     def test_superuser_demoting_site_admin_to_regular(self):
         self.client.login(username='superuser', password='testpass123')
-        session = self.client.session
-        session['pending_role_changes'] = {
-            str(self.site_admin.pk): {'is_site_admin': False},
-        }
-        session.save()
-
-        self.client.post(reverse('manage_users_confirm'))
+        self.client.post(reverse('manage_site_admins'), {
+            'remove': [str(self.site_admin.pk)],
+        })
         self.site_admin.refresh_from_db()
         self.assertFalse(self.site_admin.is_site_admin)
 
-    def test_site_admin_sees_site_admin_column(self):
+    def test_site_admin_does_not_see_site_admin_column(self):
         self.client.login(username='siteadmin', password='testpass123')
         response = self.client.get(reverse('manage_users'))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Site Admin')
+        self.assertNotContains(response, 'is_site_admin')
 
-    def test_site_admin_can_promote_to_site_admin_via_preview_and_confirm(self):
+    def test_site_admin_cannot_promote_to_site_admin(self):
         self.client.login(username='siteadmin', password='testpass123')
-        data = _build_formset_data(
-            [self.regular],
-            {self.regular.pk: {'is_site_admin': True}},
-        )
-        response = self.client.post(reverse('manage_users'), data)
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'regular')
-
-        self.client.post(reverse('manage_users_confirm'))
+        response = self.client.post(reverse('manage_users'), {
+            'promote': self.regular.pk,
+        })
         self.regular.refresh_from_db()
-        self.assertTrue(self.regular.is_site_admin)
+        self.assertFalse(self.regular.is_site_admin)

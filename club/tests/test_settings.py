@@ -181,7 +181,7 @@ class SettingsEmailVerifiedBadgeTest(TestCase):
 
 
 @tag("integration")
-class GlobalVotingOffsetSettingsTest(TestCase):
+class GlobalVotingOffsetMovedToAdminSettingsTest(TestCase):
 
     def setUp(self):
         self.admin = User.objects.create_user(
@@ -191,42 +191,12 @@ class GlobalVotingOffsetSettingsTest(TestCase):
             username='regular', password='testpass123'
         )
 
-    def test_admin_sees_global_offset_on_settings_page(self):
+    def test_admin_does_not_see_global_offset_on_personal_settings(self):
         self.client.login(username='organizer', password='testpass123')
         response = self.client.get(reverse('user_settings'))
-        self.assertContains(response, 'Default Voting Deadline Offset')
+        self.assertNotContains(response, 'Default Voting Deadline Offset')
 
     def test_regular_user_does_not_see_global_offset(self):
         self.client.login(username='regular', password='testpass123')
         response = self.client.get(reverse('user_settings'))
         self.assertNotContains(response, 'Default Voting Deadline Offset')
-
-    def test_admin_can_set_global_offset(self):
-        self.client.login(username='organizer', password='testpass123')
-        response = self.client.post(reverse('user_settings'), {
-            'email': self.admin.email,
-            'timezone': 'UTC',
-            'default_voting_offset_hours': '1',
-            'default_voting_offset_minutes_field': '30',
-        })
-        self.assertEqual(response.status_code, 302)
-        site_settings = SiteSettings.load()
-        self.assertEqual(site_settings.default_voting_offset_minutes, 90)
-
-    def test_global_offset_defaults_to_zero(self):
-        site_settings = SiteSettings.load()
-        self.assertEqual(site_settings.default_voting_offset_minutes, 0)
-
-    def test_admin_can_set_offset_to_zero(self):
-        site_settings = SiteSettings.load()
-        site_settings.default_voting_offset_minutes = 60
-        site_settings.save()
-        self.client.login(username='organizer', password='testpass123')
-        self.client.post(reverse('user_settings'), {
-            'email': self.admin.email,
-            'timezone': 'UTC',
-            'default_voting_offset_hours': '0',
-            'default_voting_offset_minutes_field': '0',
-        })
-        site_settings.refresh_from_db()
-        self.assertEqual(site_settings.default_voting_offset_minutes, 0)

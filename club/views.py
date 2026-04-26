@@ -143,61 +143,9 @@ def _get_manage_queryset(request):
 
 @site_admin_required
 def manage_users(request):
-    if 'cancel' in request.POST:
-        return redirect('dashboard')
-
     queryset = _get_manage_queryset(request)
-
-    UserFormSet = modelformset_factory(
-        User,
-        form=UserManageForm,
-        extra=0,
-    )
-
-    if request.method == 'POST':
-        formset = UserFormSet(request.POST, queryset=queryset)
-        if formset.is_valid():
-            changes = {}
-            for form in formset:
-                if form.has_changed():
-                    user_obj = form.instance
-                    changes[str(user_obj.pk)] = {
-                        'is_site_admin': form.cleaned_data.get('is_site_admin', False),
-                    }
-
-            promote_site_admin_ids = []
-            demote_site_admin_ids = []
-            actual_changes = {}
-
-            for uid, role_changes in changes.items():
-                user = User.objects.get(pk=uid)
-                if user.is_site_admin == role_changes['is_site_admin']:
-                    continue
-                actual_changes[uid] = role_changes
-                if role_changes['is_site_admin']:
-                    promote_site_admin_ids.append(uid)
-                else:
-                    demote_site_admin_ids.append(uid)
-
-            if not actual_changes:
-                formset = UserFormSet(queryset=queryset)
-                return render(request, 'club/manage_users.html', {
-                    'formset': formset,
-                    'no_changes': True,
-                    'is_superuser': request.user.is_superuser,
-                })
-
-            request.session['pending_role_changes'] = actual_changes
-
-            return render(request, 'club/manage_users_confirm.html', {
-                'promote_site_admin_users': User.objects.filter(pk__in=promote_site_admin_ids),
-                'demote_site_admin_users': User.objects.filter(pk__in=demote_site_admin_ids),
-            })
-    else:
-        formset = UserFormSet(queryset=queryset)
-
     return render(request, 'club/manage_users.html', {
-        'formset': formset,
+        'users': queryset.order_by('username'),
         'is_superuser': request.user.is_superuser,
     })
 
@@ -573,18 +521,6 @@ def user_settings(request):
                         [user.email],
                     )
 
-            if request.user.is_site_admin:
-                offset_hours = request.POST.get('default_voting_offset_hours', '0')
-                offset_mins = request.POST.get('default_voting_offset_minutes_field', '0')
-                try:
-                    total_minutes = int(offset_hours) * 60 + int(offset_mins)
-                except (ValueError, TypeError):
-                    total_minutes = 0
-                site_settings = SiteSettings.load()
-                if site_settings.default_voting_offset_minutes != total_minutes:
-                    site_settings.default_voting_offset_minutes = total_minutes
-                    site_settings.save()
-
             return redirect('user_settings')
     else:
         form = SettingsForm(initial={
@@ -597,20 +533,9 @@ def user_settings(request):
             'show_date_joined': request.user.show_date_joined,
         })
 
-    site_settings = SiteSettings.load()
-    current_total = site_settings.default_voting_offset_minutes
-    offset_hours = current_total // 60
-    offset_mins = current_total % 60
-
     return render(request, 'club/settings.html', {
         'form': form,
         'verified_icons': VerifiedIcon.objects.all().order_by('name'),
-        'icon_manage_form': VerifiedIconForm(),
-        'site_settings': site_settings,
-        'offset_hour_choices': list(range(0, 25)),
-        'offset_minute_choices': list(range(0, 60, 5)),
-        'current_offset_hours': offset_hours,
-        'current_offset_minutes': offset_mins,
     })
 
 
@@ -1413,6 +1338,104 @@ def _admin_required(request):
     return None
 
 
+@site_admin_required
+def admin_settings(request):
+    site_settings = SiteSettings.load()
+    current_total = site_settings.default_voting_offset_minutes
+    offset_hours = current_total // 60
+    offset_mins = current_total % 60
+
+    if request.method == 'POST':
+        offset_hours = request.POST.get('default_voting_offset_hours', '0')
+        offset_mins_val = request.POST.get('default_voting_offset_minutes_field', '0')
+        try:
+            total_minutes = int(offset_hours) * 60 + int(offset_mins_val)
+        except (ValueError, TypeError):
+            total_minutes = 0
+        if site_settings.default_voting_offset_minutes != total_minutes:
+            site_settings.default_voting_offset_minutes = total_minutes
+            site_settings.save()
+        return redirect('admin_settings')
+
+    site_admins = User.objects.filter(
+        Q(is_site_admin=True) | Q(is_superuser=True),
+    ).order_by('username')
+
+    return render(request, 'club/site_admin_settings.html', {
+        'verified_icons': VerifiedIcon.objects.all().order_by('name'),
+        'icon_manage_form': VerifiedIconForm(),
+        'site_settings': site_settings,
+        'offset_hour_choices': list(range(0, 25)),
+        'offset_minute_choices': list(range(0, 60, 5)),
+        'current_offset_hours': offset_hours,
+        'current_offset_minutes': offset_mins,
+        'site_admins': site_admins,
+    })
+
+
+def _superuser_required(request):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    if not request.user.is_superuser:
+        raise PermissionDenied
+    return None
+
+
+def manage_site_admins(request):
+    redirect_resp = _superuser_required(request)
+    if redirect_resp:
+        return redirect_resp
+
+    if request.method == 'POST':
+        add_ids = request.POST.getlist('add')
+        remove_ids = request.POST.getlist('remove')
+        add_set = set(add_ids) - set(remove_ids)
+        remove_set = set(remove_ids) - set(add_ids)
+
+        for uid in add_set:
+            try:
+                user = User.objects.get(pk=int(uid))
+                if not user.is_superuser:
+                    user.is_site_admin = True
+                    user.save(update_fields=['is_site_admin'])
+            except (User.DoesNotExist, ValueError, TypeError):
+                pass
+
+        for uid in remove_set:
+            try:
+                user = User.objects.get(pk=int(uid))
+                if not user.is_superuser:
+                    user.is_site_admin = False
+                    user.save(update_fields=['is_site_admin'])
+            except (User.DoesNotExist, ValueError, TypeError):
+                pass
+
+        return redirect('manage_site_admins')
+
+    current_admins = User.objects.filter(is_site_admin=True).order_by('username')
+    return render(request, 'club/manage_site_admins.html', {
+        'current_admins': current_admins,
+    })
+
+
+def manage_site_admins_search(request):
+    redirect_resp = _superuser_required(request)
+    if redirect_resp:
+        return redirect_resp
+
+    query = request.GET.get('q', '').strip()
+    results = []
+    if query:
+        qs = User.objects.exclude(is_superuser=True).exclude(is_site_admin=True)
+        if query.isdigit():
+            qs = qs.filter(pk=int(query))
+        else:
+            qs = qs.filter(username__icontains=query)
+        results = list(qs[:10].values('id', 'username'))
+
+    return JsonResponse({'results': results})
+
+
 def add_verified_icon(request):
     redirect_resp = _admin_required(request)
     if redirect_resp:
@@ -1421,17 +1444,13 @@ def add_verified_icon(request):
         form = VerifiedIconForm(request.POST, request.FILES)
         if form.is_valid():
             form.save()
-            return redirect('user_settings')
-        return render(request, 'club/settings.html', {
-            'form': SettingsForm(initial={
-                'email': request.user.email,
-                'timezone': request.user.timezone or 'UTC',
-                'verified_icon': request.user.verified_icon_id or '',
-            }),
+            return redirect('admin_settings')
+        return render(request, 'club/site_admin_settings.html', {
             'verified_icons': VerifiedIcon.objects.all().order_by('name'),
             'icon_manage_form': form,
+            'icon_add_error': True,
         })
-    return redirect('user_settings')
+    return redirect('admin_settings')
 
 
 def delete_verified_icon(request, pk):
@@ -1442,18 +1461,13 @@ def delete_verified_icon(request, pk):
     if request.method == 'POST':
         user_count = User.objects.filter(verified_icon=icon).count()
         if user_count > 0:
-            return render(request, 'club/settings.html', {
-                'form': SettingsForm(initial={
-                    'email': request.user.email,
-                    'timezone': request.user.timezone or 'UTC',
-                    'verified_icon': request.user.verified_icon_id or '',
-                }),
+            return render(request, 'club/site_admin_settings.html', {
                 'verified_icons': VerifiedIcon.objects.all().order_by('name'),
                 'icon_delete_error': f'Cannot delete "{icon.name}" — {user_count} user{"s" if user_count != 1 else ""} {"are" if user_count != 1 else "is"} using this icon.',
                 'icon_manage_form': VerifiedIconForm(),
             })
         icon.delete()
-    return redirect('user_settings')
+    return redirect('admin_settings')
 
 
 def notification_list(request):
@@ -1518,6 +1532,7 @@ def group_list(request):
     my_groups = [m.group for m in memberships]
     member_group_ids = {m.group_id for m in memberships}
     favorite_group_ids = {m.group_id for m in memberships if m.is_favorite}
+    admin_group_ids = {m.group_id for m in memberships if m.role == 'admin'}
 
     if tab == 'my':
         groups = my_groups
@@ -1551,6 +1566,7 @@ def group_list(request):
         'pending_requests': pending_requests,
         'member_group_ids': member_group_ids,
         'favorite_group_ids': favorite_group_ids,
+        'admin_group_ids': admin_group_ids,
     })
 
 

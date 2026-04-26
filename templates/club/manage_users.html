@@ -10,54 +10,28 @@
     <a href="{% url 'user_add' %}" class="btn btn-primary btn-sm">Add User</a>
 </div>
 
-{% if no_changes %}
-<div class="alert alert-warning">No changes detected.</div>
-{% endif %}
-
-<form method="post">
-    {% csrf_token %}
-    {{ formset.management_form }}
-    <table>
-        <thead>
-            <tr>
-                <th>Username</th>
-                {% if user.is_superuser or user.is_site_admin %}
-                <th>Site Admin</th>
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Username</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for u in users %}
+        <tr>
+            <td data-label="ID">{{ u.pk }}</td>
+            <td data-label="Username">
+                <a href="{% url 'public_profile' u.username %}">{{ u.username }}</a>{% verified_badge u %}
+            </td>
+            <td data-label="Actions">
+                {% if not u.is_superuser %}
+                <a href="{% url 'user_delete' u.pk %}" class="btn btn-danger btn-sm">Delete</a>
                 {% endif %}
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for form in formset %}
-            <tr>
-                <td data-label="Username">{{ form.id }}<a href="{% url 'public_profile' form.instance.username %}">{{ form.instance.username }}</a>{% verified_badge form.instance %}</td>
-                {% if user.is_superuser or user.is_site_admin %}
-                <td data-label="Site Admin">{{ form.is_site_admin }}</td>
-                {% endif %}
-                <td data-label="Actions">
-                    {% if not form.instance.is_superuser %}
-                    <a href="{% url 'user_delete' form.instance.pk %}" class="btn btn-danger btn-sm">Delete</a>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    <div class="btn-group">
-        <button type="submit" class="btn btn-primary">Preview Changes</button>
-        <button type="submit" name="cancel" value="true" class="btn btn-neutral">Cancel</button>
-    </div>
-</form>
-
-<style>
-    input[type="checkbox"].admin-locked {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-</style>
-
-<script>
-(function() {
-})();
-</script>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
 {% endblock %}

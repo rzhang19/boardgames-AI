@@ -37,7 +37,17 @@ def can_manage_members(user, group):
 
 
 def can_edit_group_settings(user, group):
-    return is_group_admin(user, group)
+    # NOTE: To open individual settings actions to organizers in the future,
+    # create per-action permission functions (e.g., can_edit_group_name,
+    # can_edit_group_join_policy) that check for organizer role, and call them
+    # from the group_settings view instead of this single gate function.
+    # The group_settings view should then conditionally show/disable fields
+    # based on the specific action permissions.
+    if not user.is_authenticated:
+        return False
+    return GroupMembership.objects.filter(
+        user=user, group=group, role='admin',
+    ).exists()
 
 
 def can_view_group(user, group):

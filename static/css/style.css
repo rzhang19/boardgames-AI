@@ -1185,6 +1185,21 @@ thead th a:hover {
     padding: 4px;
 }
 
+.nav-admin {
+    font-size: 0.875rem;
+    margin-right: 8px;
+    padding: 4px 10px;
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.15);
+    color: var(--nav-text);
+    text-decoration: none;
+}
+
+.nav-admin:hover {
+    background: rgba(255, 255, 255, 0.25);
+    text-decoration: none;
+}
+
 .nav-bell-icon {
     width: 22px;
     height: 22px;
@@ -1774,4 +1789,41 @@ thead th a:hover {
         font-size: 0.813rem;
         padding: 8px 12px;
     }
+}
+
+.site-admin-search {
+    position: relative;
+}
+
+.site-admin-search .search-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+}
+
+.search-results {
+    margin-top: 8px;
+}
+
+.search-result-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.search-result-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 4px;
+    background: var(--surface);
+}
+
+.group-settings-btn {
+    margin-right: 4px;
 }

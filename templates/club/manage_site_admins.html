@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% load club_tags %}
+
+{% block title %}Manage Site Admins{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1>Manage Site Admins</h1>
+
+    <div class="action-bar">
+        <a href="{% url 'admin_settings' %}" class="btn btn-neutral btn-sm">Back to Admin Settings</a>
+    </div>
+
+    <div class="card">
+        <h2>Add Site Admin</h2>
+        <div class="site-admin-search">
+            <input type="text" id="site-admin-search" placeholder="Search by username or ID..." class="search-input">
+            <div id="site-admin-search-results" class="search-results"></div>
+        </div>
+    </div>
+
+    <form method="post" id="site-admin-form">
+        {% csrf_token %}
+        <div class="card">
+            <h2>Current Site Admins</h2>
+            <table id="site-admin-table">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="site-admin-list">
+                    {% for admin in current_admins %}
+                    <tr data-user-id="{{ admin.pk }}" data-username="{{ admin.username }}">
+                        <td data-label="Username">
+                            <a href="{% url 'public_profile' admin.username %}">{{ admin.username }}</a>{% verified_badge admin %}
+                        </td>
+                        <td data-label="Actions">
+                            <button type="button" class="btn btn-sm btn-danger remove-site-admin" data-user-id="{{ admin.pk }}" data-username="{{ admin.username }}" title="Remove as Site Admin">&times;</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div id="confirm-changes" class="btn-group" style="display:none;">
+            <button type="submit" class="btn btn-primary">Confirm Changes</button>
+        </div>
+    </form>
+</div>
+
+<script>
+(function() {
+    var pendingAdds = [];
+    var pendingRemoves = [];
+    var searchInput = document.getElementById('site-admin-search');
+    var searchResults = document.getElementById('site-admin-search-results');
+    var confirmBtn = document.getElementById('confirm-changes');
+    var form = document.getElementById('site-admin-form');
+    var listBody = document.getElementById('site-admin-list');
+    var debounceTimer;
+
+    function updateConfirmVisibility() {
+        if (pendingAdds.length > 0 || pendingRemoves.length > 0) {
+            confirmBtn.style.display = 'flex';
+        } else {
+            confirmBtn.style.display = 'none';
+        }
+    }
+
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function removeRow(userId) {
+        var row = listBody.querySelector('tr[data-user-id="' + userId + '"]');
+        if (row) {
+            var removeBtn = row.querySelector('.remove-site-admin');
+            var td = removeBtn.parentElement;
+            td.innerHTML = '<span class="text-muted">Removed</span> <button type="button" class="btn btn-sm btn-outline undo-remove" data-user-id="' + userId + '" title="Undo">&#8634;</button>';
+        }
+    }
+
+    function restoreRow(userId) {
+        var row = listBody.querySelector('tr[data-user-id="' + userId + '"]');
+        if (row) {
+            var username = row.getAttribute('data-username');
+            var td = row.querySelector('td:last-child');
+            td.innerHTML = '<button type="button" class="btn btn-sm btn-danger remove-site-admin" data-user-id="' + userId + '" data-username="' + username + '" title="Remove as Site Admin">&times;</button>';
+        }
+    }
+
+    function addRow(userId, username) {
+        var existing = listBody.querySelector('tr[data-user-id="' + userId + '"]');
+        if (existing) {
+            return;
+        }
+        var tr = document.createElement('tr');
+        tr.setAttribute('data-user-id', userId);
+        tr.setAttribute('data-username', username);
+        tr.innerHTML = '<td data-label="Username"><a href="/profile/' + encodeURIComponent(username) + '/">' + escapeHtml(username) + '</a> <span class="badge badge-role-admin">NEW</span></td><td data-label="Actions"><button type="button" class="btn btn-sm btn-danger remove-site-admin" data-user-id="' + userId + '" data-username="' + escapeHtml(username) + '" title="Remove">&times;</button></td>';
+        listBody.appendChild(tr);
+    }
+
+    listBody.addEventListener('click', function(e) {
+        var btn = e.target;
+        if (btn.classList.contains('remove-site-admin')) {
+            var userId = btn.getAttribute('data-user-id');
+            var idx = pendingAdds.indexOf(userId);
+            if (idx > -1) {
+                pendingAdds.splice(idx, 1);
+                var row = listBody.querySelector('tr[data-user-id="' + userId + '"]');
+                if (row) row.remove();
+            } else {
+                pendingRemoves.push(userId);
+                removeRow(userId);
+            }
+            updateConfirmVisibility();
+        } else if (btn.classList.contains('undo-remove')) {
+            var userId = btn.getAttribute('data-user-id');
+            var idx = pendingRemoves.indexOf(userId);
+            if (idx > -1) {
+                pendingRemoves.splice(idx, 1);
+            }
+            restoreRow(userId);
+            updateConfirmVisibility();
+        }
+    });
+
+    searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        var query = searchInput.value.trim();
+        if (!query) {
+            searchResults.innerHTML = '';
+            return;
+        }
+        debounceTimer = setTimeout(function() {
+            fetch('{% url "manage_site_admins_search" %}?q=' + encodeURIComponent(query))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    searchResults.innerHTML = '';
+                    if (data.results.length === 0) {
+                        searchResults.innerHTML = '<p class="helptext">No users found.</p>';
+                        return;
+                    }
+                    var ul = document.createElement('ul');
+                    ul.className = 'search-result-list';
+                    data.results.forEach(function(user) {
+                        var li = document.createElement('li');
+                        li.innerHTML = '<a href="/profile/' + encodeURIComponent(user.username) + '/">' + escapeHtml(user.username) + '</a> <span class="text-muted">(ID: ' + user.id + ')</span>';
+                        var addBtn = document.createElement('button');
+                        addBtn.type = 'button';
+                        addBtn.className = 'btn btn-sm btn-primary';
+                        addBtn.textContent = 'Add';
+                        addBtn.setAttribute('data-user-id', String(user.id));
+                        addBtn.setAttribute('data-username', user.username);
+                        addBtn.addEventListener('click', function() {
+                            var uid = String(user.id);
+                            if (pendingAdds.indexOf(uid) === -1) {
+                                pendingAdds.push(uid);
+                                addRow(uid, user.username);
+                                updateConfirmVisibility();
+                            }
+                            searchInput.value = '';
+                            searchResults.innerHTML = '';
+                        });
+                        li.appendChild(addBtn);
+                        ul.appendChild(li);
+                    });
+                    searchResults.appendChild(ul);
+                });
+        }, 300);
+    });
+
+    form.addEventListener('submit', function() {
+        var existingInputs = form.querySelectorAll('input[name="add"], input[name="remove"]');
+        existingInputs.forEach(function(input) { input.remove(); });
+
+        pendingAdds.forEach(function(uid) {
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'add';
+            input.value = uid;
+            form.appendChild(input);
+        });
+        pendingRemoves.forEach(function(uid) {
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'remove';
+            input.value = uid;
+            form.appendChild(input);
+        });
+    });
+})();
+</script>
+{% endblock %}

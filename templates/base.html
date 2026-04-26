@@ -15,19 +15,18 @@
             <a href="{% url 'group_list' %}">Groups</a>
             {% if user.is_authenticated %}
             <a href="{% url 'game_list' %}">Games</a>
-            {% endif %}
             <a href="{% url 'event_list' %}">Events</a>
-            {% if user.is_authenticated %}
-                {% if user.is_superuser or user.is_site_admin %}
-                <a href="{% url 'manage_users' %}">Manage Users</a>
-                {% endif %}
             {% else %}
-                <a href="{% url 'login' %}">Login</a>
-                <a href="{% url 'register' %}">Register</a>
+            <a href="{% url 'event_list' %}">Events</a>
+            <a href="{% url 'login' %}">Login</a>
+            <a href="{% url 'register' %}">Register</a>
             {% endif %}
         </div>
         {% if user.is_authenticated %}
         <div class="nav-actions">
+            {% if user.is_superuser or user.is_site_admin %}
+            <a href="{% url 'admin_settings' %}" class="nav-admin">Admin</a>
+            {% endif %}
             <a href="{% url 'notification_list' %}" class="nav-notification">
                 {% if unread_notification_count > 0 %}
                 <img src="{% static 'img/bell-ring.png' %}" alt="Notifications" class="nav-bell-icon">

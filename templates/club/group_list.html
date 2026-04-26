@@ -80,6 +80,9 @@
             {% endif %}
         </div>
         <div class="group-card-actions">
+            {% if group.pk in admin_group_ids %}
+            <a href="{% url 'group_settings' group.slug %}" class="btn btn-sm btn-outline group-settings-btn" title="Group Settings">&#9881;</a>
+            {% endif %}
             {% if group.pk in member_group_ids %}
             <form method="post" action="{% url 'group_favorite' group.slug %}" style="display:inline">
                 {% csrf_token %}

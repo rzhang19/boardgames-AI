@@ -275,17 +275,17 @@ class IconManagementAccessTest(TestCase):
         self.client.login(username='admin', password='testpass123')
 
     def test_admin_sees_icon_management_section(self):
-        response = self.client.get(reverse('user_settings'))
+        response = self.client.get(reverse('admin_settings'))
         self.assertContains(response, 'manage-verified-icons')
 
     def test_regular_user_does_not_see_icon_management_section(self):
         self.client.login(username='regular', password='testpass123')
-        response = self.client.get(reverse('user_settings'))
-        self.assertNotContains(response, 'manage-verified-icons')
+        response = self.client.get(reverse('admin_settings'))
+        self.assertEqual(response.status_code, 403)
 
     def test_admin_sees_existing_icons_in_management(self):
         VerifiedIcon.objects.create(name='Dice', image=_create_svg('dice.svg'))
-        response = self.client.get(reverse('user_settings'))
+        response = self.client.get(reverse('admin_settings'))
         self.assertContains(response, 'Dice')
         self.assertContains(response, 'delete-icon')
 
