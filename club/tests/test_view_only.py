@@ -1,3 +1,6 @@
+import os
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, tag
 from django.urls import reverse
@@ -192,6 +195,7 @@ class ViewOnlyUserPOSTBlockedTest(TestCase):
 @tag("unit")
 class SeedStagingViewOnlyTest(TestCase):
 
+    @patch.dict(os.environ, {'SEED_USER_PASSWORD': 'testpw'})
     @override_settings(VIEW_ONLY_PASSWORD='ViewerPass123!')
     def test_creates_view_only_user_when_password_set(self):
         from django.core.management import call_command
@@ -201,6 +205,7 @@ class SeedStagingViewOnlyTest(TestCase):
         self.assertTrue(viewer.is_view_only)
         self.assertTrue(viewer.email_verified)
 
+    @patch.dict(os.environ, {'SEED_USER_PASSWORD': 'testpw'})
     @override_settings(VIEW_ONLY_PASSWORD='ViewerPass123!')
     def test_view_only_user_in_public_group(self):
         from django.core.management import call_command
@@ -212,6 +217,7 @@ class SeedStagingViewOnlyTest(TestCase):
         self.assertIsNotNone(membership)
         self.assertEqual(membership.role, 'member')
 
+    @patch.dict(os.environ, {'SEED_USER_PASSWORD': 'testpw'})
     @override_settings(VIEW_ONLY_PASSWORD='ViewerPass123!')
     def test_view_only_user_not_in_private_group(self):
         from django.core.management import call_command
@@ -222,12 +228,14 @@ class SeedStagingViewOnlyTest(TestCase):
         ).first()
         self.assertIsNone(membership)
 
+    @patch.dict(os.environ, {'SEED_USER_PASSWORD': 'testpw'})
     @override_settings(VIEW_ONLY_PASSWORD='')
     def test_skips_view_only_user_when_password_not_set(self):
         from django.core.management import call_command
         call_command('seed_staging')
         self.assertFalse(User.objects.filter(username='testviewer').exists())
 
+    @patch.dict(os.environ, {'SEED_USER_PASSWORD': 'testpw'})
     @override_settings(
         VIEW_ONLY_USERNAME='customviewer',
         VIEW_ONLY_PASSWORD='CustomPass123!',
