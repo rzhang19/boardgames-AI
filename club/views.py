@@ -17,14 +17,20 @@ from django.utils import timezone
 from .bgg import fetch_bgg_game, fetch_bgg_weight, search_bgg, weight_to_complexity
 from .borda import calculate_borda_scores
 from .forms import (
-    BetaAccessForm, BoardGameForm, EventForm, GroupCreateForm, GroupSettingsForm,
-    PasswordResetForm, RecurringEventForm, SetPasswordForm, SettingsForm, SuccessorPickForm,
+    BetaAccessForm, BoardGameForm, EventForm, EventInviteForm, EventSettingsForm,
+    GroupCreateForm, GroupSettingsForm,
+    PasswordResetForm, PrivateEventForm, RecurringEventForm, SetPasswordForm,
+    SettingsForm, SuccessorPickForm,
     UserAddForm, UserManageForm, RegistrationForm, VerifiedIconForm, VoteForm,
 )
-from .models import BoardGame, Event, EventAttendance, Group, GroupCreationLog, GroupInvite, GroupJoinRequest, GroupMembership, Notification, PasswordHistory, SiteSettings, VerifiedIcon, Vote
+from .models import BoardGame, Event, EventAttendance, EventInvite, Group, GroupCreationLog, GroupInvite, GroupJoinRequest, GroupMembership, Friendship, Notification, PasswordHistory, PrivateEventCreationLog, SiteSettings, VerifiedIcon, Vote
 from .notifications import (
     generate_missing_complexity_notifications,
     generate_missing_max_players_notifications,
+    notify_event_invite_accepted,
+    notify_event_invite_declined,
+    notify_event_invite_sent,
+    notify_event_organizer_designated,
     notify_group_demoted_member,
     notify_group_demoted_organizer,
     notify_group_game_added,
@@ -49,10 +55,15 @@ from .notifications import (
 from .permissions import (
     can_create_event,
     can_create_group,
+    can_create_private_event,
     can_delete_group,
     can_edit_group_settings,
+    can_edit_private_event_settings,
+    can_invite_to_event,
     can_restore_group,
+    can_rsvp_private_event,
     can_view_group,
+    can_view_private_event,
     is_group_admin,
     is_group_member,
     is_group_organizer,
@@ -447,6 +458,27 @@ def public_profile(request, username):
 
     context['show_date_joined'] = is_own or profile_user.show_date_joined
 
+    if not is_own:
+        friendship = Friendship.get_friendship(request.user, profile_user)
+        if friendship is None:
+            context['friend_status'] = 'none'
+            context['friendship'] = None
+        elif friendship.status == 'accepted':
+            context['friend_status'] = 'friends'
+            context['friendship'] = friendship
+        elif friendship.status == 'pending':
+            if friendship.requester == request.user:
+                context['friend_status'] = 'pending_sent'
+            else:
+                context['friend_status'] = 'pending_received'
+            context['friendship'] = friendship
+        elif friendship.status == 'declined':
+            context['friend_status'] = 'none'
+            context['friendship'] = None
+    else:
+        context['friend_status'] = None
+        context['friendship'] = None
+
     return render(request, 'club/profile.html', context)
 
 
@@ -671,6 +703,12 @@ def game_list(request):
 
     all_owners = User.objects.exclude(pk=request.user.pk).values_list('username', flat=True)
 
+    active_filter_count = 0
+    if owner_filter:
+        active_filter_count += 1
+    if players_param:
+        active_filter_count += 1
+
     return render(request, 'club/game_list.html', {
         'games': games,
         'active_tab': active_tab,
@@ -678,6 +716,7 @@ def game_list(request):
         'current_sort': sort_param,
         'owner_filter': owner_filter,
         'players_filter': players_param,
+        'active_filter_count': active_filter_count,
     })
 
 
@@ -1474,8 +1513,30 @@ def notification_list(request):
     if not request.user.is_authenticated:
         return redirect('/login/')
     notifications = Notification.objects.filter(user=request.user)
+
+    friendship_pks = {}
+    friend_notifs = notifications.filter(
+        notification_type='friend_request', is_read=False,
+    )
+    for n in friend_notifs:
+        parts = n.url.strip('/').split('/')
+        username = parts[-1] if parts else ''
+        if not username:
+            continue
+        requester = User.objects.filter(username=username).first()
+        if not requester:
+            continue
+        friendship = Friendship.objects.filter(
+            requester=requester,
+            receiver=request.user,
+            status='pending',
+        ).first()
+        if friendship:
+            friendship_pks[n.pk] = friendship.pk
+
     return render(request, 'club/notification_list.html', {
         'notifications': notifications,
+        'friendship_pks': friendship_pks,
     })
 
 
@@ -2021,3 +2082,520 @@ def group_invite_accept(request, token):
         return render(request, 'club/group_invite_accept.html', {
             'error': str(e),
         })
+
+
+# ---------------------------------------------------------------------------
+# Friendship views
+# ---------------------------------------------------------------------------
+
+@login_required
+def send_friend_request(request, username):
+    target = get_object_or_404(User, username=username)
+    if target == request.user:
+        raise PermissionDenied
+    if not Friendship.can_send_request(request.user, target):
+        return redirect('public_profile', username=username)
+
+    existing = Friendship.objects.filter(
+        requester=request.user, receiver=target,
+    ).first()
+    if existing and existing.status == 'declined':
+        existing.status = 'pending'
+        existing.save(update_fields=['status', 'updated_at'])
+    elif not existing:
+        Friendship.objects.create(requester=request.user, receiver=target)
+
+    from .notifications import notify_friend_request_sent
+    notify_friend_request_sent(target, request.user)
+    from django.contrib import messages
+    messages.success(request, f'Friend request sent to {username}')
+    return redirect('public_profile', username=username)
+
+
+@login_required
+def accept_friend_request(request, pk):
+    friendship = get_object_or_404(Friendship, pk=pk)
+    if friendship.receiver != request.user:
+        raise PermissionDenied
+    if friendship.status != 'pending':
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        friendship.status = 'accepted'
+        friendship.save(update_fields=['status', 'updated_at'])
+        from .notifications import notify_friend_request_accepted
+        notify_friend_request_accepted(friendship.requester, request.user)
+        return redirect('public_profile', username=friendship.requester.username)
+
+    return redirect('public_profile', username=friendship.requester.username)
+
+
+@login_required
+def decline_friend_request(request, pk):
+    friendship = get_object_or_404(Friendship, pk=pk)
+    if friendship.receiver != request.user:
+        raise PermissionDenied
+    if friendship.status != 'pending':
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        friendship.status = 'declined'
+        friendship.decline_count += 1
+        friendship.last_declined_at = timezone.now()
+        friendship.save(update_fields=['status', 'decline_count', 'last_declined_at', 'updated_at'])
+        from .notifications import notify_friend_request_declined
+        notify_friend_request_declined(friendship.requester, request.user)
+        return redirect('notification_list')
+
+    return redirect('notification_list')
+
+
+@login_required
+def cancel_friend_request(request, pk):
+    friendship = get_object_or_404(Friendship, pk=pk)
+    if friendship.requester != request.user:
+        raise PermissionDenied
+    if friendship.status != 'pending':
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        target_username = friendship.receiver.username
+        Notification.objects.filter(
+            user=friendship.receiver,
+            notification_type='friend_request',
+            url=f'/profile/{request.user.username}/',
+        ).delete()
+        friendship.delete()
+        return redirect('public_profile', username=target_username)
+
+    return redirect('public_profile', username=friendship.receiver.username)
+
+
+@login_required
+def remove_friend(request, username):
+    target = get_object_or_404(User, username=username)
+    friendship = Friendship.objects.filter(
+        status='accepted',
+    ).filter(
+        Q(requester=request.user, receiver=target)
+        | Q(requester=target, receiver=request.user),
+    ).first()
+    if not friendship:
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        friendship.delete()
+    return redirect('public_profile', username=username)
+
+
+@login_required
+def user_search(request):
+    query = request.GET.get('q', '').strip()
+    results = []
+    if query:
+        results = User.objects.exclude(pk=request.user.pk).filter(
+            username__icontains=query,
+        ).order_by('username')[:20]
+    return render(request, 'club/user_search.html', {
+        'results': results,
+        'query': query,
+    })
+
+
+@login_required
+def friends_list(request, username):
+    profile_user = get_object_or_404(User, username=username)
+    friends = Friendship.get_friends_of(profile_user)
+    return render(request, 'club/friends_list.html', {
+        'profile_user': profile_user,
+        'friends': friends,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Private event views
+# ---------------------------------------------------------------------------
+
+@login_required
+def private_event_create(request):
+    if not can_create_private_event(request.user):
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        form = PrivateEventForm(request.POST)
+        if form.is_valid():
+            event = form.save(commit=False)
+            event.created_by = request.user
+            event.date = form.cleaned_data['date']
+            offset = form.cleaned_data.get('voting_deadline_offset_minutes') or 0
+            event.voting_deadline_offset_minutes = offset
+            custom_deadline = form.cleaned_data.get('voting_deadline')
+            if custom_deadline:
+                event.voting_deadline = custom_deadline
+            else:
+                event.voting_deadline = event.date - timezone.timedelta(minutes=offset)
+            event.save()
+            PrivateEventCreationLog.objects.create(user=request.user, event=event)
+            return redirect('private_event_detail', pk=event.pk)
+    else:
+        form = PrivateEventForm(initial={
+            'voting_deadline_offset_minutes': SiteSettings.load().default_voting_offset_minutes,
+        })
+
+    return render(request, 'club/private_event_form.html', {
+        'form': form,
+        'action': 'Create',
+        'voting_offset': SiteSettings.load().default_voting_offset_minutes,
+    })
+
+
+def private_event_detail(request, pk):
+    event = get_object_or_404(Event, pk=pk)
+
+    if event.group_id is not None:
+        return redirect('event_detail', slug=event.group.slug, pk=event.pk)
+
+    if not can_view_private_event(request.user, event):
+        raise PermissionDenied
+
+    event.sync_voting_status()
+    event.refresh_from_db()
+
+    attendees = EventAttendance.objects.filter(event=event).select_related('user')
+
+    is_attending = False
+    if request.user.is_authenticated:
+        is_attending = EventAttendance.objects.filter(
+            user=request.user, event=event,
+        ).exists()
+
+    can_resume = (
+        not event.voting_open
+        and event.is_currently_active
+        and timezone.now() < event.voting_deadline
+    )
+
+    is_organizer_user = (
+        request.user.is_authenticated
+        and event.is_organizer(request.user)
+    )
+
+    is_creator = (
+        request.user.is_authenticated
+        and event.created_by == request.user
+    )
+
+    return render(request, 'club/private_event_detail.html', {
+        'event': event,
+        'attendees': attendees,
+        'is_attending': is_attending,
+        'time_midnight': dt_time(0, 0),
+        'can_resume': can_resume,
+        'is_organizer': is_organizer_user,
+        'is_creator': is_creator,
+    })
+
+
+@login_required
+def private_event_edit(request, pk):
+    event = get_object_or_404(Event, pk=pk)
+
+    if event.group_id is not None:
+        return redirect('event_edit', slug=event.group.slug, pk=event.pk)
+
+    if not event.is_organizer(request.user):
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        form = PrivateEventForm(request.POST, instance=event)
+        if form.is_valid():
+            event = form.save(commit=False)
+            event.date = form.cleaned_data['date']
+            offset = form.cleaned_data.get('voting_deadline_offset_minutes') or 0
+            event.voting_deadline_offset_minutes = offset
+            custom_deadline = form.cleaned_data.get('voting_deadline')
+            if custom_deadline:
+                event.voting_deadline = custom_deadline
+            else:
+                event.voting_deadline = event.date - timezone.timedelta(minutes=offset)
+            event.save()
+            return redirect('private_event_detail', pk=event.pk)
+    else:
+        form = PrivateEventForm(instance=event, initial={
+            'voting_deadline_offset_minutes': event.voting_deadline_offset_minutes,
+        })
+
+    return render(request, 'club/private_event_form.html', {
+        'form': form,
+        'action': 'Edit',
+        'voting_offset': event.voting_deadline_offset_minutes,
+        'event': event,
+    })
+
+
+@login_required
+def event_settings(request, pk):
+    event = get_object_or_404(Event, pk=pk)
+
+    if event.group_id is not None:
+        raise PermissionDenied
+
+    if not can_edit_private_event_settings(request.user, event):
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        form = EventSettingsForm(request.POST, instance=event)
+        if form.is_valid():
+            form.save()
+            return redirect('private_event_detail', pk=event.pk)
+    else:
+        form = EventSettingsForm(instance=event)
+
+    attendees = EventAttendance.objects.filter(
+        event=event,
+    ).exclude(user=event.created_by).select_related('user')
+
+    return render(request, 'club/private_event_settings.html', {
+        'form': form,
+        'event': event,
+        'attendees': attendees,
+    })
+
+
+@login_required
+def private_event_rsvp(request, pk):
+    event = get_object_or_404(Event, pk=pk)
+
+    if event.group_id is not None:
+        return redirect('event_rsvp', slug=event.group.slug, pk=event.pk)
+
+    if not can_rsvp_private_event(request.user, event):
+        raise PermissionDenied
+
+    attendance = EventAttendance.objects.filter(
+        user=request.user, event=event,
+    )
+    if attendance.exists():
+        attendance.delete()
+    else:
+        EventAttendance.objects.create(user=request.user, event=event)
+
+    return redirect('private_event_detail', pk=event.pk)
+
+
+@login_required
+def private_event_vote(request, pk):
+    event = get_object_or_404(Event, pk=pk)
+
+    if event.group_id is not None:
+        return redirect('event_vote', slug=event.group.slug, pk=event.pk)
+
+    if not can_view_private_event(request.user, event):
+        raise PermissionDenied
+
+    if not EventAttendance.objects.filter(user=request.user, event=event).exists():
+        raise PermissionDenied
+
+    event.sync_voting_status()
+    event.refresh_from_db()
+
+    games = event.get_game_pool()
+
+    existing_votes = Vote.objects.filter(
+        user=request.user, event=event,
+    ).select_related('board_game')
+    vote_data = []
+    for vote in existing_votes:
+        vote_data.append({
+            'board_game': vote.board_game_id,
+            'rank': vote.rank,
+            'game_name': vote.board_game.name,
+        })
+
+    if not event.is_voting_open:
+        if request.method == 'POST':
+            return render(request, 'club/event_vote.html', {
+                'event': event,
+                'formset': None,
+                'games': games,
+                'vote_data': vote_data,
+                'voting_closed': True,
+                'mid_submit_closed': True,
+            })
+        VoteFormSet = formset_factory(VoteForm, extra=0)
+        formset = VoteFormSet(initial=vote_data)
+        return render(request, 'club/event_vote.html', {
+            'event': event,
+            'formset': formset,
+            'games': games,
+            'vote_data': vote_data,
+            'voting_closed': True,
+            'mid_submit_closed': False,
+        })
+
+    if request.method == 'POST':
+        Vote.objects.filter(user=request.user, event=event).delete()
+        total_forms = int(request.POST.get('form-TOTAL_FORMS', '0'))
+        for i in range(total_forms):
+            game_id = request.POST.get(f'form-{i}-board_game', '')
+            rank = request.POST.get(f'form-{i}-rank', '')
+            if game_id and rank:
+                Vote.objects.create(
+                    user=request.user,
+                    event=event,
+                    board_game_id=int(game_id),
+                    rank=int(rank),
+                )
+        return redirect('private_event_detail', pk=event.pk)
+
+    VoteFormSet = formset_factory(VoteForm, extra=max(0, 3 - len(vote_data)))
+    formset = VoteFormSet(initial=vote_data if vote_data else [])
+
+    return render(request, 'club/event_vote.html', {
+        'event': event,
+        'formset': formset,
+        'games': games,
+        'voting_closed': False,
+        'mid_submit_closed': False,
+    })
+
+
+def private_event_results(request, pk):
+    event = get_object_or_404(Event, pk=pk)
+
+    if event.group_id is not None:
+        return redirect('event_results', slug=event.group.slug, pk=event.pk)
+
+    if not can_view_private_event(request.user, event):
+        raise PermissionDenied
+
+    scores = calculate_borda_scores(event)
+    game_map = {g.pk: g for g in BoardGame.objects.filter(pk__in=scores.keys())}
+
+    results = []
+    for game_id, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
+        results.append({
+            'game': game_map[game_id],
+            'score': score,
+        })
+
+    show_individual = event.show_individual_votes
+    individual_votes = None
+    if show_individual:
+        attendee_ids = EventAttendance.objects.filter(
+            event=event,
+        ).values_list('user_id', flat=True)
+        votes = Vote.objects.filter(
+            event=event, user_id__in=attendee_ids,
+        ).select_related('user', 'board_game').order_by('user', 'rank')
+        user_votes = {}
+        for vote in votes:
+            user_votes.setdefault(vote.user, []).append(vote)
+        individual_votes = user_votes
+
+    return render(request, 'club/event_results.html', {
+        'event': event,
+        'results': results,
+        'show_individual': show_individual,
+        'individual_votes': individual_votes,
+    })
+
+
+@login_required
+def private_event_toggle_voting(request, pk):
+    event = get_object_or_404(Event, pk=pk)
+
+    if event.group_id is not None:
+        return redirect('event_toggle_voting', slug=event.group.slug, pk=event.pk)
+
+    if not event.is_organizer(request.user):
+        raise PermissionDenied
+
+    event.sync_voting_status()
+    event.refresh_from_db()
+
+    if event.is_voting_open:
+        event.voting_open = False
+        event.save()
+    else:
+        if not event.is_active:
+            return redirect('private_event_detail', pk=event.pk)
+        if timezone.now() >= event.voting_deadline:
+            return redirect('private_event_detail', pk=event.pk)
+        event.voting_open = True
+        event.save()
+
+    return redirect('private_event_detail', pk=event.pk)
+
+
+@login_required
+def private_event_toggle_visibility(request, pk):
+    event = get_object_or_404(Event, pk=pk)
+
+    if event.group_id is not None:
+        return redirect('event_toggle_visibility', slug=event.group.slug, pk=event.pk)
+
+    if not event.is_organizer(request.user):
+        raise PermissionDenied
+
+    event.show_individual_votes = not event.show_individual_votes
+    event.save()
+    return redirect('private_event_detail', pk=event.pk)
+
+
+@login_required
+def event_invite(request, pk):
+    event = get_object_or_404(Event, pk=pk)
+
+    if event.group_id is not None:
+        raise PermissionDenied
+
+    if not can_invite_to_event(request.user, event):
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        form = EventInviteForm(request.POST)
+        if form.is_valid():
+            user_ids = form.cleaned_data['user_ids']
+            for uid in user_ids:
+                target = User.objects.filter(pk=uid).first()
+                if target and target != request.user:
+                    _, created = EventInvite.objects.get_or_create(
+                        event=event, user=target,
+                        defaults={'invited_by': request.user},
+                    )
+                    if created:
+                        notify_event_invite_sent(target, request.user, event)
+            return redirect('private_event_detail', pk=event.pk)
+    else:
+        form = EventInviteForm()
+
+    friends = Friendship.get_friends_of(request.user)
+
+    return render(request, 'club/event_invite.html', {
+        'form': form,
+        'event': event,
+        'friends': friends,
+    })
+
+
+@login_required
+def event_invite_respond(request, pk, invite_pk, status):
+    invite = get_object_or_404(EventInvite, pk=invite_pk)
+
+    if invite.user != request.user:
+        raise PermissionDenied
+
+    if invite.status != 'pending':
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        if status == 'accept':
+            invite.accept()
+            notify_event_invite_accepted(invite.invited_by, request.user, invite.event)
+        elif status == 'decline':
+            invite.decline()
+            notify_event_invite_declined(invite.invited_by, request.user, invite.event)
+        return redirect('private_event_detail', pk=invite.event.pk)
+
+    return redirect('notification_list')

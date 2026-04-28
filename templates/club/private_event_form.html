@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action }} Private Event{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ action }} Private Event</h2>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <input type="hidden" name="voting_deadline_offset_minutes" value="{{ voting_offset }}">
+        <button type="submit" class="btn btn-primary">{{ action }} Event</button>
+        {% if action == 'Create' %}
+        <a href="{% url 'event_list' %}" class="btn btn-secondary">Cancel</a>
+        {% elif event %}
+        <a href="{% url 'private_event_detail' event.pk %}" class="btn btn-secondary">Cancel</a>
+        {% endif %}
+    </form>
+</div>
+{% endblock %}

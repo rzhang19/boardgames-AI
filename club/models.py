@@ -356,6 +356,18 @@ class BoardGame(models.Model):
 
 
 class Event(models.Model):
+    PRIVACY_CHOICES = [
+        ('private', 'Private'),
+        ('invite_only_public', 'Invite Only - Public'),
+        ('public', 'Public'),
+    ]
+
+    INVITE_OTHERS_CHOICES = [
+        ('nobody', 'Nobody'),
+        ('friends_only', 'Friends Only'),
+        ('anyone', 'Anyone'),
+    ]
+
     title = models.CharField(max_length=200)
     date = models.DateTimeField()
     location = models.CharField(max_length=300, blank=True)
@@ -364,12 +376,36 @@ class Event(models.Model):
     group = models.ForeignKey(
         Group,
         on_delete=models.CASCADE,
+        null=True, blank=True,
     )
     show_individual_votes = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     voting_open = models.BooleanField(default=True)
     voting_deadline = models.DateTimeField()
     voting_deadline_offset_minutes = models.IntegerField(default=0)
+    privacy = models.CharField(
+        max_length=20,
+        choices=PRIVACY_CHOICES,
+        default='public',
+    )
+    show_description_publicly = models.BooleanField(default=True)
+    show_location_publicly = models.BooleanField(default=True)
+    show_datetime_publicly = models.BooleanField(default=True)
+    show_attendees_publicly = models.BooleanField(default=True)
+    allow_invite_others = models.CharField(
+        max_length=15,
+        choices=INVITE_OTHERS_CHOICES,
+        default='nobody',
+    )
+    auto_add_games = models.BooleanField(default=False)
+    additional_organizers = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name='co_organized_events',
+    )
+    organizers_can_edit_title = models.BooleanField(default=True)
+    organizers_can_edit_description = models.BooleanField(default=True)
+    organizers_can_edit_datetime = models.BooleanField(default=True)
 
     def __str__(self):
         return self.title
@@ -392,10 +428,46 @@ class Event(models.Model):
             return False
         return True
 
+    def is_organizer(self, user):
+        if not user.is_authenticated:
+            return False
+        if self.created_by == user:
+            return True
+        return self.additional_organizers.filter(pk=user.pk).exists()
+
     def sync_voting_status(self):
         if self.voting_open and not self.is_voting_open:
             self.voting_open = False
             self.save(update_fields=['voting_open'])
+
+    def get_game_pool(self):
+        if self.group_id is not None:
+            return self.group.games()
+
+        organizer_ids = [self.created_by_id]
+        if self.additional_organizers.exists():
+            organizer_ids.extend(
+                self.additional_organizers.values_list('pk', flat=True)
+            )
+
+        attendee_ids = list(
+            EventAttendance.objects.filter(event=self)
+            .values_list('user_id', flat=True)
+        )
+
+        relevant_user_ids = list(set(organizer_ids + attendee_ids))
+
+        attendee_group_ids = list(
+            GroupMembership.objects.filter(
+                user_id__in=relevant_user_ids,
+                role__in=['admin', 'organizer', 'member'],
+            ).values_list('group_id', flat=True)
+        )
+
+        return BoardGame.objects.filter(
+            Q(owner_id__in=relevant_user_ids)
+            | Q(group_id__in=attendee_group_ids)
+        ).distinct()
 
 
 class EventAttendance(models.Model):
@@ -410,6 +482,69 @@ class EventAttendance(models.Model):
 
     def __str__(self):
         return f'{self.user} attending {self.event}'
+
+
+class EventInvite(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('declined', 'Declined'),
+    ]
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='invites')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='event_invites')
+    invited_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default='pending',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['event', 'user'],
+                name='unique_event_invite',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.user} invited to {self.event} ({self.status})'
+
+    @property
+    def is_expired(self):
+        return timezone.now() >= self.event.date
+
+    def accept(self):
+        if self.status == 'accepted':
+            return
+        if self.status != 'pending':
+            raise ValueError('Invite is not pending.')
+        self.status = 'accepted'
+        self.save(update_fields=['status'])
+        EventAttendance.objects.get_or_create(
+            user=self.user, event=self.event,
+        )
+
+    def decline(self):
+        if self.status != 'pending':
+            raise ValueError('Invite is not pending.')
+        self.status = 'declined'
+        self.save(update_fields=['status'])
+
+
+class PrivateEventCreationLog(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+    )
+
+    def __str__(self):
+        return f'{self.user} created a private event at {self.created_at}'
 
 
 class Vote(models.Model):
@@ -463,3 +598,90 @@ class PasswordHistory(models.Model):
 
     def __str__(self):
         return f'Password history for {self.user}'
+
+
+class Friendship(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('declined', 'Declined'),
+    ]
+
+    requester = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='sent_friendships',
+    )
+    receiver = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='received_friendships',
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default='pending',
+    )
+    decline_count = models.PositiveIntegerField(default=0)
+    last_declined_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['requester', 'receiver'],
+                name='unique_friendship',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.requester} -> {self.receiver} ({self.status})'
+
+    @staticmethod
+    def are_friends(user_a, user_b):
+        return Friendship.objects.filter(
+            status='accepted',
+        ).filter(
+            Q(requester=user_a, receiver=user_b)
+            | Q(requester=user_b, receiver=user_a),
+        ).exists()
+
+    @staticmethod
+    def get_friendship(user_a, user_b):
+        return Friendship.objects.filter(
+            Q(requester=user_a, receiver=user_b)
+            | Q(requester=user_b, receiver=user_a),
+        ).first()
+
+    @staticmethod
+    def can_send_request(requester, receiver):
+        if requester == receiver:
+            return False
+        existing = Friendship.objects.filter(
+            requester=requester, receiver=receiver,
+        ).first()
+        if existing is None:
+            return True
+        if existing.status in ('pending', 'accepted'):
+            return False
+        if existing.status == 'declined':
+            if existing.decline_count >= 2 and existing.last_declined_at:
+                elapsed = timezone.now() - existing.last_declined_at
+                if elapsed < timezone.timedelta(hours=168):
+                    return False
+            return True
+        return False
+
+    @staticmethod
+    def get_friends_of(user):
+        accepted = Friendship.objects.filter(
+            status='accepted',
+        ).filter(
+            Q(requester=user) | Q(receiver=user),
+        )
+        friend_ids = set()
+        for f in accepted:
+            if f.requester_id == user.pk:
+                friend_ids.add(f.receiver_id)
+            else:
+                friend_ids.add(f.requester_id)
+        return User.objects.filter(pk__in=friend_ids)

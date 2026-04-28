@@ -13,28 +13,39 @@
 
 <div class="action-bar">
     <a href="{% url 'game_add' %}" class="btn btn-primary">Add a Game</a>
+    <button type="button" class="btn btn-neutral filter-modal-btn" onclick="document.getElementById('filterModal').classList.add('active')">
+        <span class="filter-icon">&#9881;</span> Filter{% if active_filter_count > 0 %} ({{ active_filter_count }}){% endif %}
+    </button>
 </div>
 
-<form method="get" class="filter-bar">
-    <input type="hidden" name="tab" value="{{ active_tab }}">
-    <div class="filter-group">
-        <label for="filter-owner">Owner</label>
-        <select id="filter-owner" name="owner" multiple class="filter-owner-select">
-            <option value="myself" {% if 'myself' in owner_filter %}selected{% endif %}>Myself</option>
-            {% for username in all_owners %}
-            <option value="{{ username }}" {% if username in owner_filter %}selected{% endif %}>{{ username }}</option>
-            {% endfor %}
-        </select>
+<div id="filterModal" class="filter-modal-overlay" onclick="if(event.target===this)this.classList.remove('active')">
+    <div class="filter-modal">
+        <div class="filter-modal-header">
+            <h2>Filter Games</h2>
+            <button type="button" class="filter-modal-close" onclick="document.getElementById('filterModal').classList.remove('active')">&times;</button>
+        </div>
+        <form method="get" class="filter-modal-body">
+            <input type="hidden" name="tab" value="{{ active_tab }}">
+            <div class="filter-group">
+                <label for="filter-owner">Owner</label>
+                <select id="filter-owner" name="owner" multiple class="filter-owner-select">
+                    <option value="myself" {% if 'myself' in owner_filter %}selected{% endif %}>Myself</option>
+                    {% for username in all_owners %}
+                    <option value="{{ username }}" {% if username in owner_filter %}selected{% endif %}>{{ username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="filter-players">Players</label>
+                <input type="number" id="filter-players" name="players" value="{{ players_filter }}" placeholder="e.g. 4" class="filter-players-input">
+            </div>
+            <div class="filter-modal-footer">
+                <a href="{% url 'game_list' %}?tab={{ active_tab }}" class="btn btn-neutral">Clear</a>
+                <button type="submit" class="btn btn-primary filter-apply-btn">Apply</button>
+            </div>
+        </form>
     </div>
-    <div class="filter-group">
-        <label for="filter-players">Players</label>
-        <input type="number" id="filter-players" name="players" value="{{ players_filter }}" placeholder="e.g. 4" class="filter-players-input">
-    </div>
-    <div class="filter-actions">
-        <button type="submit" class="btn btn-primary btn-sm">Apply</button>
-        <a href="{% url 'game_list' %}?tab={{ active_tab }}" class="btn btn-neutral btn-sm">Clear</a>
-    </div>
-</form>
+</div>
 
 {% if games %}
 <table>

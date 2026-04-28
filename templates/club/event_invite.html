@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Invite to {{ event.title }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Invite Friends to {{ event.title }}</h2>
+    <form method="post" id="invite-form">
+        {% csrf_token %}
+        {{ form.user_ids }}
+        <div id="selected-friends"></div>
+        <div class="friend-list">
+            {% for friend in friends %}
+            <div class="friend-item">
+                <label>
+                    <input type="checkbox" class="friend-checkbox" data-user-id="{{ friend.pk }}" value="{{ friend.pk }}">
+                    <a href="{% url 'public_profile' friend.username %}">{{ friend.username }}</a>
+                </label>
+            </div>
+            {% endfor %}
+        </div>
+        {% if friends %}
+        <button type="submit" class="btn btn-primary">Send Invites</button>
+        {% else %}
+        <p>You have no friends to invite.</p>
+        {% endif %}
+        <a href="{% url 'private_event_detail' event.pk %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+<script>
+(function() {
+    var checkboxes = document.querySelectorAll('.friend-checkbox');
+    var hiddenField = document.querySelector('input[name="user_ids"]');
+    checkboxes.forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            var selected = [];
+            checkboxes.forEach(function(c) { if (c.checked) selected.push(c.value); });
+            hiddenField.value = selected.join(',');
+        });
+    });
+})();
+</script>
+{% endblock %}

@@ -1,7 +1,9 @@
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.utils import timezone
+from datetime import timedelta
 
-from club.models import GroupCreationLog, GroupMembership, SiteSettings
+from club.models import GroupCreationLog, GroupMembership, PrivateEventCreationLog, SiteSettings
 
 
 def is_group_admin(user, group):
@@ -132,3 +134,100 @@ def group_member_required(view_func):
             raise PermissionDenied
         return view_func(request, *args, **kwargs)
     return wrapper
+
+
+# ---------------------------------------------------------------------------
+# Private event permissions
+# ---------------------------------------------------------------------------
+
+PRIVATE_EVENT_RATE_LIMIT = 5
+PRIVATE_EVENT_RATE_WINDOW_HOURS = 168
+
+
+def can_create_private_event(user):
+    if not user.is_authenticated:
+        return False
+    if user.is_superuser or user.is_site_admin:
+        return True
+    if not user.email_verified:
+        return False
+    cutoff = timezone.now() - timedelta(hours=PRIVATE_EVENT_RATE_WINDOW_HOURS)
+    recent_count = PrivateEventCreationLog.objects.filter(
+        user=user,
+        created_at__gte=cutoff,
+    ).count()
+    return recent_count < PRIVATE_EVENT_RATE_LIMIT
+
+
+def can_view_private_event(user, event):
+    if event.group_id is not None:
+        return None
+    if not user.is_authenticated:
+        if event.privacy == 'public':
+            return True
+        if event.privacy == 'invite_only_public':
+            return True
+        return False
+    if user.is_superuser or user.is_site_admin:
+        return True
+    if event.created_by == user:
+        return True
+    if event.additional_organizers.filter(pk=user.pk).exists():
+        return True
+    from club.models import EventAttendance
+    if EventAttendance.objects.filter(user=user, event=event).exists():
+        return True
+    if event.privacy == 'public':
+        return True
+    if event.privacy == 'invite_only_public':
+        return True
+    from club.models import EventInvite
+    if EventInvite.objects.filter(user=user, event=event).exists():
+        return True
+    return False
+
+
+def can_rsvp_private_event(user, event):
+    if event.group_id is not None:
+        return None
+    if not user.is_authenticated:
+        return False
+    if event.created_by == user:
+        return True
+    if event.additional_organizers.filter(pk=user.pk).exists():
+        return True
+    if user.is_superuser or user.is_site_admin:
+        return True
+    if event.privacy == 'public':
+        return True
+    from club.models import EventInvite
+    if EventInvite.objects.filter(user=user, event=event).exists():
+        return True
+    return False
+
+
+def can_invite_to_event(user, event, target_user=None):
+    if not user.is_authenticated:
+        return False
+    if event.created_by == user:
+        return True
+    if not event.is_organizer(user):
+        return False
+    if event.allow_invite_others == 'nobody':
+        return False
+    if event.allow_invite_others == 'anyone':
+        return True
+    if event.allow_invite_others == 'friends_only':
+        if target_user is None:
+            return True
+        from club.models import Friendship
+        return Friendship.are_friends(user, target_user)
+    return False
+
+
+def can_edit_private_event_settings(user, event):
+    if not user.is_authenticated:
+        return False
+    if event.group_id is not None:
+        return False
+    return event.created_by == user

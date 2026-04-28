@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load club_tags %}
 
 {% block title %}Notifications{% endblock %}
 
@@ -30,6 +31,24 @@
                     {% endif %}
                     <span class="notification-time">{{ notif.created_at|date:"M j, Y g:i A" }}</span>
                 </div>
+                {% if notif.notification_type == 'friend_request' and not notif.is_read and notif.pk in friendship_pks %}
+                <div class="notification-friend-actions">
+                    <form method="post" action="{% url 'accept_friend_request' friendship_pks|dict_lookup:notif.pk %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-success btn-sm friend-accept-btn">
+                            <span class="accept-icon">&#10003;</span>
+                            <span class="accept-text">Accept</span>
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'decline_friend_request' friendship_pks|dict_lookup:notif.pk %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger btn-sm friend-decline-btn">
+                            <span class="decline-icon">&#10007;</span>
+                            <span class="decline-text">Decline</span>
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
             </div>
             {% if notif.is_read %}
             <div class="notification-select">

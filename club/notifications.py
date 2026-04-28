@@ -311,3 +311,81 @@ def generate_missing_max_players_notifications(user):
             url_label='Edit Game',
             notification_type='missing_max_players',
         )
+
+
+# ---------------------------------------------------------------------------
+# Friendship notifications
+# ---------------------------------------------------------------------------
+
+def notify_friend_request_sent(receiver, requester):
+    _notify_user(
+        receiver,
+        f'{requester.username} sent you a friend request.',
+        f'/profile/{requester.username}/',
+        'View Profile',
+        'friend_request',
+    )
+
+
+def notify_friend_request_accepted(requester, accepter):
+    _notify_user(
+        requester,
+        f'{accepter.username} accepted your friend request.',
+        f'/profile/{accepter.username}/',
+        'View Profile',
+        'friend_request_accepted',
+    )
+
+
+def notify_friend_request_declined(requester, decliner):
+    _notify_user(
+        requester,
+        f'{decliner.username} declined your friend request.',
+        '',
+        '',
+        'friend_request_declined',
+    )
+
+
+# ---------------------------------------------------------------------------
+# Private event invite notifications
+# ---------------------------------------------------------------------------
+
+def notify_event_invite_sent(invitee, inviter, event):
+    _notify_user(
+        invitee,
+        f'{inviter.username} invited you to "{event.title}"',
+        f'/events/{event.pk}/',
+        'View Event',
+        'event_invite',
+    )
+
+
+def notify_event_invite_accepted(inviter, accepter, event):
+    _notify_user(
+        inviter,
+        f'{accepter.username} accepted your invite to "{event.title}"',
+        f'/events/{event.pk}/',
+        'View Event',
+        'event_invite_accepted',
+    )
+
+
+def notify_event_invite_declined(inviter, decliner, event):
+    _notify_user(
+        inviter,
+        f'{decliner.username} declined your invite to "{event.title}"',
+        '',
+        '',
+        'event_invite_declined',
+    )
+
+
+def notify_event_organizer_designated(user, event):
+    _notify_user(
+        user,
+        f'You were made an organizer for "{event.title}"',
+        f'/events/{event.pk}/',
+        'View Event',
+        'event_organizer_designated',
+    )

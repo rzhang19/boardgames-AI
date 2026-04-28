@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}{{ event.title }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ event.title }}</h2>
+    <p><strong>Date:</strong> {{ event.date|date:"N j, Y" }}{% if event.date.time != time_midnight %} at {{ event.date|time:"g:i A" }}{% endif %}</p>
+    {% if event.location %}
+    <p><strong>Location:</strong> {{ event.location }}</p>
+    {% endif %}
+    {% if event.description %}
+    <p><strong>Description:</strong> {{ event.description }}</p>
+    {% endif %}
+    <p><strong>Created by:</strong> <a href="{% url 'public_profile' event.created_by.username %}">{{ event.created_by.username }}</a></p>
+    <p><strong>Privacy:</strong> {{ event.get_privacy_display }}</p>
+
+    {% if is_organizer %}
+    <div style="margin-top:1rem;">
+        <a href="{% url 'private_event_edit' event.pk %}" class="btn btn-primary btn-sm">Edit Event</a>
+        {% if is_creator %}
+        <a href="{% url 'event_settings' event.pk %}" class="btn btn-secondary btn-sm">Event Settings</a>
+        {% endif %}
+        {% if event.is_currently_active %}
+        <form method="post" action="{% url 'private_event_toggle_voting' event.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-secondary btn-sm">
+                {% if event.voting_open %}End Voting{% else %}{% if can_resume %}Resume Voting{% endif %}{% endif %}
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div style="margin-top:1rem;">
+        {% if is_attending %}
+        <form method="post" action="{% url 'private_event_rsvp' event.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-secondary btn-sm">Cancel RSVP</button>
+        </form>
+        {% else %}
+        <form method="post" action="{% url 'private_event_rsvp' event.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary btn-sm">RSVP</button>
+        </form>
+        {% endif %}
+
+        {% if is_attending and event.is_voting_open %}
+        <a href="{% url 'private_event_vote' event.pk %}" class="btn btn-primary btn-sm">Vote</a>
+        {% endif %}
+
+        <a href="{% url 'private_event_results' event.pk %}" class="btn btn-secondary btn-sm">Results</a>
+
+        {% if is_organizer %}
+        <a href="{% url 'event_invite' event.pk %}" class="btn btn-secondary btn-sm">Invite</a>
+        {% endif %}
+    </div>
+</div>
+
+{% if attendees %}
+<div class="card">
+    <h3>Attendees ({{ attendees|length }})</h3>
+    <ul>
+        {% for att in attendees %}
+        <li><a href="{% url 'public_profile' att.user.username %}">{{ att.user.username }}</a></li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+{% endblock %}

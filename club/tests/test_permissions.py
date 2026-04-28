@@ -5,19 +5,28 @@ from django.test import TestCase, RequestFactory, tag
 from django.utils import timezone
 
 from club.models import (
+    Event,
+    EventAttendance,
+    EventInvite,
     Group,
     GroupCreationLog,
     GroupMembership,
+    PrivateEventCreationLog,
     SiteSettings,
 )
 from club.permissions import (
     can_create_event,
     can_create_group,
+    can_create_private_event,
     can_delete_group,
     can_edit_group_settings,
+    can_edit_private_event_settings,
+    can_invite_to_event,
     can_manage_members,
     can_restore_group,
+    can_rsvp_private_event,
     can_view_group,
+    can_view_private_event,
     can_view_votes,
     is_group_admin,
     is_group_member,
@@ -308,3 +317,253 @@ class CanRestoreGroupTest(TestCase):
     def test_false_for_regular_user(self):
         u = User.objects.create_user(username='u', password='p')
         self.assertFalse(can_restore_group(u))
+
+
+# ---------------------------------------------------------------------------
+# Private event permissions
+# ---------------------------------------------------------------------------
+
+@tag("unit")
+class CanCreatePrivateEventTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='alice', password='p', email_verified=True,
+        )
+
+    def test_verified_user_can_create(self):
+        self.assertTrue(can_create_private_event(self.user))
+
+    def test_unverified_user_cannot_create(self):
+        self.user.email_verified = False
+        self.user.save()
+        self.assertFalse(can_create_private_event(self.user))
+
+    def test_superuser_bypasses_verification(self):
+        su = User.objects.create_superuser(username='su', password='p')
+        self.assertTrue(can_create_private_event(su))
+
+    def test_site_admin_bypasses_verification(self):
+        sa = User.objects.create_user(
+            username='sa', password='p',
+            is_site_admin=True, email_verified=False,
+        )
+        self.assertTrue(can_create_private_event(sa))
+
+    def test_rate_limit_blocks_at_five(self):
+        for i in range(5):
+            PrivateEventCreationLog.objects.create(user=self.user)
+        self.assertFalse(can_create_private_event(self.user))
+
+    def test_rate_limit_allows_under_five(self):
+        for i in range(4):
+            PrivateEventCreationLog.objects.create(user=self.user)
+        self.assertTrue(can_create_private_event(self.user))
+
+    def test_rate_limit_rolling_window(self):
+        old = PrivateEventCreationLog.objects.create(user=self.user)
+        PrivateEventCreationLog.objects.filter(pk=old.pk).update(
+            created_at=timezone.now() - timedelta(hours=169),
+        )
+        for i in range(4):
+            PrivateEventCreationLog.objects.create(user=self.user)
+        self.assertTrue(can_create_private_event(self.user))
+
+    def test_superuser_bypasses_rate_limit(self):
+        for i in range(5):
+            PrivateEventCreationLog.objects.create(user=self.user)
+        su = User.objects.create_superuser(username='su', password='p')
+        self.assertTrue(can_create_private_event(su))
+
+    def test_unauthenticated_cannot_create(self):
+        from django.contrib.auth.models import AnonymousUser
+        self.assertFalse(can_create_private_event(AnonymousUser()))
+
+
+@tag("unit")
+class CanViewPrivateEventTest(TestCase):
+
+    def setUp(self):
+        self.alice = User.objects.create_user(username='alice', password='p')
+        self.bob = User.objects.create_user(username='bob', password='p')
+        self.event = Event.objects.create(
+            title='Test Event',
+            date=timezone.now() + timedelta(days=7),
+            created_by=self.alice,
+            voting_deadline=timezone.now() + timedelta(days=6),
+        )
+
+    def test_creator_can_view(self):
+        self.assertTrue(can_view_private_event(self.alice, self.event))
+
+    def test_public_event_visible_to_anyone(self):
+        self.event.privacy = 'public'
+        self.event.save()
+        self.assertTrue(can_view_private_event(self.bob, self.event))
+
+    def test_invite_only_public_visible_to_anyone(self):
+        self.event.privacy = 'invite_only_public'
+        self.event.save()
+        self.assertTrue(can_view_private_event(self.bob, self.event))
+
+    def test_private_not_visible_to_non_invitee(self):
+        self.event.privacy = 'private'
+        self.event.save()
+        self.assertFalse(can_view_private_event(self.bob, self.event))
+
+    def test_private_visible_to_invitee(self):
+        self.event.privacy = 'private'
+        self.event.save()
+        EventInvite.objects.create(
+            event=self.event, user=self.bob, invited_by=self.alice,
+        )
+        self.assertTrue(can_view_private_event(self.bob, self.event))
+
+    def test_private_visible_to_attendee(self):
+        self.event.privacy = 'private'
+        self.event.save()
+        EventAttendance.objects.create(user=self.bob, event=self.event)
+        self.assertTrue(can_view_private_event(self.bob, self.event))
+
+    def test_group_event_ignored(self):
+        group = Group.objects.create(name='G1')
+        self.event.group = group
+        self.event.save()
+        self.assertIsNone(can_view_private_event(self.bob, self.event))
+
+    def test_superuser_can_view(self):
+        su = User.objects.create_superuser(username='su', password='p')
+        self.event.privacy = 'private'
+        self.event.save()
+        self.assertTrue(can_view_private_event(su, self.event))
+
+    def test_additional_organizer_can_view(self):
+        self.event.privacy = 'private'
+        self.event.save()
+        self.event.additional_organizers.add(self.bob)
+        self.assertTrue(can_view_private_event(self.bob, self.event))
+
+
+@tag("unit")
+class CanRsvpPrivateEventTest(TestCase):
+
+    def setUp(self):
+        self.alice = User.objects.create_user(username='alice', password='p')
+        self.bob = User.objects.create_user(username='bob', password='p')
+        self.event = Event.objects.create(
+            title='Test Event',
+            date=timezone.now() + timedelta(days=7),
+            created_by=self.alice,
+            voting_deadline=timezone.now() + timedelta(days=6),
+        )
+
+    def test_public_event_anyone_can_rsvp(self):
+        self.event.privacy = 'public'
+        self.event.save()
+        self.assertTrue(can_rsvp_private_event(self.bob, self.event))
+
+    def test_private_event_invitee_can_rsvp(self):
+        self.event.privacy = 'private'
+        self.event.save()
+        EventInvite.objects.create(
+            event=self.event, user=self.bob, invited_by=self.alice,
+        )
+        self.assertTrue(can_rsvp_private_event(self.bob, self.event))
+
+    def test_private_event_non_invitee_cannot_rsvp(self):
+        self.event.privacy = 'private'
+        self.event.save()
+        self.assertFalse(can_rsvp_private_event(self.bob, self.event))
+
+    def test_invite_only_public_invitee_can_rsvp(self):
+        self.event.privacy = 'invite_only_public'
+        self.event.save()
+        EventInvite.objects.create(
+            event=self.event, user=self.bob, invited_by=self.alice,
+        )
+        self.assertTrue(can_rsvp_private_event(self.bob, self.event))
+
+    def test_invite_only_public_non_invitee_cannot_rsvp(self):
+        self.event.privacy = 'invite_only_public'
+        self.event.save()
+        self.assertFalse(can_rsvp_private_event(self.bob, self.event))
+
+    def test_group_event_ignored(self):
+        group = Group.objects.create(name='G1')
+        self.event.group = group
+        self.event.save()
+        self.assertIsNone(can_rsvp_private_event(self.bob, self.event))
+
+
+@tag("unit")
+class CanInviteToEventTest(TestCase):
+
+    def setUp(self):
+        self.alice = User.objects.create_user(username='alice', password='p')
+        self.bob = User.objects.create_user(username='bob', password='p')
+        self.carol = User.objects.create_user(username='carol', password='p')
+        self.event = Event.objects.create(
+            title='Test Event',
+            date=timezone.now() + timedelta(days=7),
+            created_by=self.alice,
+            voting_deadline=timezone.now() + timedelta(days=6),
+        )
+
+    def test_creator_can_always_invite(self):
+        self.assertTrue(can_invite_to_event(self.alice, self.event))
+
+    def test_nobody_setting_blocks_others(self):
+        self.event.allow_invite_others = 'nobody'
+        self.event.save()
+        self.assertFalse(can_invite_to_event(self.bob, self.event))
+
+    def test_anyone_setting_allows_anyone(self):
+        self.event.allow_invite_others = 'anyone'
+        self.event.additional_organizers.add(self.bob)
+        self.event.save()
+        self.assertTrue(can_invite_to_event(self.bob, self.event))
+
+    def test_friends_only_allows_friend(self):
+        from club.models import Friendship
+        Friendship.objects.create(
+            requester=self.bob, receiver=self.carol, status='accepted',
+        )
+        self.event.allow_invite_others = 'friends_only'
+        self.event.additional_organizers.add(self.bob)
+        self.event.save()
+        self.assertTrue(can_invite_to_event(self.bob, self.event, self.carol))
+
+    def test_friends_only_blocks_non_friend(self):
+        self.event.allow_invite_others = 'friends_only'
+        self.event.additional_organizers.add(self.bob)
+        self.event.save()
+        self.assertFalse(can_invite_to_event(self.bob, self.event, self.carol))
+
+    def test_non_organizer_cannot_invite(self):
+        self.event.allow_invite_others = 'anyone'
+        self.event.save()
+        self.assertFalse(can_invite_to_event(self.bob, self.event))
+
+
+@tag("unit")
+class CanEditPrivateEventSettingsTest(TestCase):
+
+    def setUp(self):
+        self.alice = User.objects.create_user(username='alice', password='p')
+        self.bob = User.objects.create_user(username='bob', password='p')
+        self.event = Event.objects.create(
+            title='Test Event',
+            date=timezone.now() + timedelta(days=7),
+            created_by=self.alice,
+            voting_deadline=timezone.now() + timedelta(days=6),
+        )
+
+    def test_creator_can_edit_settings(self):
+        self.assertTrue(can_edit_private_event_settings(self.alice, self.event))
+
+    def test_additional_organizer_cannot_edit_settings(self):
+        self.event.additional_organizers.add(self.bob)
+        self.assertFalse(can_edit_private_event_settings(self.bob, self.event))
+
+    def test_non_organizer_cannot_edit_settings(self):
+        self.assertFalse(can_edit_private_event_settings(self.bob, self.event))

@@ -64,6 +64,29 @@ class GameListViewTest(TestCase):
         self.assertContains(response, 'You currently own no games.')
         self.assertContains(response, 'Click here to add a game')
 
+    def test_game_list_has_filter_button(self):
+        self.client.login(username='gameowner', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertContains(response, 'filter-modal-btn')
+
+    def test_game_list_has_filter_modal(self):
+        self.client.login(username='gameowner', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertContains(response, 'filter-modal-overlay')
+        self.assertContains(response, 'filter-modal-close')
+        self.assertContains(response, 'filter-apply-btn')
+
+    def test_game_list_filter_button_shows_active_count(self):
+        self.client.login(username='gameowner', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'owner': 'myself', 'players': '4'})
+        self.assertContains(response, 'filter-modal-btn')
+        self.assertEqual(response.context['active_filter_count'], 2)
+
+    def test_game_list_no_active_filters_shows_zero_count(self):
+        self.client.login(username='gameowner', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertEqual(response.context['active_filter_count'], 0)
+
 
 @tag("integration")
 class GameListFilterTest(TestCase):

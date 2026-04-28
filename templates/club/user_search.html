@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% load club_tags %}
+
+{% block title %}Find Users{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Find Users</h2>
+    <form method="get" class="form-inline" style="display:flex;gap:0.5rem;margin-bottom:1rem;">
+        <input type="text" name="q" value="{{ query }}" placeholder="Search by username..." class="form-control" autofocus>
+        <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+
+    {% if query %}
+        {% if results %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Username</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in results %}
+                <tr>
+                    <td><a href="{% url 'public_profile' user.username %}">{{ user.username }}</a>{% verified_badge user %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No users found matching "{{ query }}".</p>
+        {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

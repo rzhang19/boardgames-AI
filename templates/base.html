@@ -48,6 +48,26 @@
     {% endif %}
     <main>
         {% block content %}{% endblock %}
+    {% if messages %}
+    <div class="toast-container">
+        {% for message in messages %}
+        <div class="toast toast-{{ message.tags }}" role="alert">
+            <span class="toast-message">{{ message }}</span>
+            <button type="button" class="toast-close" aria-label="Close" onclick="this.parentElement.remove()">&times;</button>
+        </div>
+        {% endfor %}
+    </div>
+    <script>
+    (function() {
+        setTimeout(function() {
+            document.querySelectorAll('.toast').forEach(function(toast) {
+                toast.style.animation = 'toast-out 0.3s ease forwards';
+                setTimeout(function() { toast.remove(); }, 300);
+            });
+        }, 10000);
+    })();
+    </script>
+    {% endif %}
     </main>
     {% if user.is_authenticated and not user.timezone_detected and not is_view_only %}
     <script>

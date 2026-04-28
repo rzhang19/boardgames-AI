@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}{{ profile_user.username }}'s Friends{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ profile_user.username }}'s Friends ({{ friends|length }})</h2>
+    {% if friends %}
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for friend in friends %}
+            <tr>
+                <td><a href="{% url 'public_profile' friend.username %}">{{ friend.username }}</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>{{ profile_user.username }} has no friends yet.</p>
+    {% endif %}
+</div>
+{% endblock %}

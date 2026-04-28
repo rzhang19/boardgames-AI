@@ -905,23 +905,72 @@ li {
     border-bottom-color: var(--primary);
 }
 
-.filter-bar {
+.filter-modal-btn .filter-icon {
+    font-size: 0.875rem;
+}
+
+.filter-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.filter-modal-overlay.active {
     display: flex;
-    align-items: flex-end;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin-bottom: 20px;
-    padding: 16px;
+}
+
+.filter-modal {
     background: var(--surface);
-    border: 1px solid var(--border);
     border-radius: var(--radius);
+    width: 100%;
+    max-width: 480px;
+    margin: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    max-height: 90vh;
+    overflow-y: auto;
 }
 
-.filter-bar .filter-group {
-    margin-bottom: 0;
+.filter-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
 }
 
-.filter-bar label {
+.filter-modal-header h2 {
+    margin: 0;
+    font-size: 1.125rem;
+    color: var(--text);
+}
+
+.filter-modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-light);
+    padding: 0 4px;
+    line-height: 1;
+}
+
+.filter-modal-close:hover {
+    color: var(--text);
+}
+
+.filter-modal-body {
+    padding: 20px;
+}
+
+.filter-modal-body .filter-group {
+    margin-bottom: 16px;
+}
+
+.filter-modal-body label {
     display: block;
     font-weight: 600;
     font-size: 0.813rem;
@@ -934,19 +983,22 @@ li {
     min-height: 36px;
     padding: 6px 10px;
     font-size: 0.875rem;
+    width: 100%;
 }
 
 .filter-players-input {
-    width: 100px !important;
+    width: 100% !important;
     padding: 6px 10px;
     font-size: 0.875rem;
 }
 
-.filter-actions {
+.filter-modal-footer {
     display: flex;
     gap: 8px;
-    align-items: flex-end;
-    margin-bottom: 0;
+    justify-content: flex-end;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
 }
 
 thead th a {
@@ -1101,32 +1153,10 @@ thead th a:hover {
         font-size: 0.875rem;
     }
 
-    .filter-bar {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 12px;
-        padding: 12px;
-    }
-
-    .filter-bar .filter-group {
-        width: 100%;
-    }
-
-    .filter-owner-select {
-        width: 100%;
-        min-width: 0;
-    }
-
-    .filter-players-input {
-        width: 100% !important;
-    }
-
-    .filter-actions {
-        width: 100%;
-    }
-
-    .filter-actions .btn {
-        flex: 1;
+    .filter-modal {
+        max-width: 100%;
+        margin: 8px;
+        max-height: 95vh;
     }
 
     .bgg-search-bar {
@@ -1277,6 +1307,7 @@ thead th a:hover {
     gap: 8px;
     flex: 1;
     min-width: 0;
+    flex-wrap: wrap;
 }
 
 .notification-dot {
@@ -1323,6 +1354,13 @@ thead th a:hover {
 
 .notification-delete-bar {
     margin-top: 16px;
+}
+
+.notification-friend-actions {
+    display: inline-flex;
+    gap: 6px;
+    flex-shrink: 0;
+    margin-left: 8px;
 }
 
 @media (max-width: 600px) {
@@ -1826,4 +1864,167 @@ thead th a:hover {
 
 .group-settings-btn {
     margin-right: 4px;
+}
+
+/* Friend action buttons */
+.friend-action-btn {
+    min-width: 170px;
+    text-align: center;
+}
+
+.friend-cancel-btn {
+    position: relative;
+}
+
+.friend-cancel-btn .cancel-hover {
+    display: none;
+}
+
+.friend-cancel-btn:hover .cancel-default,
+.friend-cancel-form:hover .cancel-default {
+    display: none;
+}
+
+.friend-cancel-btn:hover .cancel-hover,
+.friend-cancel-form:hover .cancel-hover {
+    display: inline;
+}
+
+.friend-response-btns {
+    display: inline-flex;
+    gap: 6px;
+}
+
+.friend-accept-btn {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+}
+
+.friend-accept-btn:hover {
+    background: #bbf7d0;
+}
+
+.friend-decline-btn {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+}
+
+.friend-decline-btn:hover {
+    background: #fecaca;
+}
+
+.btn-success {
+    background: var(--success, #22c55e);
+    color: #fff;
+}
+
+.btn-danger {
+    background: var(--danger, #ef4444);
+    color: #fff;
+}
+
+@media (max-width: 600px) {
+    .friend-action-btn {
+        min-width: 110px;
+        font-size: 0.813rem;
+    }
+
+    .friend-cancel-btn .cancel-default {
+        display: none;
+    }
+
+    .friend-cancel-btn .cancel-hover,
+    .friend-cancel-form .cancel-hover {
+        display: inline;
+    }
+
+    .accept-text,
+    .decline-text {
+        display: none;
+    }
+
+    .friend-accept-btn,
+    .friend-decline-btn {
+        min-width: 44px;
+        padding: 6px 10px;
+    }
+}
+
+.toast-container {
+    position: fixed;
+    top: 70px;
+    right: 20px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 350px;
+}
+
+.toast {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    color: #166534;
+    font-size: 0.875rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    animation: toast-in 0.3s ease;
+}
+
+.toast-success {
+    background: #f0fdf4;
+    border-color: #86efac;
+    color: #166534;
+}
+
+.toast-error {
+    background: #fef2f2;
+    border-color: #fca5a5;
+    color: #991b1b;
+}
+
+.toast-message {
+    flex: 1;
+}
+
+.toast-close {
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    cursor: pointer;
+    margin-left: 12px;
+    color: inherit;
+    opacity: 0.6;
+}
+
+.toast-close:hover {
+    opacity: 1;
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateX(50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes toast-out {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(50px);
+    }
 }

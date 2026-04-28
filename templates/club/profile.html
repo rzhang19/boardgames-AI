@@ -20,8 +20,49 @@
         {% endif %}
         {% if is_own %}
         <a href="{% url 'user_settings' %}" class="btn btn-primary btn-sm">Edit Profile</a>
+        {% elif friend_status %}
+            {% if friend_status == 'none' %}
+            <form method="post" action="{% url 'send_friend_request' profile_user.username %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary btn-sm friend-action-btn">Add Friend</button>
+            </form>
+            {% elif friend_status == 'pending_sent' %}
+            <form method="post" action="{% url 'cancel_friend_request' friendship.pk %}" style="display:inline;" class="friend-cancel-form">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-secondary btn-sm friend-action-btn friend-cancel-btn">
+                    <span class="cancel-default">Friend Request Pending</span>
+                    <span class="cancel-hover">Cancel Friend Request</span>
+                </button>
+            </form>
+            {% elif friend_status == 'pending_received' %}
+            <div class="friend-response-btns">
+                <form method="post" action="{% url 'accept_friend_request' friendship.pk %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-success btn-sm friend-accept-btn">
+                        <span class="accept-icon">&#10003;</span>
+                        <span class="accept-text">Accept</span>
+                    </button>
+                </form>
+                <form method="post" action="{% url 'decline_friend_request' friendship.pk %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger btn-sm friend-decline-btn">
+                        <span class="decline-icon">&#10007;</span>
+                        <span class="decline-text">Decline</span>
+                    </button>
+                </form>
+            </div>
+            {% elif friend_status == 'friends' %}
+            <form method="post" action="{% url 'remove_friend' profile_user.username %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-secondary btn-sm friend-action-btn">Unfriend</button>
+            </form>
+            {% endif %}
         {% endif %}
     </div>
+</div>
+
+<div class="card">
+    <p><a href="{% url 'friends_list' profile_user.username %}">Friends</a></p>
 </div>
 
 {% if games %}

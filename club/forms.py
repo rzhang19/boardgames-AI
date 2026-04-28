@@ -8,7 +8,7 @@ from django.contrib.auth.hashers import check_password
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import BoardGame, Event, Group, GroupMembership, PasswordHistory, VerifiedIcon, Vote
+from .models import BoardGame, Event, EventAttendance, EventInvite, Group, GroupMembership, PasswordHistory, PrivateEventCreationLog, VerifiedIcon, Vote
 from .timezone_utils import get_timezone_choices, is_valid_timezone
 from .utils import MAX_FILE_SIZE, parse_bgg_link, validate_image_size
 
@@ -430,3 +430,155 @@ class SuccessorPickForm(forms.Form):
         if uid not in self._member_ids:
             raise forms.ValidationError('Invalid successor.')
         return uid
+
+
+class PrivateEventForm(forms.ModelForm):
+    date = forms.DateField(
+        widget=forms.DateInput(attrs={'type': 'date'}),
+    )
+    time = forms.TimeField(
+        required=False,
+        widget=forms.TimeInput(attrs={'type': 'time'}),
+    )
+    voting_deadline_date = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'date'}),
+    )
+    voting_deadline_time = forms.TimeField(
+        required=False,
+        widget=forms.TimeInput(attrs={'type': 'time'}),
+    )
+    voting_deadline_offset_minutes = forms.IntegerField(
+        required=False,
+        widget=forms.HiddenInput,
+    )
+    privacy = forms.ChoiceField(
+        choices=Event.PRIVACY_CHOICES,
+        initial='public',
+    )
+    allow_invite_others = forms.ChoiceField(
+        choices=Event.INVITE_OTHERS_CHOICES,
+        initial='nobody',
+    )
+    auto_add_games = forms.BooleanField(required=False, initial=False)
+
+    class Meta:
+        model = Event
+        fields = ['title', 'location', 'description', 'privacy', 'allow_invite_others', 'auto_add_games']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk and self.instance.date:
+            self.fields['date'].initial = self.instance.date.date()
+            if self.instance.date.time() != dt_time(0, 0):
+                self.fields['time'].initial = self.instance.date.time()
+            if self.instance.voting_deadline:
+                self.fields['voting_deadline_date'].initial = self.instance.voting_deadline.date()
+                if self.instance.voting_deadline.time() != dt_time(0, 0):
+                    self.fields['voting_deadline_time'].initial = self.instance.voting_deadline.time()
+
+    def clean(self):
+        cleaned_data = super().clean()
+        date_val = cleaned_data.get('date')
+        time_val = cleaned_data.get('time') or dt_time(0, 0)
+        if date_val:
+            combined = datetime.combine(date_val, time_val)
+            combined = timezone.make_aware(combined) if timezone.is_naive(combined) else combined
+            original_date = getattr(self.instance, 'date', None)
+            is_same_datetime = (
+                original_date
+                and combined.date() == original_date.date()
+                and combined.hour == original_date.hour
+                and combined.minute == original_date.minute
+            )
+            if combined < timezone.now() and not is_same_datetime:
+                self.add_error('date', 'The event date cannot be in the past.')
+            cleaned_data['date'] = combined
+
+        vd_date = cleaned_data.get('voting_deadline_date')
+        vd_time = cleaned_data.get('voting_deadline_time') or dt_time(0, 0)
+        if vd_date:
+            vd_combined = datetime.combine(vd_date, vd_time)
+            vd_combined = timezone.make_aware(vd_combined) if timezone.is_naive(vd_combined) else vd_combined
+            event_date = cleaned_data.get('date')
+            if event_date:
+                if vd_combined > event_date:
+                    self.add_error('voting_deadline_date', 'Voting deadline cannot be after the event start time.')
+            buffer = timezone.now() + timezone.timedelta(minutes=2)
+            original_deadline = getattr(self.instance, 'voting_deadline', None)
+            deadline_unchanged = (
+                original_deadline
+                and vd_combined.date() == original_deadline.date()
+                and vd_combined.hour == original_deadline.hour
+                and vd_combined.minute == original_deadline.minute
+            )
+            if vd_combined < buffer and not deadline_unchanged:
+                self.add_error('voting_deadline_date', 'Voting deadline must be at least 2 minutes from now.')
+            cleaned_data['voting_deadline'] = vd_combined
+        else:
+            cleaned_data['voting_deadline'] = None
+
+        return cleaned_data
+
+
+class EventSettingsForm(forms.ModelForm):
+    additional_organizer_ids = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput,
+    )
+
+    class Meta:
+        model = Event
+        fields = [
+            'privacy',
+            'show_description_publicly',
+            'show_location_publicly',
+            'show_datetime_publicly',
+            'show_attendees_publicly',
+            'allow_invite_others',
+            'auto_add_games',
+            'organizers_can_edit_title',
+            'organizers_can_edit_description',
+            'organizers_can_edit_datetime',
+        ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def clean_additional_organizer_ids(self):
+        raw = self.cleaned_data.get('additional_organizer_ids', '')
+        if not raw:
+            return []
+        try:
+            return [int(x) for x in raw.split(',') if x.strip()]
+        except (ValueError, TypeError):
+            raise forms.ValidationError('Invalid organizer IDs.')
+
+    def save(self, commit=True):
+        event = super().save(commit=False)
+        organizer_ids = self.cleaned_data.get('additional_organizer_ids', [])
+        if commit:
+            event.save()
+            if organizer_ids is not None:
+                current_attendee_ids = set(
+                    EventAttendance.objects.filter(event=event).values_list('user_id', flat=True)
+                )
+                valid_ids = [uid for uid in organizer_ids if uid in current_attendee_ids]
+                event.additional_organizers.set(valid_ids)
+        return event
+
+
+class EventInviteForm(forms.Form):
+    user_ids = forms.CharField(
+        widget=forms.HiddenInput,
+        required=True,
+    )
+
+    def clean_user_ids(self):
+        raw = self.cleaned_data.get('user_ids', '')
+        if not raw:
+            raise forms.ValidationError('Select at least one user to invite.')
+        try:
+            return [int(x) for x in raw.split(',') if x.strip()]
+        except (ValueError, TypeError):
+            raise forms.ValidationError('Invalid user IDs.')
