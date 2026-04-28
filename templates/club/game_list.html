@@ -108,7 +108,11 @@
                                 {% if detail.group_name %}
                                     <a href="{% url 'group_dashboard' detail.group_slug %}">{{ detail.group_name }}</a> - 
                                 {% endif %}
-                                {{ detail.owner_display }}
+                                {% if game.owner %}
+                                    <a href="{% url 'public_profile' game.owner.username %}">{{ detail.owner_display }}</a>{% verified_badge game.owner %}
+                                {% else %}
+                                    {{ detail.owner_display }}
+                                {% endif %}
                             </div>
                         {% endfor %}
                     </div>

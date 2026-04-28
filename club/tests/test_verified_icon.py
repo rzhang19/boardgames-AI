@@ -3,6 +3,8 @@ from django.core.files.base import ContentFile
 from django.test import TestCase, tag
 from django.urls import reverse
 
+import re
+
 from club.models import BoardGame, Event, EventAttendance, Group, GroupMembership, VerifiedIcon, Vote
 
 User = get_user_model()
@@ -142,24 +144,42 @@ class VerifiedBadgeCustomIconRenderingTest(TestCase):
         self.group = Group.objects.create(name='Test Group')
 
     def test_custom_icon_renders_on_dashboard(self):
-        user = User.objects.create_user(
+        owner = User.objects.create_user(
             username='iconuser', password='testpass123',
             email_verified=True, verified_icon=self.icon,
         )
-        BoardGame.objects.create(name='Catan', owner=user)
-        self.client.login(username='iconuser', password='testpass123')
+        BoardGame.objects.create(name='Catan', owner=owner)
+        viewer = User.objects.create_user(
+            username='viewer', password='testpass123',
+        )
+        GroupMembership.objects.create(user=owner, group=self.group, role='member')
+        GroupMembership.objects.create(user=viewer, group=self.group, role='member')
+        self.client.login(username='viewer', password='testpass123')
         response = self.client.get(reverse('game_list'))
-        self.assertContains(response, 'verified-badge')
+        html = response.content.decode()
+        self.assertTrue(
+            re.search(r'data-label="Owner - Details".*?verified-badge', html, re.DOTALL),
+            'verified-badge not found inside Owner - Details column',
+        )
 
     def test_no_icon_renders_default_checkmark(self):
-        user = User.objects.create_user(
+        owner = User.objects.create_user(
             username='defaultuser', password='testpass123',
             email_verified=True,
         )
-        BoardGame.objects.create(name='Catan', owner=user)
-        self.client.login(username='defaultuser', password='testpass123')
+        BoardGame.objects.create(name='Catan', owner=owner)
+        viewer = User.objects.create_user(
+            username='viewer', password='testpass123',
+        )
+        GroupMembership.objects.create(user=owner, group=self.group, role='member')
+        GroupMembership.objects.create(user=viewer, group=self.group, role='member')
+        self.client.login(username='viewer', password='testpass123')
         response = self.client.get(reverse('game_list'))
-        self.assertContains(response, 'verified-badge')
+        html = response.content.decode()
+        self.assertTrue(
+            re.search(r'data-label="Owner - Details".*?verified-badge', html, re.DOTALL),
+            'verified-badge not found inside Owner - Details column',
+        )
 
     def test_custom_icon_renders_on_game_list(self):
         owner = User.objects.create_user(
@@ -167,9 +187,18 @@ class VerifiedBadgeCustomIconRenderingTest(TestCase):
             email_verified=True, verified_icon=self.icon,
         )
         BoardGame.objects.create(name='Catan', owner=owner)
-        self.client.login(username='iconowner', password='testpass123')
+        viewer = User.objects.create_user(
+            username='viewer', password='testpass123',
+        )
+        GroupMembership.objects.create(user=owner, group=self.group, role='member')
+        GroupMembership.objects.create(user=viewer, group=self.group, role='member')
+        self.client.login(username='viewer', password='testpass123')
         response = self.client.get(reverse('game_list'))
-        self.assertContains(response, 'verified-badge')
+        html = response.content.decode()
+        self.assertTrue(
+            re.search(r'data-label="Owner - Details".*?verified-badge', html, re.DOTALL),
+            'verified-badge not found inside Owner - Details column',
+        )
 
     def test_custom_icon_renders_on_game_detail(self):
         owner = User.objects.create_user(

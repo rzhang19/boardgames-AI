@@ -118,7 +118,7 @@ class GameListDataLabelsTest(TestCase):
         self.assertContains(response, 'data-label="Name"')
         self.assertContains(response, 'data-label="Players"')
         self.assertContains(response, 'data-label="Complexity"')
-        self.assertContains(response, 'data-label="Owner"')
+        self.assertContains(response, 'data-label="Owned By"')
 
 
 @tag("integration")

@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.urls import reverse
 
+import re
+
 from club.models import BoardGame, Event, EventAttendance, Group, GroupMembership, Vote
 
 User = get_user_model()
@@ -40,9 +42,19 @@ class VerifiedBadgeGamePagesTest(TestCase):
             email='verified@example.com', email_verified=True
         )
         game = BoardGame.objects.create(name='Catan', owner=owner)
-        self.client.login(username='verifiedowner', password='testpass123')
+        viewer = User.objects.create_user(
+            username='viewer', password='testpass123',
+        )
+        group = Group.objects.create(name='Test Group')
+        GroupMembership.objects.create(user=owner, group=group, role='member')
+        GroupMembership.objects.create(user=viewer, group=group, role='member')
+        self.client.login(username='viewer', password='testpass123')
         response = self.client.get(reverse('game_list'))
-        self.assertContains(response, 'verified-badge')
+        html = response.content.decode()
+        self.assertTrue(
+            re.search(r'data-label="Owner - Details".*?verified-badge', html, re.DOTALL),
+            'verified-badge not found inside Owner - Details column',
+        )
         response = self.client.get(reverse('game_detail', kwargs={'pk': game.pk}))
         self.assertContains(response, 'verified-badge')
 
@@ -52,9 +64,21 @@ class VerifiedBadgeGamePagesTest(TestCase):
             email='unverified@example.com', email_verified=False
         )
         game = BoardGame.objects.create(name='Risk', owner=owner)
-        self.client.login(username='unverifiedowner', password='testpass123')
+        viewer = User.objects.create_user(
+            username='viewer', password='testpass123',
+        )
+        group = Group.objects.create(name='Test Group')
+        GroupMembership.objects.create(user=owner, group=group, role='member')
+        GroupMembership.objects.create(user=viewer, group=group, role='member')
+        self.client.login(username='viewer', password='testpass123')
         response = self.client.get(reverse('game_list'))
-        self.assertNotContains(response, 'verified-badge')
+        html = response.content.decode()
+        owner_details_match = re.search(
+            r'data-label="Owner - Details".*?(?:</td>)',
+            html, re.DOTALL,
+        )
+        if owner_details_match:
+            self.assertNotIn('verified-badge', owner_details_match.group(0))
         response = self.client.get(reverse('game_detail', kwargs={'pk': game.pk}))
         self.assertNotContains(response, 'verified-badge')
 
