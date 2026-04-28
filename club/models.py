@@ -685,3 +685,50 @@ class Friendship(models.Model):
             else:
                 friend_ids.add(f.requester_id)
         return User.objects.filter(pk__in=friend_ids)
+
+
+class Block(models.Model):
+    blocker = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='blocks_made',
+    )
+    blocked = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='blocks_received',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['blocker', 'blocked'],
+                name='unique_block',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.blocker} blocked {self.blocked}'
+
+    @staticmethod
+    def is_blocked(user_a, user_b):
+        return Block.objects.filter(
+            Q(blocker=user_a, blocked=user_b)
+            | Q(blocker=user_b, blocked=user_a),
+        ).exists()
+
+    @staticmethod
+    def get_blocked_user_ids(user):
+        blocked = set(
+            Block.objects.filter(
+                Q(blocker=user) | Q(blocked=user),
+            ).values_list('blocker_id', 'blocked_id')
+        )
+        ids = set()
+        for blocker_id, blocked_id in blocked:
+            if blocker_id == user.pk:
+                ids.add(blocked_id)
+            else:
+                ids.add(blocker_id)
+        return ids

@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 
-from club.models import BoardGame, GroupMembership, Notification
+from club.models import Block, BoardGame, GroupMembership, Notification
 
 User = get_user_model()
 
@@ -14,6 +14,12 @@ def _notify_user(user, message, url, url_label, notification_type):
         url_label=url_label,
         notification_type=notification_type,
     )
+
+
+def _notify_user_if_not_blocked(actor, user, message, url, url_label, notification_type):
+    if Block.is_blocked(actor, user):
+        return
+    _notify_user(user, message, url, url_label, notification_type)
 
 
 def _notify_group_members(group, message, url, url_label, notification_type, exclude_user=None):
@@ -318,7 +324,8 @@ def generate_missing_max_players_notifications(user):
 # ---------------------------------------------------------------------------
 
 def notify_friend_request_sent(receiver, requester):
-    _notify_user(
+    _notify_user_if_not_blocked(
+        requester,
         receiver,
         f'{requester.username} sent you a friend request.',
         f'/profile/{requester.username}/',
@@ -328,7 +335,8 @@ def notify_friend_request_sent(receiver, requester):
 
 
 def notify_friend_request_accepted(requester, accepter):
-    _notify_user(
+    _notify_user_if_not_blocked(
+        accepter,
         requester,
         f'{accepter.username} accepted your friend request.',
         f'/profile/{accepter.username}/',
@@ -338,7 +346,8 @@ def notify_friend_request_accepted(requester, accepter):
 
 
 def notify_friend_request_declined(requester, decliner):
-    _notify_user(
+    _notify_user_if_not_blocked(
+        decliner,
         requester,
         f'{decliner.username} declined your friend request.',
         '',
@@ -352,7 +361,8 @@ def notify_friend_request_declined(requester, decliner):
 # ---------------------------------------------------------------------------
 
 def notify_event_invite_sent(invitee, inviter, event):
-    _notify_user(
+    _notify_user_if_not_blocked(
+        inviter,
         invitee,
         f'{inviter.username} invited you to "{event.title}"',
         f'/events/{event.pk}/',
@@ -362,7 +372,8 @@ def notify_event_invite_sent(invitee, inviter, event):
 
 
 def notify_event_invite_accepted(inviter, accepter, event):
-    _notify_user(
+    _notify_user_if_not_blocked(
+        accepter,
         inviter,
         f'{accepter.username} accepted your invite to "{event.title}"',
         f'/events/{event.pk}/',
@@ -372,7 +383,8 @@ def notify_event_invite_accepted(inviter, accepter, event):
 
 
 def notify_event_invite_declined(inviter, decliner, event):
-    _notify_user(
+    _notify_user_if_not_blocked(
+        decliner,
         inviter,
         f'{decliner.username} declined your invite to "{event.title}"',
         '',

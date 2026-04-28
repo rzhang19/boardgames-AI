@@ -23,7 +23,7 @@ from .forms import (
     SettingsForm, SuccessorPickForm,
     UserAddForm, UserManageForm, RegistrationForm, VerifiedIconForm, VoteForm,
 )
-from .models import BoardGame, Event, EventAttendance, EventInvite, Group, GroupCreationLog, GroupInvite, GroupJoinRequest, GroupMembership, Friendship, Notification, PasswordHistory, PrivateEventCreationLog, SiteSettings, VerifiedIcon, Vote
+from .models import BoardGame, Block, Event, EventAttendance, EventInvite, Group, GroupCreationLog, GroupInvite, GroupJoinRequest, GroupMembership, Friendship, Notification, PasswordHistory, PrivateEventCreationLog, SiteSettings, VerifiedIcon, Vote
 from .notifications import (
     generate_missing_complexity_notifications,
     generate_missing_max_players_notifications,
@@ -445,6 +445,15 @@ def public_profile(request, username):
         'is_own': is_own,
     }
 
+    is_blocked = (
+        not is_own
+        and Block.is_blocked(request.user, profile_user)
+    )
+    context['is_blocked'] = is_blocked
+
+    if is_blocked:
+        return render(request, 'club/profile.html', context)
+
     if is_own or profile_user.show_games:
         context['games'] = BoardGame.objects.filter(
             owner=profile_user,
@@ -568,6 +577,11 @@ def user_settings(request):
     return render(request, 'club/settings.html', {
         'form': form,
         'verified_icons': VerifiedIcon.objects.all().order_by('name'),
+        'blocked_users': User.objects.filter(
+            pk__in=Block.objects.filter(
+                blocker=request.user,
+            ).values_list('blocked_id', flat=True),
+        ).order_by('username'),
     })
 
 
@@ -1663,6 +1677,27 @@ def notification_list(request):
         return redirect('/login/')
     notifications = Notification.objects.filter(user=request.user)
 
+    blocked_ids = Block.get_blocked_user_ids(request.user)
+    if blocked_ids:
+        blocked_usernames = set(
+            User.objects.filter(pk__in=blocked_ids).values_list('username', flat=True)
+        )
+        direct_types = {
+            'friend_request', 'friend_request_accepted', 'friend_request_declined',
+            'event_invite', 'event_invite_accepted', 'event_invite_declined',
+            'event_organizer_designated',
+        }
+        filtered_ids = []
+        for n in notifications:
+            if n.notification_type not in direct_types:
+                continue
+            parts = (n.url or '').strip('/').split('/')
+            username = parts[-1] if parts else ''
+            if username in blocked_usernames:
+                filtered_ids.append(n.pk)
+        if filtered_ids:
+            notifications = notifications.exclude(pk__in=filtered_ids)
+
     friendship_pks = {}
     friend_notifs = notifications.filter(
         notification_type='friend_request', is_read=False,
@@ -2234,6 +2269,52 @@ def group_invite_accept(request, token):
 
 
 # ---------------------------------------------------------------------------
+# Block views
+# ---------------------------------------------------------------------------
+
+@login_required
+def block_user(request, username):
+    from django.http import HttpResponseNotAllowed
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+
+    target = get_object_or_404(User, username=username)
+    if target == request.user:
+        raise PermissionDenied
+
+    Block.objects.get_or_create(blocker=request.user, blocked=target)
+
+    Friendship.objects.filter(
+        Q(requester=request.user, receiver=target)
+        | Q(requester=target, receiver=request.user),
+    ).delete()
+
+    Notification.objects.filter(
+        user=request.user,
+        notification_type='friend_request',
+        url=f'/profile/{target.username}/',
+    ).delete()
+    Notification.objects.filter(
+        user=target,
+        notification_type='friend_request',
+        url=f'/profile/{request.user.username}/',
+    ).delete()
+
+    return redirect('public_profile', username=username)
+
+
+@login_required
+def unblock_user(request, username):
+    from django.http import HttpResponseNotAllowed
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+
+    target = get_object_or_404(User, username=username)
+    Block.objects.filter(blocker=request.user, blocked=target).delete()
+    return redirect('public_profile', username=username)
+
+
+# ---------------------------------------------------------------------------
 # Friendship views
 # ---------------------------------------------------------------------------
 
@@ -2241,6 +2322,8 @@ def group_invite_accept(request, token):
 def send_friend_request(request, username):
     target = get_object_or_404(User, username=username)
     if target == request.user:
+        raise PermissionDenied
+    if Block.is_blocked(request.user, target):
         raise PermissionDenied
     if not Friendship.can_send_request(request.user, target):
         return redirect('public_profile', username=username)
@@ -2268,6 +2351,8 @@ def accept_friend_request(request, pk):
         raise PermissionDenied
     if friendship.status != 'pending':
         raise PermissionDenied
+    if Block.is_blocked(request.user, friendship.requester):
+        raise PermissionDenied
 
     if request.method == 'POST':
         friendship.status = 'accepted'
@@ -2285,6 +2370,8 @@ def decline_friend_request(request, pk):
     if friendship.receiver != request.user:
         raise PermissionDenied
     if friendship.status != 'pending':
+        raise PermissionDenied
+    if Block.is_blocked(request.user, friendship.requester):
         raise PermissionDenied
 
     if request.method == 'POST':
@@ -2305,6 +2392,8 @@ def cancel_friend_request(request, pk):
     if friendship.requester != request.user:
         raise PermissionDenied
     if friendship.status != 'pending':
+        raise PermissionDenied
+    if Block.is_blocked(request.user, friendship.receiver):
         raise PermissionDenied
 
     if request.method == 'POST':
@@ -2342,7 +2431,10 @@ def user_search(request):
     query = request.GET.get('q', '').strip()
     results = []
     if query:
-        results = User.objects.exclude(pk=request.user.pk).filter(
+        blocked_ids = Block.get_blocked_user_ids(request.user)
+        results = User.objects.exclude(
+            pk__in=[request.user.pk] + list(blocked_ids),
+        ).filter(
             username__icontains=query,
         ).order_by('username')[:20]
     return render(request, 'club/user_search.html', {
@@ -2355,6 +2447,9 @@ def user_search(request):
 def friends_list(request, username):
     profile_user = get_object_or_404(User, username=username)
     friends = Friendship.get_friends_of(profile_user)
+    if profile_user == request.user:
+        blocked_ids = Block.get_blocked_user_ids(request.user)
+        friends = friends.exclude(pk__in=blocked_ids)
     return render(request, 'club/friends_list.html', {
         'profile_user': profile_user,
         'friends': friends,
@@ -2706,7 +2801,10 @@ def event_invite(request, pk):
         form = EventInviteForm(request.POST)
         if form.is_valid():
             user_ids = form.cleaned_data['user_ids']
+            blocked_ids = Block.get_blocked_user_ids(request.user)
             for uid in user_ids:
+                if uid in blocked_ids:
+                    continue
                 target = User.objects.filter(pk=uid).first()
                 if target and target != request.user:
                     _, created = EventInvite.objects.get_or_create(
@@ -2719,7 +2817,8 @@ def event_invite(request, pk):
     else:
         form = EventInviteForm()
 
-    friends = Friendship.get_friends_of(request.user)
+    blocked_ids = Block.get_blocked_user_ids(request.user)
+    friends = Friendship.get_friends_of(request.user).exclude(pk__in=blocked_ids)
 
     return render(request, 'club/event_invite.html', {
         'form': form,
