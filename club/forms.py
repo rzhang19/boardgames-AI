@@ -14,6 +14,8 @@ from .utils import MAX_FILE_SIZE, parse_bgg_link, validate_image_size
 
 User = get_user_model()
 
+RESERVED_GROUP_NAMES = {'self', 'others'}
+
 
 class UserManageForm(forms.ModelForm):
     is_site_admin = forms.BooleanField(required=False)
@@ -405,6 +407,12 @@ class GroupCreateForm(forms.ModelForm):
         model = Group
         fields = ['name', 'description', 'image', 'discoverable', 'join_policy']
 
+    def clean_name(self):
+        name = self.cleaned_data.get('name')
+        if name and name.strip().lower() in RESERVED_GROUP_NAMES:
+            raise forms.ValidationError('Group name cannot be "Self" or "Others".')
+        return name
+
 
 class GroupSettingsForm(forms.ModelForm):
     class Meta:
@@ -416,6 +424,12 @@ class GroupSettingsForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if self.user and not self.user.is_superuser:
             self.fields['max_members'].disabled = True
+
+    def clean_name(self):
+        name = self.cleaned_data.get('name')
+        if name and name.strip().lower() in RESERVED_GROUP_NAMES:
+            raise forms.ValidationError('Group name cannot be "Self" or "Others".')
+        return name
 
 
 class SuccessorPickForm(forms.Form):

@@ -36,6 +36,16 @@
                 </select>
             </div>
             <div class="filter-group">
+                <label for="filter-group">Group</label>
+                <select id="filter-group" name="group" class="filter-group-select">
+                    <option value="">All</option>
+                    <option value="self" {% if group_filter == 'self' %}selected{% endif %}>Self-owned</option>
+                    {% for grp in visible_groups %}
+                    <option value="{{ grp.slug }}" {% if group_filter == grp.slug %}selected{% endif %}>{{ grp.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
                 <label for="filter-players">Players</label>
                 <input type="number" id="filter-players" name="players" value="{{ players_filter }}" placeholder="e.g. 4" class="filter-players-input">
             </div>
@@ -51,13 +61,16 @@
 <table>
     <thead>
         <tr>
-            <th><a href="{% url 'game_list' %}?tab={{ active_tab }}{% if owner_filter %}{% for o in owner_filter %}&owner={{ o }}{% endfor %}{% endif %}{% if players_filter %}&players={{ players_filter }}{% endif %}&sort={% if current_sort == 'name_asc' %}name_desc{% else %}name_asc{% endif %}">Name{% if current_sort == 'name_asc' %} &#9650;{% elif current_sort == 'name_desc' %} &#9660;{% endif %}</a></th>
+            <th><a href="{% url 'game_list' %}?tab={{ active_tab }}{% if owner_filter %}{% for o in owner_filter %}&owner={{ o }}{% endfor %}{% endif %}{% if players_filter %}&players={{ players_filter }}{% endif %}{% if group_filter %}&group={{ group_filter }}{% endif %}&sort={% if current_sort == 'name_asc' %}name_desc{% else %}name_asc{% endif %}">Name{% if current_sort == 'name_asc' %} &#9650;{% elif current_sort == 'name_desc' %} &#9660;{% endif %}</a></th>
             <th>
-                <a href="{% url 'game_list' %}?tab={{ active_tab }}{% if owner_filter %}{% for o in owner_filter %}&owner={{ o }}{% endfor %}{% endif %}{% if players_filter %}&players={{ players_filter }}{% endif %}&sort={% if current_sort == 'min_players_asc' %}min_players_desc{% else %}min_players_asc{% endif %}">Min{% if current_sort == 'min_players_asc' %} &#9650;{% elif current_sort == 'min_players_desc' %} &#9660;{% endif %}</a> /
-                <a href="{% url 'game_list' %}?tab={{ active_tab }}{% if owner_filter %}{% for o in owner_filter %}&owner={{ o }}{% endfor %}{% endif %}{% if players_filter %}&players={{ players_filter }}{% endif %}&sort={% if current_sort == 'max_players_asc' %}max_players_desc{% else %}max_players_asc{% endif %}">Max{% if current_sort == 'max_players_asc' %} &#9650;{% elif current_sort == 'max_players_desc' %} &#9660;{% endif %}</a>
+                <a href="{% url 'game_list' %}?tab={{ active_tab }}{% if owner_filter %}{% for o in owner_filter %}&owner={{ o }}{% endfor %}{% endif %}{% if players_filter %}&players={{ players_filter }}{% endif %}{% if group_filter %}&group={{ group_filter }}{% endif %}&sort={% if current_sort == 'min_players_asc' %}min_players_desc{% else %}min_players_asc{% endif %}">Min{% if current_sort == 'min_players_asc' %} &#9650;{% elif current_sort == 'min_players_desc' %} &#9660;{% endif %}</a> /
+                <a href="{% url 'game_list' %}?tab={{ active_tab }}{% if owner_filter %}{% for o in owner_filter %}&owner={{ o }}{% endfor %}{% endif %}{% if players_filter %}&players={{ players_filter }}{% endif %}{% if group_filter %}&group={{ group_filter }}{% endif %}&sort={% if current_sort == 'max_players_asc' %}max_players_desc{% else %}max_players_asc{% endif %}">Max{% if current_sort == 'max_players_asc' %} &#9650;{% elif current_sort == 'max_players_desc' %} &#9660;{% endif %}</a>
             </th>
             <th>Complexity</th>
-            <th><a href="{% url 'game_list' %}?tab={{ active_tab }}{% if owner_filter %}{% for o in owner_filter %}&owner={{ o }}{% endfor %}{% endif %}{% if players_filter %}&players={{ players_filter }}{% endif %}&sort={% if current_sort == 'owner_asc' %}owner_desc{% else %}owner_asc{% endif %}">Owner{% if current_sort == 'owner_asc' %} &#9650;{% elif current_sort == 'owner_desc' %} &#9660;{% endif %}</a></th>
+            <th>Owned By</th>
+            <th>
+                <a href="{% url 'game_list' %}?tab={{ active_tab }}{% if owner_filter %}{% for o in owner_filter %}&owner={{ o }}{% endfor %}{% endif %}{% if players_filter %}&players={{ players_filter }}{% endif %}{% if group_filter %}&group={{ group_filter }}{% endif %}&sort={% if current_sort == 'owner_asc' %}owner_desc{% else %}owner_asc{% endif %}">Owner - Details{% if current_sort == 'owner_asc' %} &#9650;{% elif current_sort == 'owner_desc' %} &#9660;{% endif %}</a>
+            </th>
         </tr>
     </thead>
     <tbody>
@@ -80,7 +93,30 @@
                     -
                 {% endif %}
             </td>
-            <td data-label="Owner"><a href="{% url 'public_profile' game.owner.username %}">{{ game.owner.username }}</a>{% verified_badge game.owner %}</td>
+            <td data-label="Owned By">
+                {% if game.ownership_info.owned_by == 'self' %}
+                    Self
+                {% else %}
+                    Others
+                {% endif %}
+            </td>
+            <td data-label="Owner - Details">
+                {% if game.ownership_info.owned_by == 'others' %}
+                    <div id="details-{{ game.pk }}">
+                        {% for detail in game.ownership_info.details %}
+                            <div class="owner-detail-item"{% if forloop.counter > 1 %} style="display:none"{% endif %}>
+                                {% if detail.group_name %}
+                                    <a href="{% url 'group_dashboard' detail.group_slug %}">{{ detail.group_name }}</a> - 
+                                {% endif %}
+                                {{ detail.owner_display }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {% if game.ownership_info.details|length > 1 %}
+                        <button type="button" class="btn btn-small owner-detail-toggle" onclick="toggleOwnerDetails('{{ game.pk }}', {{ game.ownership_info.details|length }})">More (+{{ game.ownership_info.details|length|add:"-1" }})</button>
+                    {% endif %}
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </tbody>
@@ -95,4 +131,30 @@
     {% endif %}
 </div>
 {% endif %}
+
+<script>
+function toggleOwnerDetails(gamePk, totalCount) {
+    var container = document.getElementById('details-' + gamePk);
+    if (!container) return;
+    var items = container.querySelectorAll('.owner-detail-item');
+    var btn = event.target;
+    var isExpanded = btn.textContent.indexOf('Less') !== -1;
+    if (isExpanded) {
+        for (var i = 1; i < items.length; i++) {
+            items[i].style.display = 'none';
+        }
+        btn.textContent = 'More (+' + (totalCount - 1) + ')';
+    } else {
+        var limit = Math.min(items.length, 5);
+        for (var i = 1; i < limit; i++) {
+            items[i].style.display = '';
+        }
+        if (items.length <= 5) {
+            btn.textContent = 'Less';
+        } else if (items.length === totalCount) {
+            btn.textContent = 'Less (+' + (items.length - 5) + ' more hidden)';
+        }
+    }
+}
+</script>
 {% endblock %}

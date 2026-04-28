@@ -2,7 +2,7 @@ from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from club.models import BoardGame
+from club.models import BoardGame, Group, GroupMembership
 
 User = get_user_model()
 
@@ -17,6 +17,9 @@ class GameListViewTest(TestCase):
         self.other_user = User.objects.create_user(
             username='otherplayer', password='testpass123'
         )
+        self.group = Group.objects.create(name='Test Group', created_by=self.user)
+        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
+        GroupMembership.objects.create(user=self.other_user, group=self.group, role='member')
         self.game1 = BoardGame.objects.create(
             name='Catan', owner=self.user, min_players=3, max_players=4,
             image_url='https://cf.geekdo-images.com/pic123.png',
@@ -28,7 +31,7 @@ class GameListViewTest(TestCase):
             name='Risk', owner=self.other_user, min_players=2, max_players=6
         )
 
-    def test_game_list_displays_all_games(self):
+    def test_game_list_displays_all_visible_games(self):
         self.client.login(username='gameowner', password='testpass123')
         response = self.client.get(reverse('game_list'))
         self.assertEqual(response.status_code, 200)
@@ -101,6 +104,9 @@ class GameListFilterTest(TestCase):
         self.third_user = User.objects.create_user(
             username='thirdplayer', password='testpass123'
         )
+        self.group = Group.objects.create(name='Test Group', created_by=self.user)
+        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
+        GroupMembership.objects.create(user=self.other_user, group=self.group, role='member')
         self.game1 = BoardGame.objects.create(
             name='Catan', owner=self.user, min_players=3, max_players=4
         )
@@ -187,6 +193,9 @@ class GameListSortTest(TestCase):
         self.other_user = User.objects.create_user(
             username='bob', password='testpass123'
         )
+        self.group = Group.objects.create(name='Test Group', created_by=self.user)
+        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
+        GroupMembership.objects.create(user=self.other_user, group=self.group, role='member')
         self.game1 = BoardGame.objects.create(
             name='Catan', owner=self.user, min_players=3, max_players=4
         )
@@ -689,3 +698,392 @@ class GameDeleteViewTest(TestCase):
         self.client.login(username='admin', password='adminpass123')
         response = self.client.get(reverse('game_delete', kwargs={'pk': self.game.pk}))
         self.assertContains(response, 'owner')
+
+
+@tag("integration")
+class GameListVisibilityTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='alice', password='testpass123'
+        )
+        self.group_member = User.objects.create_user(
+            username='bob', password='testpass123'
+        )
+        self.outsider = User.objects.create_user(
+            username='charlie', password='testpass123'
+        )
+        self.group = Group.objects.create(name='Game Group', created_by=self.user)
+        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
+        GroupMembership.objects.create(user=self.group_member, group=self.group, role='member')
+        self.own_game = BoardGame.objects.create(
+            name='Catan', owner=self.user, min_players=3, max_players=4,
+            complexity='medium',
+        )
+        self.member_game = BoardGame.objects.create(
+            name='Risk', owner=self.group_member, min_players=2, max_players=6,
+            complexity='medium',
+        )
+        self.group_game = BoardGame.objects.create(
+            name='Pandemic', group=self.group, min_players=2, max_players=4,
+            complexity='light',
+        )
+        self.outsider_game = BoardGame.objects.create(
+            name='Chess', owner=self.outsider, min_players=2, max_players=2,
+            complexity='heavy',
+        )
+
+    def test_user_sees_own_games(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertContains(response, 'Catan')
+
+    def test_user_sees_group_member_games(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertContains(response, 'Risk')
+
+    def test_user_sees_group_owned_games(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertContains(response, 'Pandemic')
+
+    def test_user_does_not_see_outsider_games(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertNotContains(response, 'Chess')
+
+    def test_user_not_in_group_sees_only_own_games(self):
+        self.client.login(username='charlie', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertContains(response, 'Chess')
+        self.assertNotContains(response, 'Catan')
+        self.assertNotContains(response, 'Risk')
+        self.assertNotContains(response, 'Pandemic')
+
+    def test_superuser_sees_all_games(self):
+        superuser = User.objects.create_superuser(
+            username='admin', password='adminpass123'
+        )
+        self.client.login(username='admin', password='adminpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertContains(response, 'Catan')
+        self.assertContains(response, 'Risk')
+        self.assertContains(response, 'Pandemic')
+        self.assertContains(response, 'Chess')
+
+    def test_site_admin_sees_all_games(self):
+        admin = User.objects.create_user(
+            username='siteadmin', password='adminpass123', is_site_admin=True
+        )
+        self.client.login(username='siteadmin', password='adminpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertContains(response, 'Catan')
+        self.assertContains(response, 'Risk')
+        self.assertContains(response, 'Pandemic')
+        self.assertContains(response, 'Chess')
+
+
+@tag("integration")
+class GameListOwnedByColumnTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='alice', password='testpass123'
+        )
+        self.other_user = User.objects.create_user(
+            username='bob', password='testpass123'
+        )
+        self.group = Group.objects.create(name='Game Club', created_by=self.user)
+        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
+        GroupMembership.objects.create(user=self.other_user, group=self.group, role='member')
+        self.own_game = BoardGame.objects.create(
+            name='Catan', owner=self.user, min_players=3, max_players=4,
+            complexity='medium',
+        )
+        self.member_game = BoardGame.objects.create(
+            name='Risk', owner=self.other_user, min_players=2, max_players=6,
+            complexity='medium',
+        )
+        self.group_game = BoardGame.objects.create(
+            name='Pandemic', group=self.group, min_players=2, max_players=4,
+            complexity='light',
+        )
+
+    def test_self_owned_game_shows_self(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        catan_row_start = content.find('Catan')
+        self.assertGreater(catan_row_start, 0)
+        self.assertIn('Self', content)
+
+    def test_other_user_game_shows_others(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertIn('Others', response.content.decode())
+
+    def test_group_owned_game_shows_others(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        content = response.content.decode()
+        pandemic_count = content.count('Pandemic')
+        self.assertGreaterEqual(pandemic_count, 1)
+        self.assertIn('Group Owned', content)
+
+    def test_other_user_game_shows_owner_details(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        content = response.content.decode()
+        self.assertIn('Game Club', content)
+        self.assertIn('bob', content)
+
+    def test_group_owned_game_shows_group_owned_label(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        content = response.content.decode()
+        self.assertIn('Group Owned', content)
+
+    def test_self_owned_game_has_no_details(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        content = response.content.decode()
+        self.assertNotContains(response, 'owner-detail-toggle')
+
+
+@tag("integration")
+class GameListOwnedByMultiGroupTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='alice', password='testpass123'
+        )
+        self.other_user = User.objects.create_user(
+            username='bob', password='testpass123'
+        )
+        self.group_a = Group.objects.create(name='Alpha Group', created_by=self.user)
+        self.group_b = Group.objects.create(name='Beta Group', created_by=self.user)
+        GroupMembership.objects.create(user=self.user, group=self.group_a, role='admin')
+        GroupMembership.objects.create(user=self.user, group=self.group_b, role='organizer')
+        GroupMembership.objects.create(user=self.other_user, group=self.group_a, role='member')
+        GroupMembership.objects.create(user=self.other_user, group=self.group_b, role='member')
+        self.shared_game = BoardGame.objects.create(
+            name='Risk', owner=self.other_user, min_players=2, max_players=6,
+            complexity='medium',
+        )
+
+    def test_game_visible_through_multiple_groups_shows_more_button(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        content = response.content.decode()
+        self.assertIn('More (+1)', content)
+
+    def test_deterministic_order_shows_admin_group_first(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        content = response.content.decode()
+        alpha_pos = content.find('Alpha Group')
+        beta_pos = content.find('Beta Group')
+        self.assertGreater(alpha_pos, 0)
+        self.assertGreater(beta_pos, 0)
+        self.assertLess(alpha_pos, beta_pos)
+
+
+@tag("integration")
+class GameListGroupFilterTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='alice', password='testpass123'
+        )
+        self.other_user = User.objects.create_user(
+            username='bob', password='testpass123'
+        )
+        self.group = Group.objects.create(name='Game Club', created_by=self.user)
+        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
+        GroupMembership.objects.create(user=self.other_user, group=self.group, role='member')
+        self.own_game = BoardGame.objects.create(
+            name='Catan', owner=self.user, min_players=3, max_players=4,
+            complexity='medium',
+        )
+        self.member_game = BoardGame.objects.create(
+            name='Risk', owner=self.other_user, min_players=2, max_players=6,
+            complexity='medium',
+        )
+        self.group_game = BoardGame.objects.create(
+            name='Pandemic', group=self.group, min_players=2, max_players=4,
+            complexity='light',
+        )
+
+    def test_filter_self_owned_shows_only_own_games(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'group': 'self'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Catan')
+        self.assertNotContains(response, 'Risk')
+        self.assertNotContains(response, 'Pandemic')
+
+    def test_filter_by_group_shows_group_games(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'group': self.group.slug})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Risk')
+        self.assertContains(response, 'Pandemic')
+
+    def test_filter_by_group_excludes_non_group_games(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'group': self.group.slug})
+        self.assertNotContains(response, 'Catan')
+
+    def test_filter_modal_has_group_select(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertContains(response, 'filter-group')
+        self.assertContains(response, 'Self-owned')
+
+    def test_group_filter_counts_toward_active_filters(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'), {'group': 'self'})
+        self.assertEqual(response.context['active_filter_count'], 1)
+
+    def test_owner_filter_dropdown_scoped_to_visible_users(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        owner_usernames = list(response.context['all_owners'])
+        self.assertIn('bob', owner_usernames)
+        self.assertNotIn('alice', owner_usernames)
+
+
+@tag("integration")
+class GameListOwnerFilterScopingTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='alice', password='testpass123'
+        )
+        self.group_member = User.objects.create_user(
+            username='bob', password='testpass123'
+        )
+        self.outsider = User.objects.create_user(
+            username='charlie', password='testpass123'
+        )
+        self.group = Group.objects.create(name='Game Group', created_by=self.user)
+        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
+        GroupMembership.objects.create(user=self.group_member, group=self.group, role='member')
+        BoardGame.objects.create(
+            name='Catan', owner=self.user, min_players=3, max_players=4,
+            complexity='medium',
+        )
+        BoardGame.objects.create(
+            name='Risk', owner=self.group_member, min_players=2, max_players=6,
+            complexity='medium',
+        )
+        BoardGame.objects.create(
+            name='Chess', owner=self.outsider, min_players=2, max_players=2,
+            complexity='heavy',
+        )
+
+    def test_owner_dropdown_excludes_outsider(self):
+        self.client.login(username='alice', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        owner_usernames = list(response.context['all_owners'])
+        self.assertNotIn('charlie', owner_usernames)
+
+
+@tag("unit")
+class GroupNameValidationTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='creator', password='testpass123'
+        )
+        self.client.login(username='creator', password='testpass123')
+
+    def test_cannot_create_group_named_self(self):
+        response = self.client.post(reverse('group_create'), {
+            'name': 'Self',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Group.objects.filter(name='Self').exists())
+
+    def test_cannot_create_group_named_others(self):
+        response = self.client.post(reverse('group_create'), {
+            'name': 'Others',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Group.objects.filter(name='Others').exists())
+
+    def test_cannot_create_group_named_self_case_insensitive(self):
+        response = self.client.post(reverse('group_create'), {
+            'name': 'SELF',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Group.objects.filter(name='SELF').exists())
+
+    def test_cannot_create_group_named_others_case_insensitive(self):
+        response = self.client.post(reverse('group_create'), {
+            'name': 'others',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Group.objects.filter(name='others').exists())
+
+    def test_can_create_group_named_selfish(self):
+        response = self.client.post(reverse('group_create'), {
+            'name': 'Selfish',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Group.objects.filter(name='Selfish').exists())
+
+    def test_can_create_group_with_others_in_name(self):
+        response = self.client.post(reverse('group_create'), {
+            'name': 'Helping Others',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Group.objects.filter(name='Helping Others').exists())
+
+    def test_cannot_rename_group_to_self(self):
+        group = Group.objects.create(name='My Group', created_by=self.user)
+        GroupMembership.objects.create(user=self.user, group=group, role='admin')
+        response = self.client.post(reverse('group_settings', kwargs={'slug': group.slug}), {
+            'name': 'Self',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+            'max_members': 50,
+        })
+        self.assertEqual(response.status_code, 200)
+        group.refresh_from_db()
+        self.assertEqual(group.name, 'My Group')
+
+    def test_cannot_rename_group_to_others(self):
+        group = Group.objects.create(name='My Group', created_by=self.user)
+        GroupMembership.objects.create(user=self.user, group=group, role='admin')
+        response = self.client.post(reverse('group_settings', kwargs={'slug': group.slug}), {
+            'name': 'Others',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+            'max_members': 50,
+        })
+        self.assertEqual(response.status_code, 200)
+        group.refresh_from_db()
+        self.assertEqual(group.name, 'My Group')

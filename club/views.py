@@ -655,11 +655,139 @@ def bgg_import(request, bgg_id):
     return JsonResponse(data)
 
 
+def _compute_game_details(games, user):
+    is_admin = user.is_superuser or user.is_site_admin
+    role_priority = {'admin': 0, 'organizer': 1, 'member': 2}
+
+    group_info = {}
+    if not is_admin:
+        memberships = GroupMembership.objects.filter(
+            user=user,
+        ).select_related('group').values(
+            'group_id', 'group__name', 'group__slug', 'role', 'is_favorite',
+        )
+        for m in memberships:
+            group_info[m['group_id']] = {
+                'name': m['group__name'],
+                'slug': m['group__slug'],
+                'role_priority': role_priority.get(m['role'], 3),
+                'is_favorite': m['is_favorite'],
+            }
+
+    owner_group_map = {}
+    if not is_admin:
+        other_owner_ids = set()
+        for g in games:
+            if g.owner_id and g.owner_id != user.pk:
+                other_owner_ids.add(g.owner_id)
+        if other_owner_ids and group_info:
+            owner_group_pairs = GroupMembership.objects.filter(
+                user_id__in=other_owner_ids,
+                group_id__in=group_info.keys(),
+                role__in=['admin', 'organizer', 'member'],
+            ).values_list('user_id', 'group_id')
+            for uid, gid in owner_group_pairs:
+                owner_group_map.setdefault(uid, set()).add(gid)
+
+    game_details = {}
+    for game in games:
+        if game.owner_id == user.pk:
+            game_details[game.pk] = {'owned_by': 'self', 'details': []}
+            continue
+
+        details = []
+
+        if game.owner_id is None and game.group_id is not None:
+            gi = group_info.get(game.group_id)
+            if gi:
+                details.append({
+                    'group_name': gi['name'],
+                    'group_slug': gi['slug'],
+                    'owner_display': 'Group Owned',
+                    'sort_key': (gi['role_priority'], 0 if gi['is_favorite'] else 1, gi['name']),
+                })
+            else:
+                details.append({
+                    'group_name': game.group.name if game.group else 'Unknown',
+                    'group_slug': game.group.slug if game.group else '',
+                    'owner_display': 'Group Owned',
+                    'sort_key': (3, 1, game.group.name if game.group else 'zzz'),
+                })
+        elif game.owner_id is not None:
+            if not is_admin:
+                shared_groups = owner_group_map.get(game.owner_id, set()) & set(group_info.keys())
+            else:
+                shared_groups = set()
+            if shared_groups:
+                for gid in shared_groups:
+                    gi = group_info[gid]
+                    details.append({
+                        'group_name': gi['name'],
+                        'group_slug': gi['slug'],
+                        'owner_display': game.owner.username,
+                        'sort_key': (gi['role_priority'], 0 if gi['is_favorite'] else 1, gi['name'], game.owner.username),
+                    })
+            else:
+                if game.group_id is not None:
+                    group_name = game.group.name if game.group else None
+                    group_slug = game.group.slug if game.group else ''
+                    details.append({
+                        'group_name': group_name,
+                        'group_slug': group_slug,
+                        'owner_display': game.owner.username,
+                        'sort_key': (3, 1, group_name or 'zzz', game.owner.username),
+                    })
+                else:
+                    details.append({
+                        'group_name': None,
+                        'group_slug': '',
+                        'owner_display': game.owner.username,
+                        'sort_key': (3, 1, 'zzz', game.owner.username),
+                    })
+
+        details.sort(key=lambda x: x['sort_key'])
+        game_details[game.pk] = {'owned_by': 'others', 'details': details}
+
+    return game_details
+
+
 def game_list(request):
     if not request.user.is_authenticated:
         return redirect('/login/')
 
-    games = BoardGame.objects.select_related('owner').all()
+    is_admin_user = request.user.is_superuser or request.user.is_site_admin
+
+    if is_admin_user:
+        base_games = BoardGame.objects.select_related('owner', 'group').all()
+    else:
+        user_group_ids = set(GroupMembership.objects.filter(
+            user=request.user,
+        ).values_list('group_id', flat=True))
+
+        base_games = BoardGame.objects.select_related('owner', 'group').filter(
+            Q(owner=request.user)
+            | Q(group_id__in=user_group_ids)
+            | Q(
+                owner__membership__group_id__in=user_group_ids,
+                owner__membership__role__in=['admin', 'organizer', 'member'],
+            )
+        ).distinct()
+
+    visible_owners = User.objects.filter(
+        boardgame__in=base_games,
+    ).exclude(pk=request.user.pk).distinct().order_by('username').values_list('username', flat=True)
+
+    if is_admin_user:
+        visible_groups = list(Group.objects.filter(
+            disbanded_at__isnull=True,
+        ).order_by('name'))
+    else:
+        visible_groups = list(Group.objects.filter(
+            membership__user=request.user,
+            disbanded_at__isnull=True,
+        ).order_by('name').distinct())
+
+    games = base_games
     active_tab = request.GET.get('tab', 'all')
 
     if active_tab == 'my':
@@ -675,6 +803,21 @@ def game_list(request):
                 resolved_owners.append(o)
         if resolved_owners:
             games = games.filter(owner__username__in=resolved_owners)
+
+    group_filter = request.GET.get('group', '')
+    if group_filter == 'self':
+        games = games.filter(owner=request.user)
+    elif group_filter:
+        group_obj = Group.objects.filter(slug=group_filter).first()
+        if group_obj:
+            games = games.filter(
+                Q(group_id=group_obj.pk)
+                | Q(
+                    owner_id__isnull=False,
+                    owner__membership__group_id=group_obj.pk,
+                    owner__membership__role__in=['admin', 'organizer', 'member'],
+                )
+            ).exclude(owner=request.user)
 
     players_param = request.GET.get('players', '')
     if players_param:
@@ -701,21 +844,27 @@ def game_list(request):
     order_by = sort_map.get(sort_param, 'name')
     games = games.order_by(order_by)
 
-    all_owners = User.objects.exclude(pk=request.user.pk).values_list('username', flat=True)
+    game_details = _compute_game_details(games, request.user)
+    for game in games:
+        game.ownership_info = game_details.get(game.pk, {'owned_by': 'self', 'details': []})
 
     active_filter_count = 0
     if owner_filter:
         active_filter_count += 1
     if players_param:
         active_filter_count += 1
+    if group_filter:
+        active_filter_count += 1
 
     return render(request, 'club/game_list.html', {
         'games': games,
         'active_tab': active_tab,
-        'all_owners': all_owners,
+        'all_owners': visible_owners,
+        'visible_groups': visible_groups,
         'current_sort': sort_param,
         'owner_filter': owner_filter,
         'players_filter': players_param,
+        'group_filter': group_filter,
         'active_filter_count': active_filter_count,
     })
 
