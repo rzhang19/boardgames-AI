@@ -1,8 +1,10 @@
 from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.management import call_command
 from django.core.signing import TimestampSigner
 from django.urls import reverse
+from django.utils import timezone
 
 User = get_user_model()
 
@@ -236,7 +238,11 @@ class UserDeleteTest(TestCase):
             'confirm_username': 'target',
         })
         self.assertEqual(response.status_code, 302)
-        self.assertFalse(User.objects.filter(pk=self.target.pk).exists())
+        self.assertTrue(User.objects.filter(pk=self.target.pk).exists())
+        self.target.refresh_from_db()
+        self.assertFalse(self.target.is_active)
+        self.assertIsNotNone(self.target.deleted_at)
+        self.assertEqual(self.target.deleted_by, self.site_admin)
 
     def test_delete_fails_with_wrong_username(self):
         response = self.client.post(reverse('user_delete', kwargs={'pk': self.target.pk}), {
@@ -411,3 +417,259 @@ class AdminOrganizerEnforcementTest(TestCase):
         })
         self.regular.refresh_from_db()
         self.assertFalse(self.regular.is_site_admin)
+
+
+@tag("integration")
+class DeletedUsersListTest(TestCase):
+
+    def setUp(self):
+        self.superuser = User.objects.create_superuser(
+            username='superuser', password='testpass123'
+        )
+        self.site_admin = User.objects.create_user(
+            username='siteadmin', password='testpass123', is_site_admin=True
+        )
+        self.active_user = User.objects.create_user(
+            username='active', password='testpass123'
+        )
+        self.deleted_user = User.objects.create_user(
+            username='deleted', password='testpass123',
+            is_active=False, deleted_at=timezone.now(), deleted_by=self.site_admin,
+        )
+
+    def test_manage_users_has_active_tab(self):
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.get(reverse('manage_users'))
+        self.assertContains(response, 'Active Users')
+
+    def test_manage_users_has_deleted_tab(self):
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.get(reverse('manage_users'))
+        self.assertContains(response, 'Deleted Users')
+
+    def test_active_tab_excludes_soft_deleted_users(self):
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.get(reverse('manage_users'))
+        self.assertContains(response, 'active')
+        self.assertNotContains(response, '/profile/deleted/')
+
+    def test_deleted_tab_shows_soft_deleted_users(self):
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.get(reverse('manage_users') + '?tab=deleted')
+        self.assertContains(response, 'deleted')
+        self.assertNotContains(response, '/profile/active/')
+
+    def test_deleted_tab_shows_deleted_by(self):
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.get(reverse('manage_users') + '?tab=deleted')
+        self.assertContains(response, 'siteadmin')
+
+    def test_deleted_tab_shows_restore_button_for_site_admin(self):
+        self.client.login(username='siteadmin', password='testpass123')
+        response = self.client.get(reverse('manage_users') + '?tab=deleted')
+        self.assertContains(response, 'Restore')
+
+    def test_deleted_tab_shows_permanent_delete_button_for_superuser_only(self):
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.get(reverse('manage_users') + '?tab=deleted')
+        self.assertContains(response, 'Permanently Delete')
+
+    def test_deleted_tab_hides_permanent_delete_for_site_admin(self):
+        self.client.login(username='siteadmin', password='testpass123')
+        response = self.client.get(reverse('manage_users') + '?tab=deleted')
+        self.assertNotContains(response, 'Permanently Delete')
+
+    def test_regular_user_cannot_access_deleted_tab(self):
+        self.client.login(username='active', password='testpass123')
+        response = self.client.get(reverse('manage_users') + '?tab=deleted')
+        self.assertEqual(response.status_code, 403)
+
+    def test_site_admin_cannot_see_site_admins_in_deleted_tab(self):
+        deleted_admin = User.objects.create_user(
+            username='deladmin', password='testpass123', is_site_admin=True,
+            is_active=False, deleted_at=timezone.now(), deleted_by=self.superuser,
+        )
+        self.client.login(username='siteadmin', password='testpass123')
+        response = self.client.get(reverse('manage_users') + '?tab=deleted')
+        self.assertNotContains(response, 'deladmin')
+
+    def test_superuser_sees_site_admins_in_deleted_tab(self):
+        deleted_admin = User.objects.create_user(
+            username='deladmin', password='testpass123', is_site_admin=True,
+            is_active=False, deleted_at=timezone.now(), deleted_by=self.superuser,
+        )
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.get(reverse('manage_users') + '?tab=deleted')
+        self.assertContains(response, 'deladmin')
+
+
+@tag("integration")
+class UserRestoreTest(TestCase):
+
+    def setUp(self):
+        self.superuser = User.objects.create_superuser(
+            username='superuser', password='testpass123'
+        )
+        self.site_admin = User.objects.create_user(
+            username='siteadmin', password='testpass123', is_site_admin=True
+        )
+        self.deleted_user = User.objects.create_user(
+            username='deleted', password='testpass123',
+            is_active=False, deleted_at=timezone.now(), deleted_by=self.site_admin,
+        )
+        self.active_user = User.objects.create_user(
+            username='active', password='testpass123'
+        )
+
+    def test_site_admin_can_access_restore_page(self):
+        self.client.login(username='siteadmin', password='testpass123')
+        response = self.client.get(reverse('user_restore', kwargs={'pk': self.deleted_user.pk}))
+        self.assertEqual(response.status_code, 200)
+
+    def test_superuser_can_access_restore_page(self):
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.get(reverse('user_restore', kwargs={'pk': self.deleted_user.pk}))
+        self.assertEqual(response.status_code, 200)
+
+    def test_site_admin_can_restore_user(self):
+        self.client.login(username='siteadmin', password='testpass123')
+        response = self.client.post(reverse('user_restore', kwargs={'pk': self.deleted_user.pk}))
+        self.assertEqual(response.status_code, 302)
+        self.deleted_user.refresh_from_db()
+        self.assertTrue(self.deleted_user.is_active)
+        self.assertIsNone(self.deleted_user.deleted_at)
+        self.assertIsNone(self.deleted_user.deleted_by)
+
+    def test_superuser_can_restore_user(self):
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.post(reverse('user_restore', kwargs={'pk': self.deleted_user.pk}))
+        self.assertEqual(response.status_code, 302)
+        self.deleted_user.refresh_from_db()
+        self.assertTrue(self.deleted_user.is_active)
+        self.assertIsNone(self.deleted_user.deleted_at)
+
+    def test_cannot_restore_active_user(self):
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.post(reverse('user_restore', kwargs={'pk': self.active_user.pk}))
+        self.assertEqual(response.status_code, 404)
+
+    def test_regular_user_cannot_restore(self):
+        self.client.login(username='active', password='testpass123')
+        response = self.client.post(reverse('user_restore', kwargs={'pk': self.deleted_user.pk}))
+        self.assertEqual(response.status_code, 403)
+
+    def test_restore_page_shows_username(self):
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.get(reverse('user_restore', kwargs={'pk': self.deleted_user.pk}))
+        self.assertContains(response, 'deleted')
+
+
+@tag("integration")
+class UserPermanentDeleteTest(TestCase):
+
+    def setUp(self):
+        self.superuser = User.objects.create_superuser(
+            username='superuser', password='testpass123'
+        )
+        self.site_admin = User.objects.create_user(
+            username='siteadmin', password='testpass123', is_site_admin=True
+        )
+        self.deleted_user = User.objects.create_user(
+            username='deleted', password='testpass123',
+            is_active=False, deleted_at=timezone.now(), deleted_by=self.superuser,
+        )
+
+    def test_superuser_can_access_permanent_delete_page(self):
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.get(reverse('user_permanent_delete', kwargs={'pk': self.deleted_user.pk}))
+        self.assertEqual(response.status_code, 200)
+
+    def test_superuser_can_permanently_delete_with_correct_username(self):
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.post(reverse('user_permanent_delete', kwargs={'pk': self.deleted_user.pk}), {
+            'confirm_username': 'deleted',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(User.objects.filter(pk=self.deleted_user.pk).exists())
+
+    def test_permanent_delete_fails_with_wrong_username(self):
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.post(reverse('user_permanent_delete', kwargs={'pk': self.deleted_user.pk}), {
+            'confirm_username': 'wrongname',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(User.objects.filter(pk=self.deleted_user.pk).exists())
+        self.assertContains(response, 'Username did not match')
+
+    def test_site_admin_cannot_access_permanent_delete(self):
+        self.client.login(username='siteadmin', password='testpass123')
+        response = self.client.get(reverse('user_permanent_delete', kwargs={'pk': self.deleted_user.pk}))
+        self.assertEqual(response.status_code, 403)
+
+    def test_cannot_permanently_delete_active_user(self):
+        active = User.objects.create_user(username='active2', password='testpass123')
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.post(reverse('user_permanent_delete', kwargs={'pk': active.pk}), {
+            'confirm_username': 'active2',
+        })
+        self.assertEqual(response.status_code, 404)
+
+    def test_permanent_delete_page_shows_username_confirmation(self):
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.get(reverse('user_permanent_delete', kwargs={'pk': self.deleted_user.pk}))
+        self.assertContains(response, "type the user's username to confirm")
+        self.assertContains(response, '<code>deleted</code>', html=True)
+
+
+@tag("integration")
+class DeactivatedLoginMessageTest(TestCase):
+
+    def setUp(self):
+        self.deleted_user = User.objects.create_user(
+            username='deactivated', password='testpass123',
+            is_active=False, deleted_at=timezone.now(),
+        )
+
+    def test_soft_deleted_user_sees_deactivated_message(self):
+        response = self.client.post(reverse('login'), {
+            'username': 'deactivated',
+            'password': 'testpass123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'deactivated')
+
+    def test_active_user_with_wrong_password_sees_normal_error(self):
+        User.objects.create_user(username='activeguy', password='testpass123')
+        response = self.client.post(reverse('login'), {
+            'username': 'activeguy',
+            'password': 'wrongpass',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'deactivated')
+
+
+@tag("unit")
+class CleanupDeletedUsersCommandTest(TestCase):
+
+    def test_deletes_users_past_30_days(self):
+        user = User.objects.create_user(
+            username='expired', password='testpass123',
+            is_active=False, deleted_at=timezone.now() - timezone.timedelta(days=31),
+        )
+        call_command('cleanup_deleted_users')
+        self.assertFalse(User.objects.filter(pk=user.pk).exists())
+
+    def test_keeps_users_within_30_days(self):
+        user = User.objects.create_user(
+            username='recent', password='testpass123',
+            is_active=False, deleted_at=timezone.now() - timezone.timedelta(days=15),
+        )
+        call_command('cleanup_deleted_users')
+        self.assertTrue(User.objects.filter(pk=user.pk).exists())
+
+    def test_does_not_delete_active_users(self):
+        user = User.objects.create_user(
+            username='active', password='testpass123',
+        )
+        call_command('cleanup_deleted_users')
+        self.assertTrue(User.objects.filter(pk=user.pk).exists())

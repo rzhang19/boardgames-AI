@@ -76,9 +76,27 @@ class User(AbstractUser):
     must_change_password = models.BooleanField(default=False)
     group_creation_override = models.PositiveIntegerField(default=0)
     is_view_only = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='users_deleted',
+    )
 
     def __str__(self):
         return self.username
+
+    @property
+    def is_soft_deleted(self):
+        return self.deleted_at is not None
+
+    @property
+    def is_deletion_grace_period_expired(self):
+        if self.deleted_at is None:
+            return False
+        return self.deleted_at + timezone.timedelta(days=30) <= timezone.now()
 
 
 class Group(models.Model):

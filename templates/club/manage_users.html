@@ -6,6 +6,53 @@
 {% block content %}
 <h1>Manage Users</h1>
 
+<div class="sub-tabs">
+    <a href="{% url 'manage_users' %}?tab=active" class="sub-tab {% if tab == 'active' %}active{% endif %}">Active Users</a>
+    <a href="{% url 'manage_users' %}?tab=deleted" class="sub-tab {% if tab == 'deleted' %}active{% endif %}">Deleted Users</a>
+</div>
+
+{% if tab == 'deleted' %}
+{% if deleted_users %}
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Username</th>
+                <th>Deleted Date</th>
+                <th>Deleted By</th>
+                <th>Days Remaining</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in deleted_users %}
+            <tr>
+                <td data-label="ID">{{ u.pk }}</td>
+                <td data-label="Username">{{ u.username }}</td>
+                <td data-label="Deleted Date">{{ u.deleted_at|date:"N j, Y" }}</td>
+                <td data-label="Deleted By">{% if u.deleted_by %}{{ u.deleted_by.username }}{% else %}—{% endif %}</td>
+                <td data-label="Days Remaining">
+                    {% widthratio u.deleted_at|timesince 1 1 %}
+                </td>
+                <td data-label="Actions">
+                    <a href="{% url 'user_restore' u.pk %}" class="btn btn-primary btn-sm">Restore</a>
+                    {% if is_superuser %}
+                    <a href="{% url 'user_permanent_delete' u.pk %}" class="btn btn-danger btn-sm">Permanently Delete</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>No deleted users.</p>
+</div>
+{% endif %}
+
+{% else %}
 <div class="action-bar">
     <a href="{% url 'user_add' %}" class="btn btn-primary btn-sm">Add User</a>
 </div>
@@ -34,4 +81,5 @@
         {% endfor %}
     </tbody>
 </table>
+{% endif %}
 {% endblock %}

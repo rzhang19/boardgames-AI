@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Restore User{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>Restore {{ target_user.username }}</h1>
+
+    <p>Are you sure you want to restore this user? The account will be reactivated and removed from the deletion queue.</p>
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">Restore User</button>
+            <a href="{% url 'manage_users' %}?tab=deleted" class="btn btn-neutral">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

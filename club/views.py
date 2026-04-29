@@ -154,10 +154,14 @@ def _get_manage_queryset(request):
 
 @site_admin_required
 def manage_users(request):
-    queryset = _get_manage_queryset(request)
+    active_qs = _get_manage_queryset(request).filter(deleted_at__isnull=True)
+    deleted_qs = _get_manage_queryset(request).filter(deleted_at__isnull=False)
+    tab = request.GET.get('tab', 'active')
     return render(request, 'club/manage_users.html', {
-        'users': queryset.order_by('username'),
+        'users': active_qs.order_by('username'),
+        'deleted_users': deleted_qs.order_by('-deleted_at'),
         'is_superuser': request.user.is_superuser,
+        'tab': tab,
     })
 
 
@@ -228,6 +232,8 @@ def user_delete(request, pk):
     user = get_object_or_404(User, pk=pk)
     if user.is_superuser or user.pk == request.user.pk:
         raise PermissionDenied
+    if not request.user.is_superuser and user.is_site_admin:
+        raise PermissionDenied
     if request.method == 'POST':
         confirm_username = request.POST.get('confirm_username', '').strip()
         if confirm_username != user.username:
@@ -235,9 +241,40 @@ def user_delete(request, pk):
                 'target_user': user,
                 'error': True,
             })
-        user.delete()
+        user.is_active = False
+        user.deleted_at = timezone.now()
+        user.deleted_by = request.user
+        user.save(update_fields=['is_active', 'deleted_at', 'deleted_by'])
         return redirect('manage_users')
     return render(request, 'club/manage_users_delete.html', {'target_user': user})
+
+
+@site_admin_required
+def user_restore(request, pk):
+    user = get_object_or_404(User, pk=pk, deleted_at__isnull=False)
+    if request.method == 'POST':
+        user.is_active = True
+        user.deleted_at = None
+        user.deleted_by = None
+        user.save(update_fields=['is_active', 'deleted_at', 'deleted_by'])
+        return redirect('manage_users')
+    return render(request, 'club/manage_users_restore.html', {'target_user': user})
+
+
+def user_permanent_delete(request, pk):
+    if not request.user.is_superuser:
+        raise PermissionDenied
+    user = get_object_or_404(User, pk=pk, deleted_at__isnull=False)
+    if request.method == 'POST':
+        confirm_username = request.POST.get('confirm_username', '').strip()
+        if confirm_username != user.username:
+            return render(request, 'club/manage_users_permanent_delete.html', {
+                'target_user': user,
+                'error': True,
+            })
+        user.delete()
+        return redirect('manage_users')
+    return render(request, 'club/manage_users_permanent_delete.html', {'target_user': user})
 
 
 def user_set_password(request, token):

@@ -116,6 +116,10 @@ class RegistrationForm(UserCreationForm):
 
 class EmailOrUsernameLoginForm(AuthenticationForm):
     username = forms.CharField(label='Email or Username')
+    error_messages = {
+        'invalid_login': 'Please enter a correct email/username and password.',
+        'inactive': 'This account has been deactivated.',
+    }
 
 
 class BoardGameForm(forms.ModelForm):
