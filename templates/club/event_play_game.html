@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Record Game: {{ event.title }}{% endblock %}
+
+{% block content %}
+<h1>Record a Played Game</h1>
+<h2>{{ event.title }}</h2>
+
+{% if event.group %}
+<a href="{% url 'event_detail' event.group.slug event.pk %}" class="btn btn-outline btn-sm">Back to Event</a>
+{% else %}
+<a href="{% url 'private_event_detail' event.pk %}" class="btn btn-outline btn-sm">Back to Event</a>
+{% endif %}
+
+<form method="post">
+    {% csrf_token %}
+    <div>
+        <label for="id_board_game">Game</label>
+        <select id="id_board_game" name="board_game" required>
+            <option value="">-- Select a game --</option>
+            {% for game in games %}
+            <option value="{{ game.game_id }}"{% if preselected_game == game.game_id|stringformat:"s" %} selected{% endif %}>{{ game.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="id_selection_method">Selection Method</label>
+        <select id="id_selection_method" name="selection_method">
+            <option value="manual"{% if preselected_method == "manual" %} selected{% endif %}>Manual</option>
+            <option value="random"{% if preselected_method == "random" %} selected{% endif %}>Random</option>
+            <option value="vote"{% if preselected_method == "vote" %} selected{% endif %}>Vote</option>
+        </select>
+    </div>
+    <div>
+        <label>Registered Players</label>
+        {% for att in attendees %}
+        <label>
+            <input type="checkbox" name="players" value="{{ att.user.pk }}">
+            {{ att.user.username }}
+        </label>
+        {% endfor %}
+    </div>
+    <div>
+        <label for="id_guest_names">Guest Names (comma-separated)</label>
+        <input type="text" id="id_guest_names" name="guest_names" placeholder="e.g. Alice, Bob">
+    </div>
+    <button type="submit" class="btn btn-primary">Record Session</button>
+</form>
+{% endblock %}

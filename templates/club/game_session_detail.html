@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}{{ session.board_game }} - {{ event.title }}{% endblock %}
+
+{% block content %}
+<h1>{{ session.board_game }}</h1>
+<p>Played at {{ event.title }} on {{ session.played_at }}</p>
+<p>Selection: {{ session.get_selection_method_display }}</p>
+
+{% if event.group %}
+<a href="{% url 'event_detail' event.group.slug event.pk %}" class="btn btn-outline btn-sm">Back to Event</a>
+{% else %}
+<a href="{% url 'private_event_detail' event.pk %}" class="btn btn-outline btn-sm">Back to Event</a>
+{% endif %}
+
+<h2>Players</h2>
+<ul>
+    {% for player in players %}
+    <li>
+        {% if player.user %}
+            {{ player.user.username }}
+        {% else %}
+            {{ player.guest_name }} (guest)
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>
+{% endblock %}

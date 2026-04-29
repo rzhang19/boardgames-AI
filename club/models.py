@@ -750,3 +750,86 @@ class Block(models.Model):
             else:
                 ids.add(blocker_id)
         return ids
+
+
+class EventPresence(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='event_presences')
+    marked_at = models.DateTimeField(auto_now_add=True)
+    marked_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='marked_presences')
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['event', 'user'],
+                name='unique_event_presence',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.user} present at {self.event}'
+
+
+class EventGameOverride(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    board_game = models.ForeignKey(BoardGame, on_delete=models.CASCADE)
+    is_available = models.BooleanField()
+    modified_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    modified_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['event', 'board_game'],
+                name='unique_event_game_override',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.board_game} at {self.event}: {"available" if self.is_available else "unavailable"}'
+
+
+class GameSession(models.Model):
+    SELECTION_METHODS = [
+        ('manual', 'Manual'),
+        ('random', 'Random'),
+        ('vote', 'Vote'),
+    ]
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='game_sessions')
+    board_game = models.ForeignKey(BoardGame, on_delete=models.CASCADE)
+    selection_method = models.CharField(max_length=10, choices=SELECTION_METHODS, default='manual')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    played_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-played_at']
+
+    def __str__(self):
+        return f'{self.board_game} at {self.event}'
+
+
+class GameSessionPlayer(models.Model):
+    game_session = models.ForeignKey(GameSession, on_delete=models.CASCADE, related_name='players')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    guest_name = models.CharField(max_length=100, blank=True, default='')
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['game_session', 'user'],
+                name='unique_session_registered_player',
+                condition=models.Q(user__isnull=False),
+            ),
+        ]
+
+    def __str__(self):
+        if self.user:
+            return str(self.user)
+        return self.guest_name
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.user and self.guest_name:
+            raise ValidationError('A player cannot be both a registered user and a guest.')
+        if not self.user and not self.guest_name:
+            raise ValidationError('A player must be either a registered user or a guest.')

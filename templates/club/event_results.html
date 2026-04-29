@@ -21,6 +21,7 @@
             <th>Rank</th>
             <th>Game</th>
             <th>Score</th>
+            <th></th>
         </tr>
     </thead>
     <tbody>
@@ -29,6 +30,7 @@
             <td data-label="Rank">{{ forloop.counter }}</td>
             <td data-label="Game">{{ item.game.name }}</td>
             <td data-label="Score">{{ item.score }}</td>
+            <td><a href="{% url 'event_play_game' event.pk %}?game={{ item.game.pk }}&method=vote" class="btn btn-outline btn-xs">Play</a></td>
         </tr>
         {% endfor %}
     </tbody>
@@ -53,5 +55,9 @@
 {% endfor %}
 {% endif %}
 
+{% if event.group %}
 <a href="{% url 'event_detail' event.group.slug event.pk %}" class="btn btn-outline btn-sm">Back to Event</a>
+{% else %}
+<a href="{% url 'private_event_detail' event.pk %}" class="btn btn-outline btn-sm">Back to Event</a>
+{% endif %}
 {% endblock %}

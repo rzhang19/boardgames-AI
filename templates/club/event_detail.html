@@ -43,7 +43,11 @@
         <a href="{% url 'event_vote' event.group.slug event.pk %}" class="btn btn-primary btn-sm">Vote for Games</a>
         {% endif %}
 
+        {% if is_group_organizer %}
         <a href="{% url 'event_results' event.group.slug event.pk %}" class="btn btn-outline btn-sm">View Results</a>
+        <a href="{% url 'event_game_pool' event.pk %}" class="btn btn-outline btn-sm">Game Selection</a>
+        <a href="{% url 'event_play_game' event.pk %}" class="btn btn-outline btn-sm">Record Game</a>
+        {% endif %}
 
         {% if is_group_organizer %}
         {% if event.is_currently_active %}
@@ -83,6 +87,24 @@
     <p>No one is attending yet.</p>
     {% endif %}
 </div>
+
+{% if game_sessions %}
+<div class="card">
+    <h2>Games Played</h2>
+    <ul>
+        {% for session in game_sessions %}
+        <li>
+            <a href="{% url 'game_session_detail' event.pk session.pk %}">{{ session.board_game }}</a>
+            — {{ session.get_selection_method_display }}
+            — {{ session.played_at|date:"M j, Y g:i A" }}
+            {% if session.players.all %}
+            ({{ session.players.all|join:", " }})
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
 
 <a href="{% url 'group_event_list' event.group.slug %}" class="btn btn-outline btn-sm">Back to Events</a>
 {% endblock %}

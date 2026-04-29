@@ -49,7 +49,11 @@
         <a href="{% url 'private_event_vote' event.pk %}" class="btn btn-primary btn-sm">Vote</a>
         {% endif %}
 
+        {% if is_organizer %}
         <a href="{% url 'private_event_results' event.pk %}" class="btn btn-secondary btn-sm">Results</a>
+        <a href="{% url 'event_game_pool' event.pk %}" class="btn btn-secondary btn-sm">Game Selection</a>
+        <a href="{% url 'event_play_game' event.pk %}" class="btn btn-secondary btn-sm">Record Game</a>
+        {% endif %}
 
         {% if is_organizer %}
         <a href="{% url 'event_invite' event.pk %}" class="btn btn-secondary btn-sm">Invite</a>
@@ -63,6 +67,24 @@
     <ul>
         {% for att in attendees %}
         <li><a href="{% url 'public_profile' att.user.username %}">{{ att.user.username }}</a></li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if game_sessions %}
+<div class="card">
+    <h3>Games Played</h3>
+    <ul>
+        {% for session in game_sessions %}
+        <li>
+            <a href="{% url 'game_session_detail' event.pk session.pk %}">{{ session.board_game }}</a>
+            — {{ session.get_selection_method_display }}
+            — {{ session.played_at|date:"M j, Y g:i A" }}
+            {% if session.players.all %}
+            ({{ session.players.all|join:", " }})
+            {% endif %}
+        </li>
         {% endfor %}
     </ul>
 </div>

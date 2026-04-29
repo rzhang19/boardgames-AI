@@ -262,6 +262,7 @@ class EventResultsViewTest(TestCase):
         self.assertContains(response, 'Chess')
 
     def test_results_nonexistent_event_returns_404(self):
+        self.client.login(username='admin', password='testpass123')
         response = self.client.get(reverse('event_results', kwargs={'slug': self.group.slug, 'pk': 9999}))
         self.assertEqual(response.status_code, 404)
 

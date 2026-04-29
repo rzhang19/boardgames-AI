@@ -89,4 +89,11 @@ urlpatterns = [
     path('events/<int:pk>/toggle-visibility/', views.private_event_toggle_visibility, name='private_event_toggle_visibility'),
     path('events/<int:pk>/invite/', views.event_invite, name='event_invite'),
     path('events/<int:pk>/invite/<int:invite_pk>/<str:status>/', views.event_invite_respond, name='event_invite_respond'),
+    path('events/<int:pk>/presence/toggle/', views.event_toggle_presence, name='event_toggle_presence'),
+    path('events/<int:pk>/game-pool/', views.event_game_pool, name='event_game_pool'),
+    path('events/<int:pk>/pool-override/', views.event_pool_override, name='event_pool_override'),
+    path('events/<int:pk>/random-select/', views.event_random_select, name='event_random_select'),
+    path('events/<int:pk>/play/', views.event_play_game, name='event_play_game'),
+    path('events/<int:event_pk>/sessions/<int:pk>/', views.game_session_detail, name='game_session_detail'),
+    path('events/<int:event_pk>/sessions/<int:pk>/delete/', views.game_session_delete, name='game_session_delete'),
 ]

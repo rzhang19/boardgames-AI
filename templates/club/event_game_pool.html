@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Game Pool: {{ event.title }}{% endblock %}
+
+{% block content %}
+<h1>Game Pool for {{ event.title }}</h1>
+
+{% if event.group %}
+<a href="{% url 'event_detail' event.group.slug event.pk %}" class="btn btn-outline btn-sm">Back to Event</a>
+{% else %}
+<a href="{% url 'private_event_detail' event.pk %}" class="btn btn-outline btn-sm">Back to Event</a>
+{% endif %}
+
+<h2>Game Pool</h2>
+{% if pool %}
+<table>
+    <thead>
+        <tr>
+            <th>Game</th>
+            <th>Owners</th>
+            <th>Players</th>
+            <th>Complexity</th>
+            <th>Available</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for entry in pool %}
+        <tr>
+            <td data-label="Game">{{ entry.name }}</td>
+            <td data-label="Owners">
+                {% if entry.owners|length == 1 %}
+                    {{ entry.owners.0 }}
+                {% elif entry.owners|length > 1 %}
+                    <span class="multi-owner-toggle" data-owners="{{ entry.owners|join:', ' }}" style="cursor:pointer;color:#4a90d9;">Multiple Owners &#9662;</span>
+                {% endif %}
+            </td>
+            <td data-label="Players">
+                {% if entry.min_players and entry.max_players %}
+                    {{ entry.min_players }}-{{ entry.max_players }}
+                {% elif entry.min_players %}
+                    {{ entry.min_players }}+
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td data-label="Complexity">{{ entry.complexity|default:"-" }}</td>
+            <td data-label="Available">
+                {% if entry.is_available %}Yes{% else %}No{% endif %}
+                {% if entry.overridden %}<small>(override)</small>{% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No games in the pool.</p>
+{% endif %}
+{% endblock %}

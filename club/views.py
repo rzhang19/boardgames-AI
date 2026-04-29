@@ -23,7 +23,7 @@ from .forms import (
     SettingsForm, SuccessorPickForm,
     UserAddForm, UserManageForm, RegistrationForm, VerifiedIconForm, VoteForm,
 )
-from .models import BoardGame, Block, Event, EventAttendance, EventInvite, Group, GroupCreationLog, GroupInvite, GroupJoinRequest, GroupMembership, Friendship, Notification, PasswordHistory, PrivateEventCreationLog, SiteSettings, VerifiedIcon, Vote
+from .models import BoardGame, Block, Event, EventAttendance, EventGameOverride, EventInvite, EventPresence, GameSession, GameSessionPlayer, Group, GroupCreationLog, GroupInvite, GroupJoinRequest, GroupMembership, Friendship, Notification, PasswordHistory, PrivateEventCreationLog, SiteSettings, VerifiedIcon, Vote
 from .notifications import (
     generate_missing_complexity_notifications,
     generate_missing_max_players_notifications,
@@ -1451,9 +1451,12 @@ def event_vote(request, slug, pk):
 
 
 def event_results(request, slug, pk):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
     event = get_object_or_404(Event, pk=pk)
-    if not is_group_member(request.user, event.group):
-        raise PermissionDenied
+    if not is_group_organizer(request.user, event.group):
+        if not (request.user.is_superuser or request.user.is_site_admin):
+            raise PermissionDenied
     scores = calculate_borda_scores(event)
     game_map = {g.pk: g for g in BoardGame.objects.filter(pk__in=scores.keys())}
 
@@ -1543,6 +1546,7 @@ def event_detail(request, slug, pk):
         request.user.is_authenticated
         and is_group_organizer(request.user, event.group)
     )
+    game_sessions = GameSession.objects.filter(event=event).select_related('board_game').prefetch_related('players', 'players__user')
     return render(request, 'club/event_detail.html', {
         'event': event,
         'attendees': attendees,
@@ -1550,6 +1554,7 @@ def event_detail(request, slug, pk):
         'time_midnight': dt_time(0, 0),
         'can_resume': can_resume,
         'is_group_organizer': is_group_organizer_user,
+        'game_sessions': game_sessions,
     })
 
 
@@ -2418,9 +2423,274 @@ def decline_friend_request(request, pk):
         friendship.save(update_fields=['status', 'decline_count', 'last_declined_at', 'updated_at'])
         from .notifications import notify_friend_request_declined
         notify_friend_request_declined(friendship.requester, request.user)
-        return redirect('notification_list')
-
     return redirect('notification_list')
+
+
+def _is_event_organizer(user, event):
+    if event.group_id is not None:
+        return is_group_organizer(user, event.group)
+    return event.is_organizer(user)
+
+
+@login_required
+def event_toggle_presence(request, pk):
+    from django.http import HttpResponseNotAllowed, JsonResponse
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+
+    event = get_object_or_404(Event, pk=pk)
+
+    is_org = _is_event_organizer(request.user, event)
+    is_privileged = request.user.is_superuser or request.user.is_site_admin
+
+    if not is_org and not is_privileged:
+        raise PermissionDenied
+
+    from .presence import is_presence_locked
+    locked, _ = is_presence_locked(event)
+    if locked and not is_privileged:
+        raise PermissionDenied
+
+    import json
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except (json.JSONDecodeError, ValueError):
+        body = {}
+    user_id = body.get('user_id') or request.POST.get('user_id')
+    if not user_id:
+        return JsonResponse({'error': 'user_id required'}, status=400)
+    try:
+        user_id = int(user_id)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'invalid user_id'}, status=400)
+
+    target_user = User.objects.filter(pk=user_id).first()
+    if not target_user:
+        return JsonResponse({'error': 'user not found'}, status=400)
+
+    if event.group_id is not None:
+        if not EventAttendance.objects.filter(user=target_user, event=event).exists():
+            return JsonResponse({'error': 'user is not an attendee'}, status=400)
+    else:
+        if not can_view_private_event(target_user, event):
+            return JsonResponse({'error': 'user does not have access to this event'}, status=400)
+
+    from .models import EventPresence
+    presence = EventPresence.objects.filter(event=event, user=target_user).first()
+    if presence:
+        presence.delete()
+        return JsonResponse({'present': False, 'user_id': target_user.pk})
+    else:
+        EventPresence.objects.create(
+            event=event, user=target_user, marked_by=request.user
+        )
+        return JsonResponse({'present': True, 'user_id': target_user.pk})
+
+
+@login_required
+def event_game_pool(request, pk):
+    from django.http import HttpResponseNotAllowed
+    if request.method != 'GET':
+        return HttpResponseNotAllowed(['GET'])
+    event = get_object_or_404(Event, pk=pk)
+
+    is_org = _is_event_organizer(request.user, event)
+    is_privileged = request.user.is_superuser or request.user.is_site_admin
+    if not is_org and not is_privileged:
+        raise PermissionDenied
+
+    from .game_pool import compute_game_pool
+    pool = compute_game_pool(event)
+
+    from .presence import is_presence_locked
+    locked, lock_time = is_presence_locked(event)
+
+    present_user_ids = set(
+        EventPresence.objects.filter(event=event).values_list('user_id', flat=True)
+    )
+
+    if event.group_id is not None:
+        attendees = EventAttendance.objects.filter(
+            event=event
+        ).select_related('user')
+    else:
+        from .permissions import can_view_private_event
+        all_users = User.objects.all()
+        attendees = [u for u in all_users if can_view_private_event(u, event)]
+
+    pool_list = sorted(pool.values(), key=lambda x: x['name'])
+
+    return render(request, 'club/event_game_pool.html', {
+        'event': event,
+        'pool': pool_list,
+        'attendees': attendees if event.group_id is not None else [],
+        'accessible_users': attendees if event.group_id is None else [],
+        'present_user_ids': present_user_ids,
+        'locked': locked,
+        'lock_time': lock_time,
+    })
+
+
+@login_required
+def event_pool_override(request, pk):
+    from django.http import HttpResponseNotAllowed
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+
+    event = get_object_or_404(Event, pk=pk)
+    is_org = _is_event_organizer(request.user, event)
+    is_privileged = request.user.is_superuser or request.user.is_site_admin
+    if not is_org and not is_privileged:
+        raise PermissionDenied
+
+    import json
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except (json.JSONDecodeError, ValueError):
+        body = {}
+    board_game_id = body.get('board_game_id') or request.POST.get('board_game_id')
+    is_available_str = body.get('is_available', '')
+    if not board_game_id:
+        return JsonResponse({'error': 'board_game_id required'}, status=400)
+    try:
+        board_game_id = int(board_game_id)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'invalid board_game_id'}, status=400)
+
+    game = BoardGame.objects.filter(pk=board_game_id).first()
+    if not game:
+        return JsonResponse({'error': 'game not found'}, status=400)
+
+    if str(is_available_str).lower() == 'true':
+        EventGameOverride.objects.update_or_create(
+            event=event, board_game=game,
+            defaults={'is_available': True, 'modified_by': request.user},
+        )
+    else:
+        EventGameOverride.objects.filter(
+            event=event, board_game=game
+        ).delete()
+
+    return JsonResponse({'game_id': game.pk, 'available': str(is_available_str).lower() == 'true'})
+
+
+@login_required
+def event_random_select(request, pk):
+    from django.http import HttpResponseNotAllowed
+    import random
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+
+    event = get_object_or_404(Event, pk=pk)
+    is_org = _is_event_organizer(request.user, event)
+    is_privileged = request.user.is_superuser or request.user.is_site_admin
+    if not is_org and not is_privileged:
+        raise PermissionDenied
+
+    from .game_pool import compute_game_pool
+    pool = compute_game_pool(event)
+    available = [entry for entry in pool.values() if entry['is_available']]
+    if not available:
+        return JsonResponse({'error': 'No available games in pool'})
+
+    choice = random.choice(available)
+    return JsonResponse({
+        'name': choice['name'],
+        'bgg_id': choice['bgg_id'],
+        'owners': choice['owners'],
+        'min_players': choice['min_players'],
+        'max_players': choice['max_players'],
+        'complexity': choice['complexity'],
+    })
+
+
+@login_required
+def event_play_game(request, pk):
+    event = get_object_or_404(Event, pk=pk)
+    is_org = _is_event_organizer(request.user, event)
+    is_privileged = request.user.is_superuser or request.user.is_site_admin
+    if not is_org and not is_privileged:
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        board_game = get_object_or_404(BoardGame, pk=request.POST.get('board_game'))
+        selection_method = request.POST.get('selection_method', 'manual')
+        session = GameSession.objects.create(
+            event=event,
+            board_game=board_game,
+            selection_method=selection_method,
+            created_by=request.user,
+        )
+        player_ids = request.POST.getlist('players')
+        if not player_ids:
+            raw = request.POST.get('players', '')
+            if raw:
+                player_ids = [p.strip() for p in raw.split(',') if p.strip()]
+        for uid in player_ids:
+            try:
+                user_obj = User.objects.get(pk=int(uid))
+            except (User.DoesNotExist, ValueError):
+                continue
+            GameSessionPlayer.objects.create(
+                game_session=session, user=user_obj,
+            )
+        guest_names = request.POST.get('guest_names', '')
+        if guest_names:
+            for name in guest_names.split(','):
+                name = name.strip()
+                if name:
+                    GameSessionPlayer.objects.create(
+                        game_session=session, guest_name=name,
+                    )
+        return redirect('private_event_detail', pk=event.pk)
+
+    from .game_pool import compute_game_pool
+    pool = compute_game_pool(event)
+    games = list(pool.values())
+    attendees = EventAttendance.objects.filter(event=event).select_related('user')
+    preselected_game = request.GET.get('game', '')
+    preselected_method = request.GET.get('method', 'manual')
+    context = {
+        'event': event,
+        'games': games,
+        'attendees': attendees,
+        'preselected_game': preselected_game,
+        'preselected_method': preselected_method,
+    }
+    return render(request, 'club/event_play_game.html', context)
+
+
+@login_required
+def game_session_detail(request, event_pk, pk):
+    event = get_object_or_404(Event, pk=event_pk)
+    session = get_object_or_404(GameSession, pk=pk, event=event)
+    players = session.players.all()
+    context = {
+        'event': event,
+        'session': session,
+        'players': players,
+    }
+    return render(request, 'club/game_session_detail.html', context)
+
+
+@login_required
+def game_session_delete(request, event_pk, pk):
+    event = get_object_or_404(Event, pk=event_pk)
+    session = get_object_or_404(GameSession, pk=pk, event=event)
+    is_org = _is_event_organizer(request.user, event)
+    is_privileged = request.user.is_superuser or request.user.is_site_admin
+    if not is_org and not is_privileged:
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        session.delete()
+        return redirect('private_event_detail', pk=event.pk)
+
+    context = {
+        'event': event,
+        'session': session,
+    }
+    return render(request, 'club/game_session_confirm_delete.html', context)
 
 
 @login_required
@@ -2566,6 +2836,7 @@ def private_event_detail(request, pk):
         and event.created_by == request.user
     )
 
+    game_sessions = GameSession.objects.filter(event=event).select_related('board_game').prefetch_related('players', 'players__user')
     return render(request, 'club/private_event_detail.html', {
         'event': event,
         'attendees': attendees,
@@ -2574,6 +2845,7 @@ def private_event_detail(request, pk):
         'can_resume': can_resume,
         'is_organizer': is_organizer_user,
         'is_creator': is_creator,
+        'game_sessions': game_sessions,
     })
 
 
@@ -2742,13 +3014,16 @@ def private_event_vote(request, pk):
 
 
 def private_event_results(request, pk):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
     event = get_object_or_404(Event, pk=pk)
 
     if event.group_id is not None:
         return redirect('event_results', slug=event.group.slug, pk=event.pk)
 
-    if not can_view_private_event(request.user, event):
-        raise PermissionDenied
+    if not event.is_organizer(request.user):
+        if not (request.user.is_superuser or request.user.is_site_admin):
+            raise PermissionDenied
 
     scores = calculate_borda_scores(event)
     game_map = {g.pk: g for g in BoardGame.objects.filter(pk__in=scores.keys())}
