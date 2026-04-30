@@ -16,14 +16,15 @@ def _create_svg(name='test.svg'):
 @tag("integration")
 class AdminSettingsAccessTest(TestCase):
 
-    def setUp(self):
-        self.superuser = User.objects.create_superuser(
+    @classmethod
+    def setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
             username='superuser', password='testpass123',
         )
-        self.site_admin = User.objects.create_user(
+        cls.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123', is_site_admin=True,
         )
-        self.regular = User.objects.create_user(
+        cls.regular = User.objects.create_user(
             username='regular', password='testpass123',
         )
 
@@ -51,14 +52,15 @@ class AdminSettingsAccessTest(TestCase):
 @tag("integration")
 class AdminSettingsContentTest(TestCase):
 
-    def setUp(self):
-        self.superuser = User.objects.create_superuser(
+    @classmethod
+    def setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
             username='superuser', password='testpass123',
         )
-        self.site_admin = User.objects.create_user(
+        cls.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123', is_site_admin=True,
         )
-        self.other_admin = User.objects.create_user(
+        cls.other_admin = User.objects.create_user(
             username='otheradmin', password='testpass123', is_site_admin=True,
         )
 
@@ -112,11 +114,12 @@ class AdminSettingsContentTest(TestCase):
 @tag("integration")
 class AdminSettingsVotingOffsetTest(TestCase):
 
-    def setUp(self):
-        self.admin = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(
             username='siteadmin', password='testpass123', is_site_admin=True,
         )
-        self.regular = User.objects.create_user(
+        cls.regular = User.objects.create_user(
             username='regular', password='testpass123',
         )
 
@@ -158,8 +161,9 @@ class AdminSettingsVotingOffsetTest(TestCase):
 @tag("integration")
 class PersonalSettingsNoAdminContentTest(TestCase):
 
-    def setUp(self):
-        self.admin = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(
             username='siteadmin', password='testpass123',
             is_site_admin=True, email_verified=True,
         )
@@ -228,14 +232,15 @@ class AdminNavButtonTest(TestCase):
 @tag("integration")
 class ManageSiteAdminsAccessTest(TestCase):
 
-    def setUp(self):
-        self.superuser = User.objects.create_superuser(
+    @classmethod
+    def setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
             username='superuser', password='testpass123',
         )
-        self.site_admin = User.objects.create_user(
+        cls.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123', is_site_admin=True,
         )
-        self.regular = User.objects.create_user(
+        cls.regular = User.objects.create_user(
             username='regular', password='testpass123',
         )
 
@@ -263,16 +268,19 @@ class ManageSiteAdminsAccessTest(TestCase):
 @tag("integration")
 class ManageSiteAdminsContentTest(TestCase):
 
-    def setUp(self):
-        self.superuser = User.objects.create_superuser(
+    @classmethod
+    def setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
             username='superuser', password='testpass123',
         )
-        self.site_admin = User.objects.create_user(
+        cls.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123', is_site_admin=True,
         )
-        self.other_admin = User.objects.create_user(
+        cls.other_admin = User.objects.create_user(
             username='otheradmin', password='testpass123', is_site_admin=True,
         )
+
+    def setUp(self):
         self.client.login(username='superuser', password='testpass123')
 
     def test_manage_site_admins_lists_current_admins(self):
@@ -297,19 +305,22 @@ class ManageSiteAdminsContentTest(TestCase):
 @tag("integration")
 class ManageSiteAdminsSearchTest(TestCase):
 
-    def setUp(self):
-        self.superuser = User.objects.create_superuser(
+    @classmethod
+    def setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
             username='superuser', password='testpass123',
         )
-        self.site_admin = User.objects.create_user(
+        cls.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123', is_site_admin=True,
         )
-        self.regular1 = User.objects.create_user(
+        cls.regular1 = User.objects.create_user(
             username='alice', password='testpass123',
         )
-        self.regular2 = User.objects.create_user(
+        cls.regular2 = User.objects.create_user(
             username='Bob', password='testpass123',
         )
+
+    def setUp(self):
         self.client.login(username='superuser', password='testpass123')
 
     def test_search_by_username_case_insensitive(self):
@@ -368,19 +379,22 @@ class ManageSiteAdminsSearchTest(TestCase):
 @tag("integration")
 class ManageSiteAdminsConfirmTest(TestCase):
 
-    def setUp(self):
-        self.superuser = User.objects.create_superuser(
+    @classmethod
+    def setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
             username='superuser', password='testpass123',
         )
-        self.site_admin = User.objects.create_user(
+        cls.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123', is_site_admin=True,
         )
-        self.other_admin = User.objects.create_user(
+        cls.other_admin = User.objects.create_user(
             username='otheradmin', password='testpass123', is_site_admin=True,
         )
-        self.regular = User.objects.create_user(
+        cls.regular = User.objects.create_user(
             username='regular', password='testpass123',
         )
+
+    def setUp(self):
         self.client.login(username='superuser', password='testpass123')
 
     def test_superuser_can_add_site_admin(self):
@@ -450,14 +464,15 @@ class ManageSiteAdminsConfirmTest(TestCase):
 @tag("integration")
 class ManageUsersPageChangesTest(TestCase):
 
-    def setUp(self):
-        self.superuser = User.objects.create_superuser(
+    @classmethod
+    def setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
             username='superuser', password='testpass123',
         )
-        self.site_admin = User.objects.create_user(
+        cls.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123', is_site_admin=True,
         )
-        self.regular = User.objects.create_user(
+        cls.regular = User.objects.create_user(
             username='regular', password='testpass123',
         )
 
@@ -512,20 +527,21 @@ class ManageUsersPageChangesTest(TestCase):
 @tag("integration")
 class GroupListSettingsGearTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             username='testuser', password='testpass123',
         )
-        self.admin_user = User.objects.create_user(
+        cls.admin_user = User.objects.create_user(
             username='groupadmin', password='testpass123',
         )
         from club.models import Group, GroupMembership
-        self.group = Group.objects.create(name='Test Group')
+        cls.group = Group.objects.create(name='Test Group')
         GroupMembership.objects.create(
-            user=self.admin_user, group=self.group, role='admin',
+            user=cls.admin_user, group=cls.group, role='admin',
         )
         GroupMembership.objects.create(
-            user=self.user, group=self.group, role='member',
+            user=cls.user, group=cls.group, role='member',
         )
 
     def test_group_list_shows_settings_gear_for_admin(self):

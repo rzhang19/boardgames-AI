@@ -10,25 +10,26 @@ User = get_user_model()
 @tag("integration")
 class GameListViewTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             username='gameowner', password='testpass123'
         )
-        self.other_user = User.objects.create_user(
+        cls.other_user = User.objects.create_user(
             username='otherplayer', password='testpass123'
         )
-        self.group = Group.objects.create(name='Test Group', created_by=self.user)
-        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
-        GroupMembership.objects.create(user=self.other_user, group=self.group, role='member')
-        self.game1 = BoardGame.objects.create(
-            name='Catan', owner=self.user, min_players=3, max_players=4,
+        cls.group = Group.objects.create(name='Test Group', created_by=cls.user)
+        GroupMembership.objects.create(user=cls.user, group=cls.group, role='admin')
+        GroupMembership.objects.create(user=cls.other_user, group=cls.group, role='member')
+        cls.game1 = BoardGame.objects.create(
+            name='Catan', owner=cls.user, min_players=3, max_players=4,
             image_url='https://cf.geekdo-images.com/pic123.png',
         )
-        self.game2 = BoardGame.objects.create(
-            name='Chess', owner=self.user
+        cls.game2 = BoardGame.objects.create(
+            name='Chess', owner=cls.user
         )
-        self.game3 = BoardGame.objects.create(
-            name='Risk', owner=self.other_user, min_players=2, max_players=6
+        cls.game3 = BoardGame.objects.create(
+            name='Risk', owner=cls.other_user, min_players=2, max_players=6
         )
 
     def test_game_list_displays_all_visible_games(self):
@@ -94,27 +95,28 @@ class GameListViewTest(TestCase):
 @tag("integration")
 class GameListFilterTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             username='gameowner', password='testpass123'
         )
-        self.other_user = User.objects.create_user(
+        cls.other_user = User.objects.create_user(
             username='otherplayer', password='testpass123'
         )
-        self.third_user = User.objects.create_user(
+        cls.third_user = User.objects.create_user(
             username='thirdplayer', password='testpass123'
         )
-        self.group = Group.objects.create(name='Test Group', created_by=self.user)
-        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
-        GroupMembership.objects.create(user=self.other_user, group=self.group, role='member')
-        self.game1 = BoardGame.objects.create(
-            name='Catan', owner=self.user, min_players=3, max_players=4
+        cls.group = Group.objects.create(name='Test Group', created_by=cls.user)
+        GroupMembership.objects.create(user=cls.user, group=cls.group, role='admin')
+        GroupMembership.objects.create(user=cls.other_user, group=cls.group, role='member')
+        cls.game1 = BoardGame.objects.create(
+            name='Catan', owner=cls.user, min_players=3, max_players=4
         )
-        self.game2 = BoardGame.objects.create(
-            name='Risk', owner=self.other_user, min_players=2, max_players=6
+        cls.game2 = BoardGame.objects.create(
+            name='Risk', owner=cls.other_user, min_players=2, max_players=6
         )
-        self.game3 = BoardGame.objects.create(
-            name='Pandemic', owner=self.third_user
+        cls.game3 = BoardGame.objects.create(
+            name='Pandemic', owner=cls.third_user
         )
 
     def test_filter_by_myself_shows_only_own_games(self):
@@ -145,18 +147,19 @@ class GameListFilterTest(TestCase):
 @tag("integration")
 class GameListPlayerFilterTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             username='gameowner', password='testpass123'
         )
-        self.game1 = BoardGame.objects.create(
-            name='Catan', owner=self.user, min_players=3, max_players=4
+        cls.game1 = BoardGame.objects.create(
+            name='Catan', owner=cls.user, min_players=3, max_players=4
         )
-        self.game2 = BoardGame.objects.create(
-            name='Risk', owner=self.user, min_players=2, max_players=6
+        cls.game2 = BoardGame.objects.create(
+            name='Risk', owner=cls.user, min_players=2, max_players=6
         )
-        self.game3 = BoardGame.objects.create(
-            name='Chess', owner=self.user
+        cls.game3 = BoardGame.objects.create(
+            name='Chess', owner=cls.user
         )
 
     def test_filter_by_player_count_shows_matching_games(self):
@@ -186,24 +189,25 @@ class GameListPlayerFilterTest(TestCase):
 @tag("integration")
 class GameListSortTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             username='alice', password='testpass123'
         )
-        self.other_user = User.objects.create_user(
+        cls.other_user = User.objects.create_user(
             username='bob', password='testpass123'
         )
-        self.group = Group.objects.create(name='Test Group', created_by=self.user)
-        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
-        GroupMembership.objects.create(user=self.other_user, group=self.group, role='member')
-        self.game1 = BoardGame.objects.create(
-            name='Catan', owner=self.user, min_players=3, max_players=4
+        cls.group = Group.objects.create(name='Test Group', created_by=cls.user)
+        GroupMembership.objects.create(user=cls.user, group=cls.group, role='admin')
+        GroupMembership.objects.create(user=cls.other_user, group=cls.group, role='member')
+        cls.game1 = BoardGame.objects.create(
+            name='Catan', owner=cls.user, min_players=3, max_players=4
         )
-        self.game2 = BoardGame.objects.create(
-            name='Azul', owner=self.other_user, min_players=2, max_players=4
+        cls.game2 = BoardGame.objects.create(
+            name='Azul', owner=cls.other_user, min_players=2, max_players=4
         )
-        self.game3 = BoardGame.objects.create(
-            name='Risk', owner=self.user, min_players=2, max_players=6
+        cls.game3 = BoardGame.objects.create(
+            name='Risk', owner=cls.user, min_players=2, max_players=6
         )
 
     def test_sort_by_name_ascending(self):
@@ -272,8 +276,9 @@ class GameListSortTest(TestCase):
 @tag("integration")
 class GameCreateViewTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             username='creator', password='testpass123'
         )
 
@@ -436,12 +441,13 @@ class GameCreateViewTest(TestCase):
 @tag("integration")
 class GameDetailViewTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             username='owner', password='testpass123'
         )
-        self.game = BoardGame.objects.create(
-            name='Catan', owner=self.user,
+        cls.game = BoardGame.objects.create(
+            name='Catan', owner=cls.user,
             description='Resource management',
             min_players=3, max_players=4
         )
@@ -495,15 +501,16 @@ class GameDetailViewTest(TestCase):
 @tag("integration")
 class GameUpdateViewTest(TestCase):
 
-    def setUp(self):
-        self.owner = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(
             username='owner', password='testpass123'
         )
-        self.other_user = User.objects.create_user(
+        cls.other_user = User.objects.create_user(
             username='other', password='testpass123'
         )
-        self.game = BoardGame.objects.create(
-            name='Catan', owner=self.owner
+        cls.game = BoardGame.objects.create(
+            name='Catan', owner=cls.owner
         )
 
     def test_edit_page_requires_login(self):
@@ -635,15 +642,16 @@ class GameUpdateViewTest(TestCase):
 @tag("integration")
 class GameDeleteViewTest(TestCase):
 
-    def setUp(self):
-        self.owner = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(
             username='owner', password='testpass123'
         )
-        self.other_user = User.objects.create_user(
+        cls.other_user = User.objects.create_user(
             username='other', password='testpass123'
         )
-        self.game = BoardGame.objects.create(
-            name='Catan', owner=self.owner
+        cls.game = BoardGame.objects.create(
+            name='Catan', owner=cls.owner
         )
 
     def test_delete_page_requires_login(self):
@@ -703,33 +711,34 @@ class GameDeleteViewTest(TestCase):
 @tag("integration")
 class GameListVisibilityTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             username='alice', password='testpass123'
         )
-        self.group_member = User.objects.create_user(
+        cls.group_member = User.objects.create_user(
             username='bob', password='testpass123'
         )
-        self.outsider = User.objects.create_user(
+        cls.outsider = User.objects.create_user(
             username='charlie', password='testpass123'
         )
-        self.group = Group.objects.create(name='Game Group', created_by=self.user)
-        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
-        GroupMembership.objects.create(user=self.group_member, group=self.group, role='member')
-        self.own_game = BoardGame.objects.create(
-            name='Catan', owner=self.user, min_players=3, max_players=4,
+        cls.group = Group.objects.create(name='Game Group', created_by=cls.user)
+        GroupMembership.objects.create(user=cls.user, group=cls.group, role='admin')
+        GroupMembership.objects.create(user=cls.group_member, group=cls.group, role='member')
+        cls.own_game = BoardGame.objects.create(
+            name='Catan', owner=cls.user, min_players=3, max_players=4,
             complexity='medium',
         )
-        self.member_game = BoardGame.objects.create(
-            name='Risk', owner=self.group_member, min_players=2, max_players=6,
+        cls.member_game = BoardGame.objects.create(
+            name='Risk', owner=cls.group_member, min_players=2, max_players=6,
             complexity='medium',
         )
-        self.group_game = BoardGame.objects.create(
-            name='Pandemic', group=self.group, min_players=2, max_players=4,
+        cls.group_game = BoardGame.objects.create(
+            name='Pandemic', group=cls.group, min_players=2, max_players=4,
             complexity='light',
         )
-        self.outsider_game = BoardGame.objects.create(
-            name='Chess', owner=self.outsider, min_players=2, max_players=2,
+        cls.outsider_game = BoardGame.objects.create(
+            name='Chess', owner=cls.outsider, min_players=2, max_players=2,
             complexity='heavy',
         )
 
@@ -787,26 +796,27 @@ class GameListVisibilityTest(TestCase):
 @tag("integration")
 class GameListOwnedByColumnTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             username='alice', password='testpass123'
         )
-        self.other_user = User.objects.create_user(
+        cls.other_user = User.objects.create_user(
             username='bob', password='testpass123'
         )
-        self.group = Group.objects.create(name='Game Club', created_by=self.user)
-        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
-        GroupMembership.objects.create(user=self.other_user, group=self.group, role='member')
-        self.own_game = BoardGame.objects.create(
-            name='Catan', owner=self.user, min_players=3, max_players=4,
+        cls.group = Group.objects.create(name='Game Club', created_by=cls.user)
+        GroupMembership.objects.create(user=cls.user, group=cls.group, role='admin')
+        GroupMembership.objects.create(user=cls.other_user, group=cls.group, role='member')
+        cls.own_game = BoardGame.objects.create(
+            name='Catan', owner=cls.user, min_players=3, max_players=4,
             complexity='medium',
         )
-        self.member_game = BoardGame.objects.create(
-            name='Risk', owner=self.other_user, min_players=2, max_players=6,
+        cls.member_game = BoardGame.objects.create(
+            name='Risk', owner=cls.other_user, min_players=2, max_players=6,
             complexity='medium',
         )
-        self.group_game = BoardGame.objects.create(
-            name='Pandemic', group=self.group, min_players=2, max_players=4,
+        cls.group_game = BoardGame.objects.create(
+            name='Pandemic', group=cls.group, min_players=2, max_players=4,
             complexity='light',
         )
 
@@ -855,21 +865,22 @@ class GameListOwnedByColumnTest(TestCase):
 @tag("integration")
 class GameListOwnedByMultiGroupTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             username='alice', password='testpass123'
         )
-        self.other_user = User.objects.create_user(
+        cls.other_user = User.objects.create_user(
             username='bob', password='testpass123'
         )
-        self.group_a = Group.objects.create(name='Alpha Group', created_by=self.user)
-        self.group_b = Group.objects.create(name='Beta Group', created_by=self.user)
-        GroupMembership.objects.create(user=self.user, group=self.group_a, role='admin')
-        GroupMembership.objects.create(user=self.user, group=self.group_b, role='organizer')
-        GroupMembership.objects.create(user=self.other_user, group=self.group_a, role='member')
-        GroupMembership.objects.create(user=self.other_user, group=self.group_b, role='member')
-        self.shared_game = BoardGame.objects.create(
-            name='Risk', owner=self.other_user, min_players=2, max_players=6,
+        cls.group_a = Group.objects.create(name='Alpha Group', created_by=cls.user)
+        cls.group_b = Group.objects.create(name='Beta Group', created_by=cls.user)
+        GroupMembership.objects.create(user=cls.user, group=cls.group_a, role='admin')
+        GroupMembership.objects.create(user=cls.user, group=cls.group_b, role='organizer')
+        GroupMembership.objects.create(user=cls.other_user, group=cls.group_a, role='member')
+        GroupMembership.objects.create(user=cls.other_user, group=cls.group_b, role='member')
+        cls.shared_game = BoardGame.objects.create(
+            name='Risk', owner=cls.other_user, min_players=2, max_players=6,
             complexity='medium',
         )
 
@@ -893,26 +904,27 @@ class GameListOwnedByMultiGroupTest(TestCase):
 @tag("integration")
 class GameListGroupFilterTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             username='alice', password='testpass123'
         )
-        self.other_user = User.objects.create_user(
+        cls.other_user = User.objects.create_user(
             username='bob', password='testpass123'
         )
-        self.group = Group.objects.create(name='Game Club', created_by=self.user)
-        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
-        GroupMembership.objects.create(user=self.other_user, group=self.group, role='member')
-        self.own_game = BoardGame.objects.create(
-            name='Catan', owner=self.user, min_players=3, max_players=4,
+        cls.group = Group.objects.create(name='Game Club', created_by=cls.user)
+        GroupMembership.objects.create(user=cls.user, group=cls.group, role='admin')
+        GroupMembership.objects.create(user=cls.other_user, group=cls.group, role='member')
+        cls.own_game = BoardGame.objects.create(
+            name='Catan', owner=cls.user, min_players=3, max_players=4,
             complexity='medium',
         )
-        self.member_game = BoardGame.objects.create(
-            name='Risk', owner=self.other_user, min_players=2, max_players=6,
+        cls.member_game = BoardGame.objects.create(
+            name='Risk', owner=cls.other_user, min_players=2, max_players=6,
             complexity='medium',
         )
-        self.group_game = BoardGame.objects.create(
-            name='Pandemic', group=self.group, min_players=2, max_players=4,
+        cls.group_game = BoardGame.objects.create(
+            name='Pandemic', group=cls.group, min_players=2, max_players=4,
             complexity='light',
         )
 
@@ -958,29 +970,30 @@ class GameListGroupFilterTest(TestCase):
 @tag("integration")
 class GameListOwnerFilterScopingTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             username='alice', password='testpass123'
         )
-        self.group_member = User.objects.create_user(
+        cls.group_member = User.objects.create_user(
             username='bob', password='testpass123'
         )
-        self.outsider = User.objects.create_user(
+        cls.outsider = User.objects.create_user(
             username='charlie', password='testpass123'
         )
-        self.group = Group.objects.create(name='Game Group', created_by=self.user)
-        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
-        GroupMembership.objects.create(user=self.group_member, group=self.group, role='member')
+        cls.group = Group.objects.create(name='Game Group', created_by=cls.user)
+        GroupMembership.objects.create(user=cls.user, group=cls.group, role='admin')
+        GroupMembership.objects.create(user=cls.group_member, group=cls.group, role='member')
         BoardGame.objects.create(
-            name='Catan', owner=self.user, min_players=3, max_players=4,
+            name='Catan', owner=cls.user, min_players=3, max_players=4,
             complexity='medium',
         )
         BoardGame.objects.create(
-            name='Risk', owner=self.group_member, min_players=2, max_players=6,
+            name='Risk', owner=cls.group_member, min_players=2, max_players=6,
             complexity='medium',
         )
         BoardGame.objects.create(
-            name='Chess', owner=self.outsider, min_players=2, max_players=2,
+            name='Chess', owner=cls.outsider, min_players=2, max_players=2,
             complexity='heavy',
         )
 
@@ -994,10 +1007,13 @@ class GameListOwnerFilterScopingTest(TestCase):
 @tag("unit")
 class GroupNameValidationTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             username='creator', password='testpass123'
         )
+
+    def setUp(self):
         self.client.login(username='creator', password='testpass123')
 
     def test_cannot_create_group_named_self(self):

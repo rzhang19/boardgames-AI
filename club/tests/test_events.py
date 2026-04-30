@@ -17,22 +17,23 @@ def _make_organizer(user, group):
 @tag("integration")
 class EventListViewTest(TestCase):
 
-    def setUp(self):
-        self.admin = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(
             username='admin', password='testpass123', is_site_admin=True
         )
-        self.group = Group.objects.create(name='Test Group')
-        _make_organizer(self.admin, self.group)
-        self.event1 = Event.objects.create(
+        cls.group = Group.objects.create(name='Test Group')
+        _make_organizer(cls.admin, cls.group)
+        cls.event1 = Event.objects.create(
             title='Friday Night', date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
-            location='Community Center', created_by=self.admin,
-            group=self.group
+            location='Community Center', created_by=cls.admin,
+            group=cls.group
         )
-        self.event2 = Event.objects.create(
+        cls.event2 = Event.objects.create(
             title='Saturday Bash', date='2026-06-01T12:00:00Z',
             voting_deadline='2026-06-01T12:00:00Z',
-            created_by=self.admin, group=self.group
+            created_by=cls.admin, group=cls.group
         )
 
     def test_event_list_displays_all_events(self):
@@ -45,19 +46,20 @@ class EventListViewTest(TestCase):
 @tag("integration")
 class EventCreateViewTest(TestCase):
 
-    def setUp(self):
-        self.admin = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(
             username='admin', password='testpass123', is_site_admin=True
         )
-        self.regular = User.objects.create_user(
+        cls.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
-        self.site_admin = User.objects.create_user(
+        cls.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123',
             is_site_admin=True,
         )
-        self.group = Group.objects.create(name='Create Group')
-        _make_organizer(self.admin, self.group)
+        cls.group = Group.objects.create(name='Create Group')
+        _make_organizer(cls.admin, cls.group)
 
     def test_create_page_requires_login(self):
         response = self.client.get(reverse('event_add', kwargs={'slug': self.group.slug}))
@@ -255,17 +257,18 @@ class EventCreateViewTest(TestCase):
 @tag("integration")
 class EventDetailViewTest(TestCase):
 
-    def setUp(self):
-        self.admin = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(
             username='admin', password='testpass123', is_site_admin=True
         )
-        self.group = Group.objects.create(name='Detail Group')
-        _make_organizer(self.admin, self.group)
-        self.event = Event.objects.create(
+        cls.group = Group.objects.create(name='Detail Group')
+        _make_organizer(cls.admin, cls.group)
+        cls.event = Event.objects.create(
             title='Test Event', date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
             location='Hall', description='A test event',
-            created_by=self.admin, group=self.group
+            created_by=cls.admin, group=cls.group
         )
 
     def test_event_detail_displays_info(self):
@@ -295,20 +298,21 @@ class EventDetailViewTest(TestCase):
 @tag("integration")
 class EventRSVPTest(TestCase):
 
-    def setUp(self):
-        self.admin = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(
             username='admin', password='testpass123', is_site_admin=True
         )
-        self.user = User.objects.create_user(
+        cls.user = User.objects.create_user(
             username='attendee', password='testpass123'
         )
-        self.group = Group.objects.create(name='RSVP Group')
-        _make_organizer(self.admin, self.group)
-        GroupMembership.objects.create(user=self.user, group=self.group, role='member')
-        self.event = Event.objects.create(
+        cls.group = Group.objects.create(name='RSVP Group')
+        _make_organizer(cls.admin, cls.group)
+        GroupMembership.objects.create(user=cls.user, group=cls.group, role='member')
+        cls.event = Event.objects.create(
             title='RSVP Event', date='2026-05-01T18:00:00Z',
             voting_deadline='2026-05-01T18:00:00Z',
-            created_by=self.admin, group=self.group
+            created_by=cls.admin, group=cls.group
         )
 
     def test_rsvp_requires_login(self):
@@ -353,37 +357,38 @@ class EventRSVPTest(TestCase):
 @tag("integration")
 class EventEditViewTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123', is_site_admin=True
         )
-        self.other_organizer = User.objects.create_user(
+        cls.other_organizer = User.objects.create_user(
             username='other_org', password='testpass123', is_site_admin=True
         )
-        self.regular = User.objects.create_user(
+        cls.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
-        self.site_admin = User.objects.create_user(
+        cls.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123',
             is_site_admin=True,
         )
-        self.site_admin_only = User.objects.create_user(
+        cls.site_admin_only = User.objects.create_user(
             username='siteadminonly', password='testpass123',
             is_site_admin=True,
         )
-        self.group = Group.objects.create(name='Edit Group')
-        _make_organizer(self.organizer, self.group)
-        _make_organizer(self.other_organizer, self.group)
-        _make_organizer(self.site_admin_only, self.group)
-        self.future_date = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
-        self.event = Event.objects.create(
+        cls.group = Group.objects.create(name='Edit Group')
+        _make_organizer(cls.organizer, cls.group)
+        _make_organizer(cls.other_organizer, cls.group)
+        _make_organizer(cls.site_admin_only, cls.group)
+        cls.future_date = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        cls.event = Event.objects.create(
             title='Original Title',
             date=timezone.now() + timedelta(days=7),
             voting_deadline=timezone.now() + timedelta(days=7),
             location='Original Location',
             description='Original Description',
-            created_by=self.organizer,
-            group=self.group,
+            created_by=cls.organizer,
+            group=cls.group,
         )
 
     def test_edit_page_requires_login(self):
@@ -621,26 +626,27 @@ class EventEditViewTest(TestCase):
 @tag("integration")
 class EventDetailEditButtonTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123', is_site_admin=True
         )
-        self.regular = User.objects.create_user(
+        cls.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
-        self.site_admin_only = User.objects.create_user(
+        cls.site_admin_only = User.objects.create_user(
             username='siteadminonly', password='testpass123',
             is_site_admin=True,
         )
-        self.group = Group.objects.create(name='Button Group')
-        _make_organizer(self.organizer, self.group)
-        _make_organizer(self.site_admin_only, self.group)
-        self.event = Event.objects.create(
+        cls.group = Group.objects.create(name='Button Group')
+        _make_organizer(cls.organizer, cls.group)
+        _make_organizer(cls.site_admin_only, cls.group)
+        cls.event = Event.objects.create(
             title='Test Event',
             date=timezone.now() + timedelta(days=7),
             voting_deadline=timezone.now() + timedelta(days=7),
-            created_by=self.organizer,
-            group=self.group,
+            created_by=cls.organizer,
+            group=cls.group,
         )
 
     def test_organizer_sees_edit_button_on_event_detail(self):
@@ -668,19 +674,20 @@ class EventDetailEditButtonTest(TestCase):
 @tag("integration")
 class RecurringEventAccessTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123', is_site_admin=True
         )
-        self.regular = User.objects.create_user(
+        cls.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
-        self.site_admin = User.objects.create_user(
+        cls.site_admin = User.objects.create_user(
             username='siteadmin', password='testpass123',
             is_site_admin=True,
         )
-        self.group = Group.objects.create(name='Recurring Group')
-        _make_organizer(self.organizer, self.group)
+        cls.group = Group.objects.create(name='Recurring Group')
+        _make_organizer(cls.organizer, cls.group)
 
     def test_recurring_page_requires_login(self):
         response = self.client.get(reverse('event_add_recurring', kwargs={'slug': self.group.slug}))
@@ -717,12 +724,15 @@ class RecurringEventAccessTest(TestCase):
 @tag("integration")
 class RecurringEventFormValidationTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123', is_site_admin=True
         )
-        self.group = Group.objects.create(name='Validation Group')
-        _make_organizer(self.organizer, self.group)
+        cls.group = Group.objects.create(name='Validation Group')
+        _make_organizer(cls.organizer, cls.group)
+
+    def setUp(self):
         self.client.login(username='organizer', password='testpass123')
 
     def test_start_date_in_past_fails(self):
@@ -834,12 +844,15 @@ class RecurringEventFormValidationTest(TestCase):
 @tag("system")
 class RecurringEventPreviewTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123', is_site_admin=True
         )
-        self.group = Group.objects.create(name='Preview Group')
-        _make_organizer(self.organizer, self.group)
+        cls.group = Group.objects.create(name='Preview Group')
+        _make_organizer(cls.organizer, cls.group)
+
+    def setUp(self):
         self.client.login(username='organizer', password='testpass123')
 
     def _post_valid_form(self, **kwargs):
@@ -970,15 +983,16 @@ class RecurringEventPreviewTest(TestCase):
 @tag("integration")
 class RecurringEventButtonTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123', is_site_admin=True
         )
-        self.regular = User.objects.create_user(
+        cls.regular = User.objects.create_user(
             username='regular', password='testpass123'
         )
-        self.group = Group.objects.create(name='Button Group')
-        _make_organizer(self.organizer, self.group)
+        cls.group = Group.objects.create(name='Button Group')
+        _make_organizer(cls.organizer, cls.group)
 
     def test_organizer_sees_recurring_event_button(self):
         self.client.login(username='organizer', password='testpass123')
@@ -996,16 +1010,17 @@ class RecurringEventButtonTest(TestCase):
 @tag("integration")
 class EventCreationNotificationTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123', is_site_admin=True
         )
-        self.member = User.objects.create_user(
+        cls.member = User.objects.create_user(
             username='member', password='testpass123'
         )
-        self.group = Group.objects.create(name='Notif Group')
-        _make_organizer(self.organizer, self.group)
-        GroupMembership.objects.create(user=self.member, group=self.group, role='member')
+        cls.group = Group.objects.create(name='Notif Group')
+        _make_organizer(cls.organizer, cls.group)
+        GroupMembership.objects.create(user=cls.member, group=cls.group, role='member')
 
     def test_create_event_sends_notification_to_members(self):
         self.client.login(username='organizer', password='testpass123')

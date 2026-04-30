@@ -13,11 +13,12 @@ User = get_user_model()
 @tag("unit")
 class BoardGameGroupOwnerTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             username='gameowner', password='testpass123'
         )
-        self.group = Group.objects.create(name='Test Group')
+        cls.group = Group.objects.create(name='Test Group')
 
     def test_create_board_game_with_group_owner(self):
         game = BoardGame.objects.create(
@@ -103,22 +104,23 @@ class BoardGameGroupOwnerTest(TestCase):
 @tag("unit")
 class GroupGamesWithGroupOwnershipTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
             username='member1', password='testpass123'
         )
-        self.other_user = User.objects.create_user(
+        cls.other_user = User.objects.create_user(
             username='member2', password='testpass123'
         )
-        self.outsider = User.objects.create_user(
+        cls.outsider = User.objects.create_user(
             username='outsider', password='testpass123'
         )
-        self.group = Group.objects.create(name='Game Group')
+        cls.group = Group.objects.create(name='Game Group')
         GroupMembership.objects.create(
-            user=self.user, group=self.group, role='member'
+            user=cls.user, group=cls.group, role='member'
         )
         GroupMembership.objects.create(
-            user=self.other_user, group=self.group, role='member'
+            user=cls.other_user, group=cls.group, role='member'
         )
 
     def test_games_includes_user_owned_games(self):
@@ -178,22 +180,23 @@ class GroupGamesWithGroupOwnershipTest(TestCase):
 @tag("integration")
 class GroupGameAddViewTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123'
         )
-        self.member = User.objects.create_user(
+        cls.member = User.objects.create_user(
             username='member', password='testpass123'
         )
-        self.outsider = User.objects.create_user(
+        cls.outsider = User.objects.create_user(
             username='outsider', password='testpass123'
         )
-        self.group = Group.objects.create(name='Game Group')
+        cls.group = Group.objects.create(name='Game Group')
         GroupMembership.objects.create(
-            user=self.organizer, group=self.group, role='organizer'
+            user=cls.organizer, group=cls.group, role='organizer'
         )
         GroupMembership.objects.create(
-            user=self.member, group=self.group, role='member'
+            user=cls.member, group=cls.group, role='member'
         )
 
     def test_add_page_requires_login(self):
@@ -366,26 +369,27 @@ class GroupGameAddViewTest(TestCase):
 @tag("integration")
 class GroupGameEditViewTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123'
         )
-        self.member = User.objects.create_user(
+        cls.member = User.objects.create_user(
             username='member', password='testpass123'
         )
-        self.outsider = User.objects.create_user(
+        cls.outsider = User.objects.create_user(
             username='outsider', password='testpass123'
         )
-        self.group = Group.objects.create(name='Game Group')
+        cls.group = Group.objects.create(name='Game Group')
         GroupMembership.objects.create(
-            user=self.organizer, group=self.group, role='organizer'
+            user=cls.organizer, group=cls.group, role='organizer'
         )
         GroupMembership.objects.create(
-            user=self.member, group=self.group, role='member'
+            user=cls.member, group=cls.group, role='member'
         )
-        self.game = BoardGame.objects.create(
+        cls.game = BoardGame.objects.create(
             name='Group Catan',
-            group=self.group,
+            group=cls.group,
             min_players=3,
             max_players=4,
             complexity='medium',
@@ -492,26 +496,27 @@ class GroupGameEditViewTest(TestCase):
 @tag("integration")
 class GroupGameDeleteViewTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123'
         )
-        self.member = User.objects.create_user(
+        cls.member = User.objects.create_user(
             username='member', password='testpass123'
         )
-        self.outsider = User.objects.create_user(
+        cls.outsider = User.objects.create_user(
             username='outsider', password='testpass123'
         )
-        self.group = Group.objects.create(name='Game Group')
+        cls.group = Group.objects.create(name='Game Group')
         GroupMembership.objects.create(
-            user=self.organizer, group=self.group, role='organizer'
+            user=cls.organizer, group=cls.group, role='organizer'
         )
         GroupMembership.objects.create(
-            user=self.member, group=self.group, role='member'
+            user=cls.member, group=cls.group, role='member'
         )
-        self.game = BoardGame.objects.create(
+        cls.game = BoardGame.objects.create(
             name='Group Catan',
-            group=self.group,
+            group=cls.group,
             min_players=3,
             max_players=4,
             complexity='medium',
@@ -594,19 +599,20 @@ class GroupGameDeleteViewTest(TestCase):
 @tag("integration")
 class GroupGameDetailDisplayTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123'
         )
-        self.member = User.objects.create_user(
+        cls.member = User.objects.create_user(
             username='member', password='testpass123'
         )
-        self.group = Group.objects.create(name='Display Group')
+        cls.group = Group.objects.create(name='Display Group')
         GroupMembership.objects.create(
-            user=self.organizer, group=self.group, role='organizer'
+            user=cls.organizer, group=cls.group, role='organizer'
         )
         GroupMembership.objects.create(
-            user=self.member, group=self.group, role='member'
+            user=cls.member, group=cls.group, role='member'
         )
 
     def test_group_game_detail_shows_group_name_as_owner(self):
@@ -664,19 +670,20 @@ class GroupGameDetailDisplayTest(TestCase):
 @tag("integration")
 class GroupGamesPageDisplayTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123'
         )
-        self.member = User.objects.create_user(
+        cls.member = User.objects.create_user(
             username='member', password='testpass123'
         )
-        self.group = Group.objects.create(name='Games Page Group')
+        cls.group = Group.objects.create(name='Games Page Group')
         GroupMembership.objects.create(
-            user=self.organizer, group=self.group, role='organizer'
+            user=cls.organizer, group=cls.group, role='organizer'
         )
         GroupMembership.objects.create(
-            user=self.member, group=self.group, role='member'
+            user=cls.member, group=cls.group, role='member'
         )
 
     def test_organizer_sees_add_group_game_button(self):
@@ -736,19 +743,20 @@ class GroupGamesPageDisplayTest(TestCase):
 @tag("integration")
 class GroupDashboardAddButtonTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123'
         )
-        self.member = User.objects.create_user(
+        cls.member = User.objects.create_user(
             username='member', password='testpass123'
         )
-        self.group = Group.objects.create(name='Dashboard Group')
+        cls.group = Group.objects.create(name='Dashboard Group')
         GroupMembership.objects.create(
-            user=self.organizer, group=self.group, role='organizer'
+            user=cls.organizer, group=cls.group, role='organizer'
         )
         GroupMembership.objects.create(
-            user=self.member, group=self.group, role='member'
+            user=cls.member, group=cls.group, role='member'
         )
 
     def test_organizer_sees_add_group_game_on_dashboard(self):
@@ -769,28 +777,29 @@ class GroupDashboardAddButtonTest(TestCase):
 @tag("integration")
 class GroupGameVotingIntegrationTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123'
         )
-        self.member = User.objects.create_user(
+        cls.member = User.objects.create_user(
             username='member', password='testpass123'
         )
-        self.group = Group.objects.create(name='Voting Group')
+        cls.group = Group.objects.create(name='Voting Group')
         GroupMembership.objects.create(
-            user=self.organizer, group=self.group, role='organizer'
+            user=cls.organizer, group=cls.group, role='organizer'
         )
         GroupMembership.objects.create(
-            user=self.member, group=self.group, role='member'
+            user=cls.member, group=cls.group, role='member'
         )
-        self.event = Event.objects.create(
+        cls.event = Event.objects.create(
             title='Game Night',
             date='2026-06-01T18:00:00Z',
             voting_deadline='2026-06-01T18:00:00Z',
-            created_by=self.organizer,
-            group=self.group,
+            created_by=cls.organizer,
+            group=cls.group,
         )
-        EventAttendance.objects.create(user=self.member, event=self.event)
+        EventAttendance.objects.create(user=cls.member, event=cls.event)
 
     def test_group_game_appears_in_vote_page_games(self):
         group_game = BoardGame.objects.create(
@@ -872,24 +881,25 @@ class GroupGameVotingIntegrationTest(TestCase):
 @tag("unit")
 class GroupGameBordaScoreTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123'
         )
-        self.group = Group.objects.create(name='Borda Group')
-        self.event = Event.objects.create(
+        cls.group = Group.objects.create(name='Borda Group')
+        cls.event = Event.objects.create(
             title='Borda Event',
             date='2026-06-01T18:00:00Z',
             voting_deadline='2026-06-01T18:00:00Z',
-            created_by=self.organizer,
-            group=self.group,
+            created_by=cls.organizer,
+            group=cls.group,
         )
-        self.group_game = BoardGame.objects.create(
-            name='Group Catan', group=self.group,
+        cls.group_game = BoardGame.objects.create(
+            name='Group Catan', group=cls.group,
             min_players=3, max_players=4, complexity='medium',
         )
-        self.user_game = BoardGame.objects.create(
-            name='User Chess', owner=self.organizer,
+        cls.user_game = BoardGame.objects.create(
+            name='User Chess', owner=cls.organizer,
             min_players=2, max_players=2, complexity='light',
         )
 
@@ -936,22 +946,23 @@ class GroupGameBordaScoreTest(TestCase):
 @tag("unit")
 class NotifyGroupGameAddedTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123'
         )
-        self.member = User.objects.create_user(
+        cls.member = User.objects.create_user(
             username='member', password='testpass123'
         )
-        self.outsider = User.objects.create_user(
+        cls.outsider = User.objects.create_user(
             username='outsider', password='testpass123'
         )
-        self.group = Group.objects.create(name='Game Notif Group')
+        cls.group = Group.objects.create(name='Game Notif Group')
         GroupMembership.objects.create(
-            user=self.organizer, group=self.group, role='organizer'
+            user=cls.organizer, group=cls.group, role='organizer'
         )
         GroupMembership.objects.create(
-            user=self.member, group=self.group, role='member'
+            user=cls.member, group=cls.group, role='member'
         )
 
     def test_notifies_all_members_except_actor(self):
@@ -982,22 +993,23 @@ class NotifyGroupGameAddedTest(TestCase):
 @tag("unit")
 class NotifyGroupGameDeletedTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123'
         )
-        self.member = User.objects.create_user(
+        cls.member = User.objects.create_user(
             username='member', password='testpass123'
         )
-        self.outsider = User.objects.create_user(
+        cls.outsider = User.objects.create_user(
             username='outsider', password='testpass123'
         )
-        self.group = Group.objects.create(name='Del Notif Group')
+        cls.group = Group.objects.create(name='Del Notif Group')
         GroupMembership.objects.create(
-            user=self.organizer, group=self.group, role='organizer'
+            user=cls.organizer, group=cls.group, role='organizer'
         )
         GroupMembership.objects.create(
-            user=self.member, group=self.group, role='member'
+            user=cls.member, group=cls.group, role='member'
         )
 
     def test_notifies_all_members_except_actor(self):
@@ -1025,19 +1037,20 @@ class NotifyGroupGameDeletedTest(TestCase):
 @tag("integration")
 class GroupGameNotificationIntegrationTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123'
         )
-        self.member = User.objects.create_user(
+        cls.member = User.objects.create_user(
             username='member', password='testpass123'
         )
-        self.group = Group.objects.create(name='Integration Group')
+        cls.group = Group.objects.create(name='Integration Group')
         GroupMembership.objects.create(
-            user=self.organizer, group=self.group, role='organizer'
+            user=cls.organizer, group=cls.group, role='organizer'
         )
         GroupMembership.objects.create(
-            user=self.member, group=self.group, role='member'
+            user=cls.member, group=cls.group, role='member'
         )
 
     def test_add_group_game_sends_notification(self):
@@ -1098,29 +1111,30 @@ class GroupGameNotificationIntegrationTest(TestCase):
 @tag("integration")
 class GroupOwnedGameFullFlowTest(TestCase):
 
-    def setUp(self):
-        self.organizer = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(
             username='organizer', password='testpass123'
         )
-        self.member = User.objects.create_user(
+        cls.member = User.objects.create_user(
             username='member', password='testpass123'
         )
-        self.group = Group.objects.create(name='Full Flow Group')
+        cls.group = Group.objects.create(name='Full Flow Group')
         GroupMembership.objects.create(
-            user=self.organizer, group=self.group, role='organizer'
+            user=cls.organizer, group=cls.group, role='organizer'
         )
         GroupMembership.objects.create(
-            user=self.member, group=self.group, role='member'
+            user=cls.member, group=cls.group, role='member'
         )
-        self.event = Event.objects.create(
+        cls.event = Event.objects.create(
             title='Full Flow Event',
             date='2026-06-01T18:00:00Z',
             voting_deadline='2026-06-01T18:00:00Z',
-            created_by=self.organizer,
-            group=self.group,
+            created_by=cls.organizer,
+            group=cls.group,
         )
-        EventAttendance.objects.create(user=self.member, event=self.event)
-        EventAttendance.objects.create(user=self.organizer, event=self.event)
+        EventAttendance.objects.create(user=cls.member, event=cls.event)
+        EventAttendance.objects.create(user=cls.organizer, event=cls.event)
 
     def test_full_group_game_lifecycle(self):
         self.client.login(username='organizer', password='testpass123')

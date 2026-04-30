@@ -23,10 +23,13 @@ User = get_user_model()
 @tag("unit")
 class GroupListViewTest(TestCase):
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username='u1', password='p')
+        cls.group = Group.objects.create(name='My Group')
+        GroupMembership.objects.create(user=cls.user, group=cls.group)
+
     def setUp(self):
-        self.user = User.objects.create_user(username='u1', password='p')
-        self.group = Group.objects.create(name='My Group')
-        GroupMembership.objects.create(user=self.user, group=self.group)
         self.client.login(username='u1', password='p')
 
     def test_authenticated_user_can_access(self):
@@ -75,8 +78,11 @@ class GroupListViewTest(TestCase):
 @tag("unit")
 class GroupCreateViewTest(TestCase):
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username='u1', password='p')
+
     def setUp(self):
-        self.user = User.objects.create_user(username='u1', password='p')
         self.client.login(username='u1', password='p')
 
     def test_get_create_form(self):
@@ -130,10 +136,13 @@ class GroupCreateViewTest(TestCase):
 @tag("unit")
 class GroupDashboardViewTest(TestCase):
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username='u1', password='p')
+        cls.group = Group.objects.create(name='Dashboard Group', discoverable=True)
+        GroupMembership.objects.create(user=cls.user, group=cls.group, role='admin')
+
     def setUp(self):
-        self.user = User.objects.create_user(username='u1', password='p')
-        self.group = Group.objects.create(name='Dashboard Group', discoverable=True)
-        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
         self.client.login(username='u1', password='p')
 
     def test_member_can_view(self):
@@ -184,10 +193,13 @@ class GroupDashboardViewTest(TestCase):
 @tag("unit")
 class GroupSettingsViewTest(TestCase):
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username='admin', password='p')
+        cls.group = Group.objects.create(name='Settings Group')
+        GroupMembership.objects.create(user=cls.user, group=cls.group, role='admin')
+
     def setUp(self):
-        self.user = User.objects.create_user(username='admin', password='p')
-        self.group = Group.objects.create(name='Settings Group')
-        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
         self.client.login(username='admin', password='p')
 
     def test_admin_can_access(self):
@@ -234,12 +246,15 @@ class GroupSettingsViewTest(TestCase):
 @tag("unit")
 class GroupFavoriteViewTest(TestCase):
 
-    def setUp(self):
-        self.user = User.objects.create_user(username='u1', password='p')
-        self.group = Group.objects.create(name='Fav Group')
-        self.membership = GroupMembership.objects.create(
-            user=self.user, group=self.group,
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username='u1', password='p')
+        cls.group = Group.objects.create(name='Fav Group')
+        cls.membership = GroupMembership.objects.create(
+            user=cls.user, group=cls.group,
         )
+
+    def setUp(self):
         self.client.login(username='u1', password='p')
 
     def test_toggle_on(self):
@@ -268,9 +283,12 @@ class GroupFavoriteViewTest(TestCase):
 @tag("unit")
 class GroupDeleteViewTest(TestCase):
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.su = User.objects.create_superuser(username='su', password='p')
+        cls.group = Group.objects.create(name='Delete Me')
+
     def setUp(self):
-        self.su = User.objects.create_superuser(username='su', password='p')
-        self.group = Group.objects.create(name='Delete Me')
         self.client.login(username='su', password='p')
 
     def test_superuser_can_access(self):
@@ -322,11 +340,14 @@ class GroupDeleteViewTest(TestCase):
 @tag("unit")
 class GroupRestoreViewTest(TestCase):
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.su = User.objects.create_superuser(username='su', password='p')
+        cls.group = Group.objects.create(name='Disbanded')
+        cls.group.disbanded_at = timezone.now() - timedelta(days=10)
+        cls.group.save()
+
     def setUp(self):
-        self.su = User.objects.create_superuser(username='su', password='p')
-        self.group = Group.objects.create(name='Disbanded')
-        self.group.disbanded_at = timezone.now() - timedelta(days=10)
-        self.group.save()
         self.client.login(username='su', password='p')
 
     def test_superuser_can_access(self):
@@ -377,10 +398,13 @@ class GroupRestoreViewTest(TestCase):
 @tag("unit")
 class GroupMembersViewTest(TestCase):
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username='u1', password='p')
+        cls.group = Group.objects.create(name='Members', discoverable=True)
+        GroupMembership.objects.create(user=cls.user, group=cls.group, role='admin')
+
     def setUp(self):
-        self.user = User.objects.create_user(username='u1', password='p')
-        self.group = Group.objects.create(name='Members', discoverable=True)
-        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
         self.client.login(username='u1', password='p')
 
     def test_member_can_view(self):
@@ -415,12 +439,15 @@ class GroupMembersViewTest(TestCase):
 @tag("unit")
 class GroupMembersManageViewTest(TestCase):
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(username='admin', password='p')
+        cls.group = Group.objects.create(name='Manage')
+        GroupMembership.objects.create(user=cls.admin, group=cls.group, role='admin')
+        cls.member = User.objects.create_user(username='member', password='p')
+        GroupMembership.objects.create(user=cls.member, group=cls.group, role='member')
+
     def setUp(self):
-        self.admin = User.objects.create_user(username='admin', password='p')
-        self.group = Group.objects.create(name='Manage')
-        GroupMembership.objects.create(user=self.admin, group=self.group, role='admin')
-        self.member = User.objects.create_user(username='member', password='p')
-        GroupMembership.objects.create(user=self.member, group=self.group, role='member')
         self.client.login(username='admin', password='p')
 
     def test_admin_can_access(self):
@@ -533,8 +560,11 @@ class GroupMembersManageViewTest(TestCase):
 @tag("unit")
 class GroupJoinViewTest(TestCase):
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username='joiner', password='p')
+
     def setUp(self):
-        self.user = User.objects.create_user(username='joiner', password='p')
         self.client.login(username='joiner', password='p')
 
     def test_open_group_auto_join(self):
@@ -593,10 +623,13 @@ class GroupJoinViewTest(TestCase):
 @tag("unit")
 class GroupLeaveViewTest(TestCase):
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username='leaver', password='p')
+        cls.group = Group.objects.create(name='Leave')
+        GroupMembership.objects.create(user=cls.user, group=cls.group, role='member')
+
     def setUp(self):
-        self.user = User.objects.create_user(username='leaver', password='p')
-        self.group = Group.objects.create(name='Leave')
-        GroupMembership.objects.create(user=self.user, group=self.group, role='member')
         self.client.login(username='leaver', password='p')
 
     def test_regular_member_leaves(self):
@@ -662,10 +695,13 @@ class GroupLeaveViewTest(TestCase):
 @tag("unit")
 class GroupJoinRequestManageViewTest(TestCase):
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(username='admin', password='p')
+        cls.group = Group.objects.create(name='ReqManage', join_policy='request')
+        GroupMembership.objects.create(user=cls.admin, group=cls.group, role='admin')
+
     def setUp(self):
-        self.admin = User.objects.create_user(username='admin', password='p')
-        self.group = Group.objects.create(name='ReqManage', join_policy='request')
-        GroupMembership.objects.create(user=self.admin, group=self.group, role='admin')
         self.client.login(username='admin', password='p')
 
     def test_admin_can_access(self):
@@ -739,10 +775,13 @@ class GroupJoinRequestManageViewTest(TestCase):
 @tag("unit")
 class GroupInviteCreateViewTest(TestCase):
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(username='admin', password='p')
+        cls.group = Group.objects.create(name='InviteGroup')
+        GroupMembership.objects.create(user=cls.admin, group=cls.group, role='admin')
+
     def setUp(self):
-        self.admin = User.objects.create_user(username='admin', password='p')
-        self.group = Group.objects.create(name='InviteGroup')
-        GroupMembership.objects.create(user=self.admin, group=self.group, role='admin')
         self.client.login(username='admin', password='p')
 
     def test_admin_can_access(self):
@@ -780,13 +819,14 @@ class GroupInviteCreateViewTest(TestCase):
 @tag("unit")
 class GroupInviteAcceptViewTest(TestCase):
 
-    def setUp(self):
-        self.admin = User.objects.create_user(username='admin', password='p')
-        self.group = Group.objects.create(name='InviteAccept')
-        GroupMembership.objects.create(user=self.admin, group=self.group, role='admin')
-        self.invite = GroupInvite.objects.create(
-            group=self.group,
-            created_by=self.admin,
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(username='admin', password='p')
+        cls.group = Group.objects.create(name='InviteAccept')
+        GroupMembership.objects.create(user=cls.admin, group=cls.group, role='admin')
+        cls.invite = GroupInvite.objects.create(
+            group=cls.group,
+            created_by=cls.admin,
             expires_at=timezone.now() + timedelta(days=7),
         )
 
