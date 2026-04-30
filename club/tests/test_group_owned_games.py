@@ -849,7 +849,7 @@ class GroupGameVotingIntegrationTest(TestCase):
             user=self.member, event=self.event,
             board_game=group_game, rank=1,
         )
-        self.client.login(username='member', password='testpass123')
+        self.client.login(username='organizer', password='testpass123')
         response = self.client.get(
             reverse('event_results', kwargs={
                 'slug': self.group.slug, 'pk': self.event.pk,

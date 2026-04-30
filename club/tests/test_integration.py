@@ -115,6 +115,7 @@ class FullGroupLifecycleTest(TestCase):
         self.assertEqual(Vote.objects.filter(event=event).count(), 2)
 
         # 6. View results
+        self.client.login(username='creator', password='testpass123')
         resp = self.client.get(reverse('event_results', kwargs={'slug': event.group.slug, 'pk': event.pk}))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'Catan')

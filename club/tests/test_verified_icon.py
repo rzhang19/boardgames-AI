@@ -262,7 +262,7 @@ class VerifiedBadgeCustomIconRenderingTest(TestCase):
             username='iconvoter', password='testpass123',
             email_verified=True, verified_icon=self.icon,
         )
-        GroupMembership.objects.create(user=voter, group=self.group, role='member')
+        GroupMembership.objects.create(user=voter, group=self.group, role='organizer')
         event = Event.objects.create(
             title='Game Night', date='2026-06-01T18:00:00Z',
             voting_deadline='2026-06-01T18:00:00Z',

@@ -159,7 +159,7 @@ class EventResultsDataLabelsTest(TestCase):
         from django.utils import timezone
         import datetime as dt
         group = Group.objects.create(name='Test Group')
-        GroupMembership.objects.create(user=user, group=group, role='member')
+        GroupMembership.objects.create(user=user, group=group, role='organizer')
         event = Event.objects.create(
             title='Result Event',
             date=timezone.now() + dt.timedelta(days=7),

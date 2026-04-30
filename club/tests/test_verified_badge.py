@@ -156,7 +156,7 @@ class VerifiedBadgeEventPagesTest(TestCase):
             email='verified@example.com', email_verified=True
         )
         group = Group.objects.create(name='Test Group')
-        GroupMembership.objects.create(user=verified_user, group=group, role='member')
+        GroupMembership.objects.create(user=verified_user, group=group, role='organizer')
         event = Event.objects.create(
             title='Game Night', date='2026-06-01T18:00:00Z',
             voting_deadline='2026-06-01T18:00:00Z',
