@@ -22,7 +22,7 @@ class Command(BaseCommand):
     TEST_USERS = [
         {'username': 'testuser', 'is_site_admin': False},
         {'username': 'testorganizer', 'is_site_admin': False},
-        {'username': 'testadmin', 'is_site_admin': True},
+        {'username': 'testadmin', 'is_site_admin': False},
         {'username': 'newtestadmin', 'is_site_admin': False},
         {'username': 'testsiteadmin', 'is_site_admin': True},
     ]
@@ -175,7 +175,7 @@ class Command(BaseCommand):
             f'Login credentials (password from SEED_USER_PASSWORD env var):\n'
             f'  testuser (member of Workday Boardgames)\n'
             f'  testorganizer (organizer of Workday Boardgames)\n'
-            f'  testadmin (site admin, admin of Workday Boardgames)\n'
+            f'  testadmin (admin of Workday Boardgames)\n'
             f'  newtestadmin (admin of Public Board Games Group)\n'
             f'  testsiteadmin (site admin, no group)'
         ))

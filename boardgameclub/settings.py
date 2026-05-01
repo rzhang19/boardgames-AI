@@ -156,6 +156,9 @@ BETA_ACCESS_CODE_HASH = os.environ.get('BETA_ACCESS_CODE_HASH', '')
 VIEW_ONLY_USERNAME = os.environ.get('VIEW_ONLY_USERNAME', 'testviewer')
 VIEW_ONLY_PASSWORD = os.environ.get('VIEW_ONLY_PASSWORD', '')
 
+SUPERUSER_USERNAME = os.environ.get('SUPERUSER_USERNAME', '')
+SUPERUSER_PASSWORD = os.environ.get('SUPERUSER_PASSWORD', '')
+
 PROTECTED_USERNAMES = os.environ.get('PROTECTED_USERNAMES', '')
 
 if os.environ.get('SECURE_PROXY_SSL_HEADER', 'False').lower() in ('true', '1', 'yes'):
