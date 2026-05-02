@@ -531,10 +531,9 @@ class FriendRequestInlineNotificationTest(TestCase):
         )
         self.client.login(username='bob', password='testpass123')
         resp = self.client.get(reverse('notification_list'))
-        accept_url = reverse('accept_friend_request', kwargs={'pk': friendship.pk})
-        decline_url = reverse('decline_friend_request', kwargs={'pk': friendship.pk})
-        self.assertContains(resp, accept_url)
-        self.assertContains(resp, decline_url)
+        self.assertContains(resp, 'data-friendship-pk="' + str(friendship.pk) + '"')
+        self.assertContains(resp, 'friend-accept-btn')
+        self.assertContains(resp, 'friend-decline-btn')
 
     def test_non_friend_notification_has_no_inline_buttons(self):
         Notification.objects.create(
@@ -543,8 +542,8 @@ class FriendRequestInlineNotificationTest(TestCase):
         )
         self.client.login(username='bob', password='testpass123')
         resp = self.client.get(reverse('notification_list'))
-        self.assertNotContains(resp, 'accept')
-        self.assertNotContains(resp, 'decline')
+        self.assertNotContains(resp, 'data-action="accept"')
+        self.assertNotContains(resp, 'data-action="decline"')
 
     def test_read_friend_request_no_inline_buttons(self):
         friendship = Friendship.objects.create(requester=self.a, receiver=self.b)
@@ -557,8 +556,7 @@ class FriendRequestInlineNotificationTest(TestCase):
         )
         self.client.login(username='bob', password='testpass123')
         resp = self.client.get(reverse('notification_list'))
-        accept_url = reverse('accept_friend_request', kwargs={'pk': friendship.pk})
-        self.assertNotContains(resp, accept_url)
+        self.assertNotContains(resp, 'data-action="accept"')
 
     def test_accepted_friendship_no_inline_buttons(self):
         Friendship.objects.create(requester=self.a, receiver=self.b, status='accepted')
@@ -570,9 +568,7 @@ class FriendRequestInlineNotificationTest(TestCase):
         )
         self.client.login(username='bob', password='testpass123')
         resp = self.client.get(reverse('notification_list'))
-        friendship = Friendship.objects.get(requester=self.a, receiver=self.b)
-        accept_url = reverse('accept_friend_request', kwargs={'pk': friendship.pk})
-        self.assertNotContains(resp, accept_url)
+        self.assertNotContains(resp, 'data-action="accept"')
 
     def test_accepting_via_notification_accepts_friendship(self):
         friendship = Friendship.objects.create(requester=self.a, receiver=self.b)
@@ -587,3 +583,146 @@ class FriendRequestInlineNotificationTest(TestCase):
         self.client.post(reverse('decline_friend_request', kwargs={'pk': friendship.pk}))
         friendship.refresh_from_db()
         self.assertEqual(friendship.status, 'declined')
+
+
+# ---------------------------------------------------------------------------
+# View tests — AJAX friend request actions
+# ---------------------------------------------------------------------------
+
+@tag("integration")
+class AjaxAcceptFriendRequestTest(TestCase):
+
+    def setUp(self):
+        self.a, self.b = _create_users('alice', 'bob')
+
+    def test_ajax_accept_returns_json(self):
+        friendship = Friendship.objects.create(requester=self.a, receiver=self.b)
+        self.client.login(username='bob', password='testpass123')
+        resp = self.client.post(
+            reverse('accept_friend_request', kwargs={'pk': friendship.pk}),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['status'], 'accepted')
+        self.assertEqual(data['username'], 'alice')
+
+    def test_ajax_accept_marks_notification_as_read(self):
+        friendship = Friendship.objects.create(requester=self.a, receiver=self.b)
+        notif = Notification.objects.create(
+            user=self.b,
+            message=f'{self.a.username} sent you a friend request.',
+            url=f'/profile/{self.a.username}/',
+            notification_type='friend_request',
+        )
+        self.client.login(username='bob', password='testpass123')
+        self.client.post(
+            reverse('accept_friend_request', kwargs={'pk': friendship.pk}),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        notif.refresh_from_db()
+        self.assertTrue(notif.is_read)
+
+    def test_ajax_accept_actually_accepts_friendship(self):
+        friendship = Friendship.objects.create(requester=self.a, receiver=self.b)
+        self.client.login(username='bob', password='testpass123')
+        self.client.post(
+            reverse('accept_friend_request', kwargs={'pk': friendship.pk}),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        friendship.refresh_from_db()
+        self.assertEqual(friendship.status, 'accepted')
+
+    def test_ajax_accept_by_wrong_user_forbidden(self):
+        friendship = Friendship.objects.create(requester=self.a, receiver=self.b)
+        self.client.login(username='alice', password='testpass123')
+        resp = self.client.post(
+            reverse('accept_friend_request', kwargs={'pk': friendship.pk}),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_ajax_accept_non_pending_forbidden(self):
+        friendship = Friendship.objects.create(requester=self.a, receiver=self.b, status='accepted')
+        self.client.login(username='bob', password='testpass123')
+        resp = self.client.post(
+            reverse('accept_friend_request', kwargs={'pk': friendship.pk}),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_ajax_accept_requires_login(self):
+        friendship = Friendship.objects.create(requester=self.a, receiver=self.b)
+        resp = self.client.post(
+            reverse('accept_friend_request', kwargs={'pk': friendship.pk}),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn('/login/', resp.url)
+
+    def test_non_ajax_accept_still_redirects(self):
+        friendship = Friendship.objects.create(requester=self.a, receiver=self.b)
+        self.client.login(username='bob', password='testpass123')
+        resp = self.client.post(reverse('accept_friend_request', kwargs={'pk': friendship.pk}))
+        self.assertEqual(resp.status_code, 302)
+
+
+@tag("integration")
+class AjaxDeclineFriendRequestTest(TestCase):
+
+    def setUp(self):
+        self.a, self.b = _create_users('alice', 'bob')
+
+    def test_ajax_decline_returns_json(self):
+        friendship = Friendship.objects.create(requester=self.a, receiver=self.b)
+        self.client.login(username='bob', password='testpass123')
+        resp = self.client.post(
+            reverse('decline_friend_request', kwargs={'pk': friendship.pk}),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['status'], 'declined')
+        self.assertEqual(data['username'], 'alice')
+
+    def test_ajax_decline_marks_notification_as_read(self):
+        friendship = Friendship.objects.create(requester=self.a, receiver=self.b)
+        notif = Notification.objects.create(
+            user=self.b,
+            message=f'{self.a.username} sent you a friend request.',
+            url=f'/profile/{self.a.username}/',
+            notification_type='friend_request',
+        )
+        self.client.login(username='bob', password='testpass123')
+        self.client.post(
+            reverse('decline_friend_request', kwargs={'pk': friendship.pk}),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        notif.refresh_from_db()
+        self.assertTrue(notif.is_read)
+
+    def test_ajax_decline_actually_declines_friendship(self):
+        friendship = Friendship.objects.create(requester=self.a, receiver=self.b)
+        self.client.login(username='bob', password='testpass123')
+        self.client.post(
+            reverse('decline_friend_request', kwargs={'pk': friendship.pk}),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        friendship.refresh_from_db()
+        self.assertEqual(friendship.status, 'declined')
+        self.assertEqual(friendship.decline_count, 1)
+
+    def test_ajax_decline_by_wrong_user_forbidden(self):
+        friendship = Friendship.objects.create(requester=self.a, receiver=self.b)
+        self.client.login(username='alice', password='testpass123')
+        resp = self.client.post(
+            reverse('decline_friend_request', kwargs={'pk': friendship.pk}),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_non_ajax_decline_still_redirects(self):
+        friendship = Friendship.objects.create(requester=self.a, receiver=self.b)
+        self.client.login(username='bob', password='testpass123')
+        resp = self.client.post(reverse('decline_friend_request', kwargs={'pk': friendship.pk}))
+        self.assertEqual(resp.status_code, 302)

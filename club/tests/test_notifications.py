@@ -485,3 +485,37 @@ class CleanupNotificationsTest(TestCase):
         from club.management.commands.cleanup_notifications import Command
         Command().handle()
         self.assertTrue(Notification.objects.filter(pk=old_unread.pk).exists())
+
+
+@tag("integration")
+class AjaxNotificationMarkReadTest(TestCase):
+
+    def test_ajax_mark_read_returns_json(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        notif = Notification.objects.create(user=user, message='Test')
+        self.client.login(username='testuser', password='testpass123')
+        resp = self.client.post(
+            reverse('notification_mark_read', kwargs={'pk': notif.pk}),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['status'], 'read')
+
+    def test_ajax_mark_read_marks_as_read(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        notif = Notification.objects.create(user=user, message='Test')
+        self.client.login(username='testuser', password='testpass123')
+        self.client.post(
+            reverse('notification_mark_read', kwargs={'pk': notif.pk}),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        notif.refresh_from_db()
+        self.assertTrue(notif.is_read)
+
+    def test_non_ajax_mark_read_still_redirects(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        notif = Notification.objects.create(user=user, message='Test')
+        self.client.login(username='testuser', password='testpass123')
+        resp = self.client.post(reverse('notification_mark_read', kwargs={'pk': notif.pk}))
+        self.assertEqual(resp.status_code, 302)

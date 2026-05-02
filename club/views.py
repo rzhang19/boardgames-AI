@@ -1780,6 +1780,8 @@ def notification_mark_read(request, pk):
     notif = get_object_or_404(Notification, pk=pk, user=request.user)
     notif.is_read = True
     notif.save()
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'status': 'read'})
     if notif.url:
         return redirect(notif.url)
     return redirect('notification_list')
@@ -2401,12 +2403,30 @@ def accept_friend_request(request, pk):
     if Block.is_blocked(request.user, friendship.requester):
         raise PermissionDenied
 
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
     if request.method == 'POST':
         friendship.status = 'accepted'
         friendship.save(update_fields=['status', 'updated_at'])
         from .notifications import notify_friend_request_accepted
         notify_friend_request_accepted(friendship.requester, request.user)
+
+        if is_ajax:
+            Notification.objects.filter(
+                user=request.user,
+                notification_type='friend_request',
+                url=f'/profile/{friendship.requester.username}/',
+                is_read=False,
+            ).update(is_read=True)
+            return JsonResponse({
+                'status': 'accepted',
+                'username': friendship.requester.username,
+            })
+
         return redirect('public_profile', username=friendship.requester.username)
+
+    if is_ajax:
+        return JsonResponse({'status': 'error', 'message': 'POST required'}, status=400)
 
     return redirect('public_profile', username=friendship.requester.username)
 
@@ -2421,6 +2441,8 @@ def decline_friend_request(request, pk):
     if Block.is_blocked(request.user, friendship.requester):
         raise PermissionDenied
 
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
     if request.method == 'POST':
         friendship.status = 'declined'
         friendship.decline_count += 1
@@ -2428,6 +2450,22 @@ def decline_friend_request(request, pk):
         friendship.save(update_fields=['status', 'decline_count', 'last_declined_at', 'updated_at'])
         from .notifications import notify_friend_request_declined
         notify_friend_request_declined(friendship.requester, request.user)
+
+        if is_ajax:
+            Notification.objects.filter(
+                user=request.user,
+                notification_type='friend_request',
+                url=f'/profile/{friendship.requester.username}/',
+                is_read=False,
+            ).update(is_read=True)
+            return JsonResponse({
+                'status': 'declined',
+                'username': friendship.requester.username,
+            })
+
+    if is_ajax:
+        return JsonResponse({'status': 'error', 'message': 'POST required'}, status=400)
+
     return redirect('notification_list')
 
 

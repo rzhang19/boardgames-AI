@@ -14,50 +14,48 @@
     </form>
 </div>
 
-<form method="post" action="{% url 'notification_delete_selected' %}" id="delete-selected-form">
-    {% csrf_token %}
-    <div class="notification-list">
-        {% for notif in notifications %}
-        <div class="notification-item {% if not notif.is_read %}notification-unread{% endif %}">
-            <div class="notification-content">
-                {% if not notif.is_read %}
-                <span class="notification-dot"></span>
-                {% endif %}
-                <div class="notification-message">
-                    {% if notif.url %}
-                    <a href="{% url 'notification_mark_read' notif.pk %}" class="notification-link">{{ notif.message }}</a>
-                    {% else %}
-                    {{ notif.message }}
-                    {% endif %}
-                    <span class="notification-time">{{ notif.created_at|date:"M j, Y g:i A" }}</span>
-                </div>
+<div class="notification-list">
+    {% for notif in notifications %}
+    <div class="notification-item {% if not notif.is_read %}notification-unread{% endif %}" data-notification-pk="{{ notif.pk }}">
+        <div class="notification-content">
+            {% if not notif.is_read %}
+            <span class="notification-dot"></span>
+            {% endif %}
+            <div class="notification-message">
                 {% if notif.notification_type == 'friend_request' and not notif.is_read and notif.pk in friendship_pks %}
-                <div class="notification-friend-actions">
-                    <form method="post" action="{% url 'accept_friend_request' friendship_pks|dict_lookup:notif.pk %}" style="display:inline;">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-success btn-sm friend-accept-btn">
-                            <span class="accept-icon">&#10003;</span>
-                            <span class="accept-text">Accept</span>
-                        </button>
-                    </form>
-                    <form method="post" action="{% url 'decline_friend_request' friendship_pks|dict_lookup:notif.pk %}" style="display:inline;">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-danger btn-sm friend-decline-btn">
-                            <span class="decline-icon">&#10007;</span>
-                            <span class="decline-text">Decline</span>
-                        </button>
-                    </form>
-                </div>
+                <span class="notification-link friend-request-message" data-notification-pk="{{ notif.pk }}" data-mark-read-url="{% url 'notification_mark_read' notif.pk %}">{{ notif.message }}</span>
+                {% elif notif.url %}
+                <a href="{% url 'notification_mark_read' notif.pk %}" class="notification-link">{{ notif.message }}</a>
+                {% else %}
+                {{ notif.message }}
                 {% endif %}
+                <span class="notification-time">{{ notif.created_at|date:"M j, Y g:i A" }}</span>
             </div>
-            {% if notif.is_read %}
-            <div class="notification-select">
-                <input type="checkbox" name="selected_notifications" value="{{ notif.pk }}" class="notification-checkbox">
+            {% if notif.notification_type == 'friend_request' and not notif.is_read and notif.pk in friendship_pks %}
+            <div class="notification-friend-actions" data-friendship-pk="{{ friendship_pks|dict_lookup:notif.pk }}" data-requester-username="{% for part in notif.url|cut:'/' %}{% if forloop.last %}{{ part }}{% endif %}{% endfor %}">
+                <button type="button" class="btn btn-success btn-sm friend-accept-btn" data-action="accept">
+                    <span class="accept-icon">&#10003;</span>
+                    <span class="accept-text">Accept</span>
+                </button>
+                <button type="button" class="btn btn-danger btn-sm friend-decline-btn" data-action="decline">
+                    <span class="decline-icon">&#10007;</span>
+                    <span class="decline-text">Decline</span>
+                </button>
             </div>
+            <div class="friend-request-status"></div>
             {% endif %}
         </div>
-        {% endfor %}
+        {% if notif.is_read %}
+        <div class="notification-select">
+            <input type="checkbox" name="selected_notifications" value="{{ notif.pk }}" class="notification-checkbox" form="delete-selected-form">
+        </div>
+        {% endif %}
     </div>
+    {% endfor %}
+</div>
+
+<form method="post" action="{% url 'notification_delete_selected' %}" id="delete-selected-form">
+    {% csrf_token %}
     <div class="notification-delete-bar">
         <button type="submit" class="btn btn-danger btn-sm">Delete Selected</button>
     </div>
@@ -67,4 +65,106 @@
     <p>No notifications.</p>
 </div>
 {% endif %}
+
+<script>
+(function() {
+    function getCsrfToken() {
+        var el = document.querySelector('[name=csrfmiddlewaretoken]');
+        return el ? el.value : '';
+    }
+
+    function markNotificationRead(notifPk) {
+        var item = document.querySelector('.notification-item[data-notification-pk="' + notifPk + '"]');
+        if (!item) return;
+        item.classList.remove('notification-unread');
+        var dot = item.querySelector('.notification-dot');
+        if (dot) dot.remove();
+    }
+
+    function showFriendStatus(actionsDiv, statusDiv, status, username) {
+        actionsDiv.classList.add('friend-action-fading');
+        actionsDiv.style.pointerEvents = 'none';
+
+        setTimeout(function() {
+            actionsDiv.style.display = 'none';
+
+            var profileUrl = '/profile/' + encodeURIComponent(username) + '/';
+            var link = document.createElement('a');
+            link.href = profileUrl;
+            link.className = 'friend-status-link';
+            link.textContent = username;
+
+            statusDiv.innerHTML = '';
+            if (status === 'accepted') {
+                statusDiv.appendChild(document.createTextNode('You are now friends with '));
+                statusDiv.appendChild(link);
+                statusDiv.appendChild(document.createTextNode('!'));
+            } else {
+                statusDiv.appendChild(document.createTextNode('You declined the friend request from '));
+                statusDiv.appendChild(link);
+            }
+            statusDiv.classList.add('friend-status-visible');
+        }, 400);
+    }
+
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.friend-accept-btn, .friend-decline-btn');
+        if (btn) {
+            e.preventDefault();
+            var actionsDiv = btn.closest('.notification-friend-actions');
+            if (!actionsDiv || actionsDiv.style.pointerEvents === 'none') return;
+
+            var friendshipPk = actionsDiv.getAttribute('data-friendship-pk');
+            var action = btn.getAttribute('data-action');
+            var statusDiv = actionsDiv.parentElement.querySelector('.friend-request-status');
+            var notifItem = btn.closest('.notification-item');
+            var notifPk = notifItem ? notifItem.getAttribute('data-notification-pk') : null;
+
+            var url = action === 'accept'
+                ? '/friends/accept/' + friendshipPk + '/'
+                : '/friends/decline/' + friendshipPk + '/';
+
+            actionsDiv.style.pointerEvents = 'none';
+            actionsDiv.classList.add('friend-action-fading');
+
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            }).then(function(resp) {
+                if (!resp.ok) {
+                    actionsDiv.classList.remove('friend-action-fading');
+                    actionsDiv.style.pointerEvents = '';
+                    return;
+                }
+                return resp.json();
+            }).then(function(data) {
+                if (!data) return;
+                if (notifPk) markNotificationRead(notifPk);
+                showFriendStatus(actionsDiv, statusDiv, data.status, data.username);
+            });
+        }
+
+        var msgEl = e.target.closest('.friend-request-message');
+        if (msgEl) {
+            e.preventDefault();
+            var readUrl = msgEl.getAttribute('data-mark-read-url');
+            var nItem = msgEl.closest('.notification-item');
+            var nPk = nItem ? nItem.getAttribute('data-notification-pk') : null;
+
+            fetch(readUrl, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            }).then(function() {
+                if (nPk) markNotificationRead(nPk);
+            });
+        }
+    });
+})();
+</script>
 {% endblock %}
