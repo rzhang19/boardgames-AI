@@ -196,6 +196,84 @@ class ManageUsersConfirmFieldWhitelistTest(TestCase):
 
 
 @tag("integration")
+class ManageUsersConfirmInputValidationTest(TestCase):
+
+    def setUp(self):
+        self.superuser = User.objects.create_superuser(
+            username='superuser', password='testpass123'
+        )
+        self.regular = User.objects.create_user(
+            username='regular', password='testpass123'
+        )
+        self.client.login(username='superuser', password='testpass123')
+
+    def test_non_integer_user_id_in_session_is_ignored(self):
+        session = self.client.session
+        session['pending_role_changes'] = {
+            'not_a_number': {'is_site_admin': True},
+        }
+        session.save()
+        response = self.client.post(reverse('manage_users_confirm'))
+        self.assertEqual(response.status_code, 302)
+
+    def test_non_existent_user_id_is_ignored(self):
+        session = self.client.session
+        session['pending_role_changes'] = {
+            '99999': {'is_site_admin': True},
+        }
+        session.save()
+        response = self.client.post(reverse('manage_users_confirm'))
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(User.objects.filter(pk=99999).exists())
+
+    def test_deleted_user_cannot_have_roles_changed(self):
+        deleted_user = User.objects.create_user(
+            username='deleted', password='testpass123',
+            is_active=False, deleted_at=timezone.now(), deleted_by=self.superuser,
+        )
+        session = self.client.session
+        session['pending_role_changes'] = {
+            str(deleted_user.pk): {'is_site_admin': True},
+        }
+        session.save()
+        self.client.post(reverse('manage_users_confirm'))
+        deleted_user.refresh_from_db()
+        self.assertFalse(deleted_user.is_site_admin)
+
+    def test_non_boolean_value_for_is_site_admin_is_rejected(self):
+        session = self.client.session
+        session['pending_role_changes'] = {
+            str(self.regular.pk): {'is_site_admin': 'malicious_string'},
+        }
+        session.save()
+        self.client.post(reverse('manage_users_confirm'))
+        self.regular.refresh_from_db()
+        self.assertFalse(self.regular.is_site_admin)
+
+    def test_superuser_cannot_have_roles_changed_via_confirm(self):
+        other_superuser = User.objects.create_superuser(
+            username='other_super', password='testpass123'
+        )
+        session = self.client.session
+        session['pending_role_changes'] = {
+            str(other_superuser.pk): {'is_site_admin': False},
+        }
+        session.save()
+        self.client.post(reverse('manage_users_confirm'))
+        other_superuser.refresh_from_db()
+        self.assertTrue(other_superuser.is_superuser)
+
+    def test_empty_session_data_results_in_no_errors(self):
+        response = self.client.post(reverse('manage_users_confirm'))
+        self.assertEqual(response.status_code, 302)
+
+    def test_get_request_to_confirm_redirects(self):
+        response = self.client.get(reverse('manage_users_confirm'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('manage-users', response.url)
+
+
+@tag("integration")
 class UserAddTest(TestCase):
 
     def setUp(self):

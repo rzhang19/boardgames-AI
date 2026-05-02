@@ -174,21 +174,33 @@ def manage_users_confirm(request):
         return redirect('manage_users')
 
     changes = request.session.pop('pending_role_changes', {})
+    if not isinstance(changes, dict):
+        return redirect('manage_users')
 
-    if not request.user.is_superuser:
-        site_admin_ids = set(
-            User.objects.filter(is_site_admin=True).values_list('pk', flat=True)
-        )
-        changes = {
-            uid: role_changes
-            for uid, role_changes in changes.items()
-            if int(uid) not in site_admin_ids
-        }
+    allowed_user_ids = set(
+        _get_manage_queryset(request)
+        .filter(deleted_at__isnull=True)
+        .values_list('pk', flat=True)
+    )
 
     for user_id, role_changes in changes.items():
-        safe_changes = {k: v for k, v in role_changes.items() if k in MANAGE_USERS_ALLOWED_FIELDS}
+        try:
+            uid = int(user_id)
+        except (ValueError, TypeError):
+            continue
+
+        if uid not in allowed_user_ids:
+            continue
+
+        if not isinstance(role_changes, dict):
+            continue
+
+        safe_changes = {
+            k: v for k, v in role_changes.items()
+            if k in MANAGE_USERS_ALLOWED_FIELDS and isinstance(v, bool)
+        }
         if safe_changes:
-            User.objects.filter(pk=user_id).update(**safe_changes)
+            User.objects.filter(pk=uid).update(**safe_changes)
 
     return redirect('manage_users')
 
