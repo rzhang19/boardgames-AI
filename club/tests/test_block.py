@@ -343,26 +343,30 @@ class BlockFriendRequestTest(TestCase):
 class BlockUserSearchTest(TestCase):
 
     def test_blocked_users_excluded_from_search(self):
-        a, b, c = _create_users('alice', 'bob', 'carol')
+        a = User.objects.create_user(username='alice', password='testpass123', email_verified=True, email='a@test.com')
+        b = User.objects.create_user(username='bob', password='testpass123')
+        c = User.objects.create_user(username='carol', password='testpass123')
         Block.objects.create(blocker=a, blocked=b)
         self.client.force_login(a)
-        resp = self.client.get(reverse('user_search') + '?q=bo')
-        usernames = [u.username for u in resp.context['results']]
+        resp = self.client.get(reverse('users_page') + '?tab=all&q=bo')
+        usernames = [u.username for u in resp.context['page_obj'].object_list]
         self.assertNotIn('bob', usernames)
 
     def test_blocking_users_excluded_from_search(self):
-        a, b, c = _create_users('alice', 'bob', 'carol')
+        a = User.objects.create_user(username='alice', password='testpass123', email_verified=True, email='a@test.com')
+        b = User.objects.create_user(username='bob', password='testpass123')
         Block.objects.create(blocker=b, blocked=a)
         self.client.force_login(a)
-        resp = self.client.get(reverse('user_search') + '?q=bo')
-        usernames = [u.username for u in resp.context['results']]
+        resp = self.client.get(reverse('users_page') + '?tab=all&q=bo')
+        usernames = [u.username for u in resp.context['page_obj'].object_list]
         self.assertNotIn('bob', usernames)
 
     def test_unblocked_users_appear_in_search(self):
-        a, b = _create_users('alice', 'bob')
+        a = User.objects.create_user(username='alice', password='testpass123', email_verified=True, email='a@test.com')
+        b = User.objects.create_user(username='bob', password='testpass123')
         self.client.force_login(a)
-        resp = self.client.get(reverse('user_search') + '?q=bo')
-        usernames = [u.username for u in resp.context['results']]
+        resp = self.client.get(reverse('users_page') + '?tab=all&q=bo')
+        usernames = [u.username for u in resp.context['page_obj'].object_list]
         self.assertIn('bob', usernames)
 
 

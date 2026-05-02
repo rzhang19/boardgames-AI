@@ -905,6 +905,25 @@ li {
     border-bottom-color: var(--primary);
 }
 
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    padding: 0.5rem 0;
+}
+
+.pagination-info {
+    color: var(--text-light);
+    font-size: 0.875rem;
+}
+
+.unfriend-btn,
+.confirm-unfriend-btn {
+    cursor: pointer;
+}
+
 .filter-modal-btn .filter-icon {
     font-size: 0.875rem;
 }

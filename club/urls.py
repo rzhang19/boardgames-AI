@@ -76,6 +76,7 @@ urlpatterns = [
     path('friends/cancel/<int:pk>/', views.cancel_friend_request, name='cancel_friend_request'),
     path('friends/remove/<str:username>/', views.remove_friend, name='remove_friend'),
     path('friends/list/<str:username>/', views.friends_list, name='friends_list'),
+    path('users/', views.users_page, name='users_page'),
     path('users/search/', views.user_search, name='user_search'),
     path('profile/<str:username>/', views.public_profile, name='public_profile'),
     path('events/create/', views.private_event_create, name='private_event_create'),

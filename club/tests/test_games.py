@@ -476,7 +476,10 @@ class GameDetailViewTest(TestCase):
         self.assertContains(response, reverse('game_edit', kwargs={'pk': self.game.pk}))
 
     def test_game_detail_hides_edit_link_for_non_owner(self):
+        group = Group.objects.create(name='Edit Test Group')
+        GroupMembership.objects.create(user=self.user, group=group, role='admin')
         other_user = User.objects.create_user(username='other', password='testpass123')
+        GroupMembership.objects.create(user=other_user, group=group, role='member')
         self.client.login(username='other', password='testpass123')
         response = self.client.get(reverse('game_detail', kwargs={'pk': self.game.pk}))
         self.assertNotContains(response, reverse('game_edit', kwargs={'pk': self.game.pk}))
@@ -1103,3 +1106,127 @@ class GroupNameValidationTest(TestCase):
         self.assertEqual(response.status_code, 200)
         group.refresh_from_db()
         self.assertEqual(group.name, 'My Group')
+
+
+@tag("integration")
+class GameDetailVisibilityTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(
+            username='gameowner', password='testpass123'
+        )
+        cls.group_member = User.objects.create_user(
+            username='groupmember', password='testpass123'
+        )
+        cls.outsider = User.objects.create_user(
+            username='outsider', password='testpass123'
+        )
+        cls.superuser = User.objects.create_superuser(
+            username='superuser', password='testpass123'
+        )
+        cls.site_admin = User.objects.create_user(
+            username='siteadmin', password='testpass123', is_site_admin=True
+        )
+        cls.group = Group.objects.create(name='Visibility Group', created_by=cls.owner)
+        GroupMembership.objects.create(user=cls.owner, group=cls.group, role='admin')
+        GroupMembership.objects.create(
+            user=cls.group_member, group=cls.group, role='member',
+        )
+        cls.owned_game = BoardGame.objects.create(
+            name='Owned Game', owner=cls.owner,
+        )
+        cls.group_game = BoardGame.objects.create(
+            name='Group Game', group=cls.group,
+        )
+        cls.other_member_game = BoardGame.objects.create(
+            name='Member Game', owner=cls.group_member,
+        )
+
+    def test_owner_can_view_own_game(self):
+        """Given a game owned by the user, when viewing detail, then 200"""
+        self.client.login(username='gameowner', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.owned_game.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_group_member_can_view_game_owned_by_another_member(self):
+        """Given a game owned by a group member, when another member views detail, then 200"""
+        self.client.login(username='groupmember', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.owned_game.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_group_member_can_view_group_assigned_game(self):
+        """Given a game assigned to a group, when a group member views detail, then 200"""
+        self.client.login(username='groupmember', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.group_game.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_owner_can_view_group_assigned_game(self):
+        """Given a game assigned to a group, when a group admin views detail, then 200"""
+        self.client.login(username='gameowner', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.group_game.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_outsider_cannot_view_game_with_no_shared_group(self):
+        """Given a game owned by a user with no shared group, when an outsider views detail, then 404"""
+        self.client.login(username='outsider', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.owned_game.pk})
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_outsider_cannot_view_group_assigned_game(self):
+        """Given a game assigned to a group, when a non-member views detail, then 404"""
+        self.client.login(username='outsider', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.group_game.pk})
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_outsider_cannot_view_game_owned_by_group_member(self):
+        """Given a game owned by a group member, when an outsider views detail, then 404"""
+        self.client.login(username='outsider', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.other_member_game.pk})
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_superuser_can_view_any_game(self):
+        """Given any game, when a superuser views detail, then 200"""
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.owned_game.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_site_admin_can_view_any_game(self):
+        """Given any game, when a site admin views detail, then 200"""
+        self.client.login(username='siteadmin', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.owned_game.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_superuser_can_view_group_game(self):
+        """Given a group-assigned game, when a superuser views detail, then 200"""
+        self.client.login(username='superuser', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.group_game.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_site_admin_can_view_group_game(self):
+        """Given a group-assigned game, when a site admin views detail, then 200"""
+        self.client.login(username='siteadmin', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.group_game.pk})
+        )
+        self.assertEqual(response.status_code, 200)

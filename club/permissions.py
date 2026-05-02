@@ -3,7 +3,7 @@ from django.core.exceptions import PermissionDenied
 from django.utils import timezone
 from datetime import timedelta
 
-from club.models import GroupCreationLog, GroupMembership, PrivateEventCreationLog, SiteSettings
+from club.models import BoardGame, GroupCreationLog, GroupMembership, PrivateEventCreationLog, SiteSettings
 
 
 def is_group_admin(user, group):
@@ -50,6 +50,29 @@ def can_edit_group_settings(user, group):
     return GroupMembership.objects.filter(
         user=user, group=group, role='admin',
     ).exists()
+
+
+def can_view_game(user, game):
+    if not user.is_authenticated:
+        return False
+    if user.is_superuser or user.is_site_admin:
+        return True
+    if game.owner_id == user.pk:
+        return True
+    user_group_ids = set(GroupMembership.objects.filter(
+        user=user,
+    ).values_list('group_id', flat=True))
+    if not user_group_ids:
+        return False
+    if game.group_id and game.group_id in user_group_ids:
+        return True
+    if game.owner_id and GroupMembership.objects.filter(
+        user_id=game.owner_id,
+        group_id__in=user_group_ids,
+        role__in=['admin', 'organizer', 'member'],
+    ).exists():
+        return True
+    return False
 
 
 def can_view_group(user, group):

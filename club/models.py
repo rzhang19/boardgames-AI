@@ -674,6 +674,12 @@ class Friendship(models.Model):
     def can_send_request(requester, receiver):
         if requester == receiver:
             return False
+        if not requester.email_verified:
+            pending_count = Friendship.objects.filter(
+                requester=requester, status='pending',
+            ).count()
+            if pending_count >= 3:
+                return False
         existing = Friendship.objects.filter(
             requester=requester, receiver=receiver,
         ).first()

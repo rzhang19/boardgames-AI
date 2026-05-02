@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% load club_tags %}
+
+{% block title %}Users{% endblock %}
+
+{% block content %}
+<h1>Users</h1>
+
+<div class="sub-tabs">
+    <a href="{% url 'users_page' %}?tab=friends" class="sub-tab {% if tab == 'friends' %}active{% endif %}">Friends</a>
+    <a href="{% url 'users_page' %}?tab=all" class="sub-tab {% if tab == 'all' %}active{% endif %}">All Users</a>
+</div>
+
+{% if tab == 'friends' %}
+
+{% if friends %}
+<div class="card">
+    <h2>Friends ({{ friends|length }})</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Groups in Common</th>
+                <th>Upcoming Events</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for friend in friends %}
+            <tr>
+                <td data-label="Username">
+                    <a href="{% url 'public_profile' friend.username %}">{{ friend.username }}</a>
+                    {% verified_badge friend %}
+                </td>
+                <td data-label="Groups in Common">
+                    {% with groups=friends_mutual_groups|dict_lookup:friend.pk %}
+                        {% if groups %}
+                            {% for gm in groups %}
+                                <a href="{% url 'group_dashboard' gm.group.slug %}">{{ gm.group.name }}</a>{% if not forloop.last %}, {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    {% endwith %}
+                </td>
+                <td data-label="Upcoming Events">
+                    {% with events=friends_shared_events|dict_lookup:friend.pk %}
+                        {% if events %}
+                            {% for ea in events %}
+                                <a href="{% url 'private_event_detail' ea.event.pk %}">{{ ea.event.title }}</a>{% if not forloop.last %}, {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    {% endwith %}
+                </td>
+                <td>
+                    <form method="post" action="{% url 'remove_friend' friend.username %}" style="display:inline;" class="unfriend-form">
+                        {% csrf_token %}
+                        <button type="button" class="btn btn-secondary btn-sm unfriend-btn">Unfriend</button>
+                        <button type="submit" class="btn btn-danger btn-sm confirm-unfriend-btn" style="display:none;">Confirm Unfriend</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>No friends yet.</p>
+</div>
+{% endif %}
+
+{% if pending_received %}
+<div class="card">
+    <h2>Pending Friend Requests ({{ pending_received|length }})</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Groups in Common</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pr in pending_received %}
+            <tr data-friendship-pk="{{ pr.pk }}">
+                <td data-label="Username">
+                    <a href="{% url 'public_profile' pr.requester.username %}">{{ pr.requester.username }}</a>
+                    {% verified_badge pr.requester %}
+                </td>
+                <td data-label="Groups in Common">
+                    {% with groups=pending_mutual_groups|dict_lookup:pr.pk %}
+                        {% if groups %}
+                            {% for gm in groups %}
+                                <a href="{% url 'group_dashboard' gm.group.slug %}">{{ gm.group.name }}</a>{% if not forloop.last %}, {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    {% endwith %}
+                </td>
+                <td>
+                    <div class="friend-response-btns">
+                        <form method="post" action="{% url 'accept_friend_request' pr.pk %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-success btn-sm friend-accept-btn">
+                                <span class="accept-icon">&#10003;</span>
+                                <span class="accept-text">Accept</span>
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'decline_friend_request' pr.pk %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger btn-sm friend-decline-btn">
+                                <span class="decline-icon">&#10007;</span>
+                                <span class="decline-text">Decline</span>
+                            </button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>No pending friend requests.</p>
+</div>
+{% endif %}
+
+{% if sent_requests %}
+<div class="card">
+    <h2>Sent Friend Requests ({{ sent_requests|length }})</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sr in sent_requests %}
+            <tr>
+                <td data-label="Username">
+                    <a href="{% url 'public_profile' sr.receiver.username %}">{{ sr.receiver.username }}</a>
+                    {% verified_badge sr.receiver %}
+                </td>
+                <td>
+                    <form method="post" action="{% url 'cancel_friend_request' sr.pk %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-secondary btn-sm">Cancel</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>No sent friend requests.</p>
+</div>
+{% endif %}
+
+{% elif tab == 'all' %}
+
+{% if is_unverified %}
+<div class="card">
+    <p><a href="{% url 'user_settings' %}">Become verified</a> to see all users.</p>
+</div>
+{% else %}
+
+<div class="action-bar">
+    <form method="get" class="filter-bar filter-bar-inline">
+        <input type="hidden" name="tab" value="all">
+        <input type="text" name="q" value="{{ query }}" placeholder="Search by username..." class="search-input">
+        {% if query %}
+        <a href="{% url 'users_page' %}?tab=all" class="btn btn-neutral btn-sm">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+{% if page_obj.object_list %}
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in page_obj.object_list %}
+            <tr>
+                <td data-label="Username">
+                    <a href="{% url 'public_profile' user.username %}">{{ user.username }}</a>
+                    {% verified_badge user %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if page_obj.has_other_pages %}
+<div class="pagination">
+    {% if page_obj.has_previous %}
+    <a href="?tab=all{% if query %}&q={{ query }}{% endif %}&page={{ page_obj.previous_page_number }}" class="btn btn-sm btn-outline">&laquo; Previous</a>
+    {% endif %}
+    <span class="pagination-info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a href="?tab=all{% if query %}&q={{ query }}{% endif %}&page={{ page_obj.next_page_number }}" class="btn btn-sm btn-outline">Next &raquo;</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+    {% if query %}
+    <p>No users found matching "{{ query }}".</p>
+    {% else %}
+    <p>No users found.</p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% endif %}
+
+{% endif %}
+{% endblock %}
+
+{% block extra_script %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.unfriend-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var form = this.closest('.unfriend-form');
+            this.style.display = 'none';
+            form.querySelector('.confirm-unfriend-btn').style.display = 'inline-block';
+        });
+    });
+
+    document.addEventListener('click', function(e) {
+        document.querySelectorAll('.unfriend-form').forEach(function(form) {
+            if (!form.contains(e.target)) {
+                form.querySelector('.unfriend-btn').style.display = 'inline-block';
+                form.querySelector('.confirm-unfriend-btn').style.display = 'none';
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

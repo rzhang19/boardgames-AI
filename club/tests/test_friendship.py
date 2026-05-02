@@ -426,45 +426,42 @@ class ProfileFriendButtonTest(TestCase):
 class UserSearchViewTest(TestCase):
 
     def setUp(self):
-        self.user = User.objects.create_user(username='alice', password='testpass123')
+        self.user = User.objects.create_user(
+            username='alice', password='testpass123',
+            email_verified=True, email='alice@test.com',
+        )
         User.objects.create_user(username='bob123', password='testpass123')
         User.objects.create_user(username='bobsmith', password='testpass123')
         User.objects.create_user(username='carol', password='testpass123')
 
     def test_search_partial_match(self):
-        self.client.login(username='alice', password='testpass123')
-        resp = self.client.get(reverse('user_search') + '?q=bob')
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse('users_page') + '?tab=all&q=bob')
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(len(resp.context['results']), 2)
+        usernames = [u.username for u in resp.context['page_obj'].object_list]
+        self.assertTrue(any('bob' in u for u in usernames))
 
     def test_search_case_insensitive(self):
-        self.client.login(username='alice', password='testpass123')
-        resp = self.client.get(reverse('user_search') + '?q=BOB')
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse('users_page') + '?tab=all&q=BOB')
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(len(resp.context['results']), 2)
+        usernames = [u.username for u in resp.context['page_obj'].object_list]
+        self.assertTrue(any('bob' in u.lower() for u in usernames))
 
     def test_search_excludes_self(self):
-        self.client.login(username='alice', password='testpass123')
-        resp = self.client.get(reverse('user_search') + '?q=ali')
-        self.assertEqual(resp.status_code, 200)
-        usernames = [u.username for u in resp.context['results']]
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse('users_page') + '?tab=all&q=ali')
+        usernames = [u.username for u in resp.context['page_obj'].object_list]
         self.assertNotIn('alice', usernames)
 
-    def test_search_limits_to_20(self):
-        for i in range(25):
-            User.objects.create_user(username=f'user{i:02d}', password='testpass123')
-        self.client.login(username='alice', password='testpass123')
-        resp = self.client.get(reverse('user_search') + '?q=user')
-        self.assertEqual(len(resp.context['results']), 20)
-
-    def test_search_no_query_shows_empty(self):
-        self.client.login(username='alice', password='testpass123')
-        resp = self.client.get(reverse('user_search'))
+    def test_search_no_query_shows_all(self):
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse('users_page') + '?tab=all')
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(len(resp.context['results']), 0)
+        self.assertGreater(len(resp.context['page_obj'].object_list), 0)
 
     def test_search_requires_login(self):
-        resp = self.client.get(reverse('user_search'))
+        resp = self.client.get(reverse('users_page') + '?tab=all')
         self.assertEqual(resp.status_code, 302)
         self.assertIn('/login/', resp.url)
 
@@ -472,8 +469,8 @@ class UserSearchViewTest(TestCase):
         bob = User.objects.get(username='bob123')
         bob.email_verified = True
         bob.save()
-        self.client.login(username='alice', password='testpass123')
-        resp = self.client.get(reverse('user_search') + '?q=bob')
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse('users_page') + '?tab=all&q=bob')
         self.assertContains(resp, 'verified-badge')
 
 

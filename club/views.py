@@ -10,7 +10,7 @@ from django.core.mail import send_mail
 from django.core.signing import TimestampSigner
 from django.db.models import Q
 from django.forms import formset_factory, modelformset_factory
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -62,6 +62,7 @@ from .permissions import (
     can_invite_to_event,
     can_restore_group,
     can_rsvp_private_event,
+    can_view_game,
     can_view_group,
     can_view_private_event,
     is_group_admin,
@@ -983,6 +984,8 @@ def game_detail(request, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
     game = get_object_or_404(BoardGame, pk=pk)
+    if not can_view_game(request.user, game):
+        raise Http404
     can_edit = (
         game.owner == request.user
         or request.user.is_superuser
@@ -2387,6 +2390,8 @@ def send_friend_request(request, username):
     if Block.is_blocked(request.user, target):
         raise PermissionDenied
     if not Friendship.can_send_request(request.user, target):
+        from django.contrib import messages
+        messages.warning(request, 'You cannot send a friend request right now.')
         return redirect('public_profile', username=username)
 
     existing = Friendship.objects.filter(
@@ -2789,20 +2794,108 @@ def remove_friend(request, username):
 
 
 @login_required
-def user_search(request):
-    query = request.GET.get('q', '').strip()
-    results = []
-    if query:
+def users_page(request):
+    tab = request.GET.get('tab', 'friends')
+    if tab not in ('friends', 'all'):
+        tab = 'friends'
+
+    context = {
+        'tab': tab,
+    }
+
+    if tab == 'friends':
+        friends = Friendship.get_friends_of(request.user)
         blocked_ids = Block.get_blocked_user_ids(request.user)
-        results = User.objects.exclude(
-            pk__in=[request.user.pk] + list(blocked_ids),
-        ).filter(
-            username__icontains=query,
-        ).order_by('username')[:20]
-    return render(request, 'club/user_search.html', {
-        'results': results,
-        'query': query,
-    })
+        friends = friends.exclude(pk__in=blocked_ids)
+
+        user_group_ids = set(
+            GroupMembership.objects.filter(user=request.user).values_list('group_id', flat=True)
+        )
+
+        friends_mutual_groups = {}
+        for friend in friends:
+            mutual = GroupMembership.objects.filter(
+                user=friend, group_id__in=user_group_ids,
+            ).select_related('group')
+            friends_mutual_groups[friend.pk] = list(mutual)
+
+        user_event_ids = set(
+            EventAttendance.objects.filter(user=request.user).values_list('event_id', flat=True)
+        )
+        upcoming_private_event_ids = Event.objects.filter(
+            pk__in=user_event_ids,
+            group__isnull=True,
+            date__gt=timezone.now(),
+        ).values_list('pk', flat=True)
+
+        friends_shared_events = {}
+        for friend in friends:
+            shared = EventAttendance.objects.filter(
+                user=friend, event_id__in=upcoming_private_event_ids,
+            ).select_related('event')
+            friends_shared_events[friend.pk] = list(shared)
+
+        pending_received = Friendship.objects.filter(
+            receiver=request.user, status='pending',
+        ).select_related('requester')
+
+        pending_mutual_groups = {}
+        for pr in pending_received:
+            mutual = GroupMembership.objects.filter(
+                user=pr.requester, group_id__in=user_group_ids,
+            ).select_related('group')
+            pending_mutual_groups[pr.pk] = list(mutual)
+
+        sent_requests = Friendship.objects.filter(
+            requester=request.user, status='pending',
+        ).select_related('receiver')
+
+        context.update({
+            'friends': friends,
+            'friends_mutual_groups': friends_mutual_groups,
+            'friends_shared_events': friends_shared_events,
+            'pending_received': pending_received,
+            'pending_mutual_groups': pending_mutual_groups,
+            'sent_requests': sent_requests,
+        })
+
+    elif tab == 'all':
+        context['is_unverified'] = not request.user.email_verified
+
+        if request.user.email_verified:
+            from django.core.paginator import Paginator
+
+            blocked_ids = Block.get_blocked_user_ids(request.user)
+            queryset = User.objects.exclude(
+                pk__in=[request.user.pk] + list(blocked_ids),
+            ).filter(
+                deleted_at__isnull=True,
+            ).order_by('username')
+
+            query = request.GET.get('q', '').strip()
+            if query:
+                queryset = queryset.filter(username__icontains=query)
+
+            paginator = Paginator(queryset, 25)
+            page_number = request.GET.get('page', 1)
+            page_obj = paginator.get_page(page_number)
+
+            context.update({
+                'page_obj': page_obj,
+                'query': query,
+            })
+
+    return render(request, 'club/users_page.html', context)
+
+
+def user_search(request):
+    from django.http import QueryDict
+    query = request.GET.get('q', '').strip()
+    params = QueryDict(mutable=True)
+    params['tab'] = 'all'
+    if query:
+        params['q'] = query
+    return redirect(f'/users/?{params.urlencode()}', permanent=True)
 
 
 @login_required
