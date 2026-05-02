@@ -1039,15 +1039,19 @@ thead th a:hover {
     }
 
     .nav-links {
-        display: none;
         flex-direction: column;
         width: 100%;
         order: 10;
         padding-bottom: 8px;
+        transform: scaleY(0);
+        transform-origin: top left;
+        transition: transform 0.25s ease;
+        background: var(--nav-bg);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
     }
 
     .nav-links.nav-open {
-        display: flex;
+        transform: scaleY(1);
     }
 
     .nav-links a {

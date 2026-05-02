@@ -10,7 +10,7 @@
 <body>
     <nav>
         <a href="{% url 'dashboard' %}">Home</a>
-        <button class="nav-hamburger" aria-label="Menu" onclick="document.querySelector('.nav-links').classList.toggle('nav-open')">&#9776;</button>
+        <button class="nav-hamburger" aria-label="Menu" id="nav-hamburger-btn">&#9776;</button>
         <div class="nav-links">
             <a href="{% url 'group_list' %}">Groups</a>
             {% if user.is_authenticated %}
@@ -122,6 +122,38 @@
                         input.type = 'password';
                     }
                 });
+            });
+        });
+    })();
+    </script>
+    <script id="nav-hamburger-menu">
+    (function() {
+        document.addEventListener('DOMContentLoaded', function() {
+            var btn = document.getElementById('nav-hamburger-btn');
+            var menu = document.querySelector('.nav-links');
+            if (!btn || !menu) return;
+
+            function closeMenu() {
+                menu.classList.remove('nav-open');
+            }
+
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                menu.classList.toggle('nav-open');
+            });
+
+            document.addEventListener('click', function(e) {
+                if (menu.classList.contains('nav-open') && !menu.contains(e.target)) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    closeMenu();
+                }
+            }, true);
+
+            window.addEventListener('scroll', function() {
+                if (menu.classList.contains('nav-open')) {
+                    closeMenu();
+                }
             });
         });
     })();

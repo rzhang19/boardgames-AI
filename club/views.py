@@ -135,6 +135,9 @@ class CustomLoginView(auth_views.LoginView):
         return response
 
 
+MANAGE_USERS_ALLOWED_FIELDS = {'is_site_admin'}
+
+
 def site_admin_required(view_func):
     def wrapper(request, *args, **kwargs):
         if not request.user.is_authenticated:
@@ -183,7 +186,9 @@ def manage_users_confirm(request):
         }
 
     for user_id, role_changes in changes.items():
-        User.objects.filter(pk=user_id).update(**role_changes)
+        safe_changes = {k: v for k, v in role_changes.items() if k in MANAGE_USERS_ALLOWED_FIELDS}
+        if safe_changes:
+            User.objects.filter(pk=user_id).update(**safe_changes)
 
     return redirect('manage_users')
 

@@ -134,6 +134,68 @@ class SiteAdminRestrictionTest(TestCase):
 
 
 @tag("integration")
+class ManageUsersConfirmFieldWhitelistTest(TestCase):
+
+    def setUp(self):
+        self.superuser = User.objects.create_superuser(
+            username='superuser', password='testpass123'
+        )
+        self.regular = User.objects.create_user(
+            username='regular', password='testpass123'
+        )
+
+    def test_non_whitelisted_is_staff_stripped_from_changes(self):
+        self.client.login(username='superuser', password='testpass123')
+        session = self.client.session
+        session['pending_role_changes'] = {
+            str(self.regular.pk): {'is_staff': True},
+        }
+        session.save()
+
+        self.client.post(reverse('manage_users_confirm'))
+        self.regular.refresh_from_db()
+        self.assertFalse(self.regular.is_staff)
+
+    def test_non_whitelisted_is_superuser_stripped_from_changes(self):
+        self.client.login(username='superuser', password='testpass123')
+        session = self.client.session
+        session['pending_role_changes'] = {
+            str(self.regular.pk): {'is_superuser': True},
+        }
+        session.save()
+
+        self.client.post(reverse('manage_users_confirm'))
+        self.regular.refresh_from_db()
+        self.assertFalse(self.regular.is_superuser)
+
+    def test_whitelisted_is_site_admin_still_applied(self):
+        self.client.login(username='superuser', password='testpass123')
+        session = self.client.session
+        session['pending_role_changes'] = {
+            str(self.regular.pk): {'is_site_admin': True},
+        }
+        session.save()
+
+        self.client.post(reverse('manage_users_confirm'))
+        self.regular.refresh_from_db()
+        self.assertTrue(self.regular.is_site_admin)
+
+    def test_mixed_whitelisted_and_non_whitelisted_only_applies_whitelisted(self):
+        self.client.login(username='superuser', password='testpass123')
+        session = self.client.session
+        session['pending_role_changes'] = {
+            str(self.regular.pk): {'is_site_admin': True, 'is_staff': True, 'is_superuser': True},
+        }
+        session.save()
+
+        self.client.post(reverse('manage_users_confirm'))
+        self.regular.refresh_from_db()
+        self.assertTrue(self.regular.is_site_admin)
+        self.assertFalse(self.regular.is_staff)
+        self.assertFalse(self.regular.is_superuser)
+
+
+@tag("integration")
 class UserAddTest(TestCase):
 
     def setUp(self):
