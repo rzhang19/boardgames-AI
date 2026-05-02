@@ -6,7 +6,7 @@ import sys
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Run the board game club test suite with parallelism by default.'
+        description='Run the board game club test suite. Default: 4 parallel workers. Use --serial for sequential (1 worker).'
     )
     parser.add_argument(
         '--unit', action='store_true',

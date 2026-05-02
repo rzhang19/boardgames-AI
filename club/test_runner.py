@@ -1,14 +1,14 @@
-import os
-
 from django.db import connections
 from django.test.runner import DiscoverRunner
+
+DEFAULT_PARALLEL_WORKERS = 4
 
 
 class ParallelDiscoverRunner(DiscoverRunner):
 
     def __init__(self, **kwargs):
         if kwargs.get('parallel', 0) == 0:
-            kwargs['parallel'] = os.cpu_count() or 1
+            kwargs['parallel'] = DEFAULT_PARALLEL_WORKERS
         super().__init__(**kwargs)
 
     def teardown_databases(self, old_config, **kwargs):
