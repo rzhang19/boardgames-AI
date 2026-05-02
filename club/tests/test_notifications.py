@@ -3,7 +3,7 @@ from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
-from club.models import BoardGame, Notification
+from club.models import BoardGame, Friendship, Notification
 
 User = get_user_model()
 
@@ -519,3 +519,128 @@ class AjaxNotificationMarkReadTest(TestCase):
         self.client.login(username='testuser', password='testpass123')
         resp = self.client.post(reverse('notification_mark_read', kwargs={'pk': notif.pk}))
         self.assertEqual(resp.status_code, 302)
+
+
+@tag("integration")
+class NotificationLinkRenderingTest(TestCase):
+
+    def test_notification_with_url_renders_link_to_target_not_mark_read(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        notif = Notification.objects.create(
+            user=user,
+            message='Edit your game',
+            url='/games/1/edit/',
+            url_label='Edit Game',
+            notification_type='missing_complexity',
+        )
+        self.client.login(username='testuser', password='testpass123')
+        response = self.client.get(reverse('notification_list'))
+        mark_read_url = reverse('notification_mark_read', kwargs={'pk': notif.pk})
+        self.assertContains(response, 'href="/games/1/edit/"')
+        self.assertContains(response, 'Edit Game')
+        self.assertNotContains(response, f'href="{mark_read_url}"')
+
+    def test_notification_without_url_renders_plain_message(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        Notification.objects.create(
+            user=user,
+            message='Something happened',
+            notification_type='general',
+        )
+        self.client.login(username='testuser', password='testpass123')
+        response = self.client.get(reverse('notification_list'))
+        self.assertContains(response, 'Something happened')
+
+    def test_unread_notification_shows_mark_read_button(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        notif = Notification.objects.create(
+            user=user,
+            message='Unread notif',
+            url='/games/1/edit/',
+            url_label='Edit Game',
+            is_read=False,
+        )
+        self.client.login(username='testuser', password='testpass123')
+        response = self.client.get(reverse('notification_list'))
+        mark_read_url = reverse('notification_mark_read', kwargs={'pk': notif.pk})
+        self.assertContains(response, f'action="{mark_read_url}"')
+        self.assertContains(response, 'Mark as Read')
+
+    def test_read_notification_does_not_show_mark_read_button(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        notif = Notification.objects.create(
+            user=user,
+            message='Read notif',
+            url='/games/1/edit/',
+            url_label='Edit Game',
+            is_read=True,
+        )
+        self.client.login(username='testuser', password='testpass123')
+        response = self.client.get(reverse('notification_list'))
+        mark_read_url = reverse('notification_mark_read', kwargs={'pk': notif.pk})
+        self.assertNotContains(response, f'action="{mark_read_url}"')
+
+    def test_notification_with_url_no_label_still_renders_message(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        Notification.objects.create(
+            user=user,
+            message='No label notif',
+            url='/games/1/',
+            url_label='',
+            notification_type='general',
+        )
+        self.client.login(username='testuser', password='testpass123')
+        response = self.client.get(reverse('notification_list'))
+        self.assertContains(response, 'No label notif')
+        self.assertNotContains(response, 'href="/games/1/"')
+
+    def test_friend_request_shows_profile_link_not_mark_read_link(self):
+        requester = User.objects.create_user(username='alice', password='testpass123')
+        receiver = User.objects.create_user(username='bob', password='testpass123')
+        notif = Notification.objects.create(
+            user=receiver,
+            message='alice sent you a friend request.',
+            url=f'/profile/{requester.username}/',
+            url_label='View Profile',
+            notification_type='friend_request',
+            is_read=False,
+        )
+        self.client.login(username='bob', password='testpass123')
+        response = self.client.get(reverse('notification_list'))
+        self.assertContains(response, 'href="/profile/alice/"')
+        self.assertContains(response, 'View Profile')
+        mark_read_url = reverse('notification_mark_read', kwargs={'pk': notif.pk})
+        self.assertNotContains(response, f'href="{mark_read_url}"')
+
+    def test_friend_request_message_does_not_have_mark_read_click_handler(self):
+        requester = User.objects.create_user(username='alice', password='testpass123')
+        receiver = User.objects.create_user(username='bob', password='testpass123')
+        notif = Notification.objects.create(
+            user=receiver,
+            message='alice sent you a friend request.',
+            url=f'/profile/{requester.username}/',
+            url_label='View Profile',
+            notification_type='friend_request',
+            is_read=False,
+        )
+        self.client.login(username='bob', password='testpass123')
+        response = self.client.get(reverse('notification_list'))
+        content = response.content.decode()
+        self.assertNotIn('data-mark-read-url', content)
+
+    def test_read_friend_request_notification_link_goes_to_profile(self):
+        requester = User.objects.create_user(username='alice', password='testpass123')
+        receiver = User.objects.create_user(username='bob', password='testpass123')
+        notif = Notification.objects.create(
+            user=receiver,
+            message='alice sent you a friend request.',
+            url=f'/profile/{requester.username}/',
+            url_label='View Profile',
+            notification_type='friend_request',
+            is_read=True,
+        )
+        self.client.login(username='bob', password='testpass123')
+        response = self.client.get(reverse('notification_list'))
+        self.assertContains(response, 'href="/profile/alice/"')
+        mark_read_url = reverse('notification_mark_read', kwargs={'pk': notif.pk})
+        self.assertNotContains(response, f'href="{mark_read_url}"')

@@ -1350,6 +1350,19 @@ thead th a:hover {
     flex-shrink: 0;
 }
 
+.notification-mark-read {
+    flex-shrink: 0;
+}
+
+.mark-read-form {
+    display: inline;
+}
+
+.mark-read-btn {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+}
+
 .notification-checkbox {
     width: 16px;
     height: 16px;

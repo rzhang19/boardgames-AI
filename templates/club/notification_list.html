@@ -23,9 +23,13 @@
             {% endif %}
             <div class="notification-message">
                 {% if notif.notification_type == 'friend_request' and not notif.is_read and notif.pk in friendship_pks %}
-                <span class="notification-link friend-request-message" data-notification-pk="{{ notif.pk }}" data-mark-read-url="{% url 'notification_mark_read' notif.pk %}">{{ notif.message }}</span>
-                {% elif notif.url %}
-                <a href="{% url 'notification_mark_read' notif.pk %}" class="notification-link">{{ notif.message }}</a>
+                {{ notif.message }}
+                {% if notif.url and notif.url_label %}
+                <a href="{{ notif.url }}" class="notification-link">{{ notif.url_label }}</a>
+                {% endif %}
+                {% elif notif.url and notif.url_label %}
+                {{ notif.message }}
+                <a href="{{ notif.url }}" class="notification-link">{{ notif.url_label }}</a>
                 {% else %}
                 {{ notif.message }}
                 {% endif %}
@@ -45,6 +49,14 @@
             <div class="friend-request-status"></div>
             {% endif %}
         </div>
+        {% if not notif.is_read %}
+        <div class="notification-mark-read">
+            <form method="post" action="{% url 'notification_mark_read' notif.pk %}" class="mark-read-form">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-neutral btn-sm mark-read-btn">Mark as Read</button>
+            </form>
+        </div>
+        {% endif %}
         {% if notif.is_read %}
         <div class="notification-select">
             <input type="checkbox" name="selected_notifications" value="{{ notif.pk }}" class="notification-checkbox" form="delete-selected-form">
@@ -144,24 +156,6 @@
                 if (!data) return;
                 if (notifPk) markNotificationRead(notifPk);
                 showFriendStatus(actionsDiv, statusDiv, data.status, data.username);
-            });
-        }
-
-        var msgEl = e.target.closest('.friend-request-message');
-        if (msgEl) {
-            e.preventDefault();
-            var readUrl = msgEl.getAttribute('data-mark-read-url');
-            var nItem = msgEl.closest('.notification-item');
-            var nPk = nItem ? nItem.getAttribute('data-notification-pk') : null;
-
-            fetch(readUrl, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': getCsrfToken(),
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-            }).then(function() {
-                if (nPk) markNotificationRead(nPk);
             });
         }
     });
