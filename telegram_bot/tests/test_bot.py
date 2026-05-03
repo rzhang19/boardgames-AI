@@ -1,4 +1,6 @@
+import inspect
 import pytest
+import subprocess
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -103,3 +105,16 @@ class TestLoadConfig:
         assert bot.AUTHORIZED_IDS == {123, 456}
         del os.environ["TELEGRAM_BOT_TOKEN"]
         del os.environ["TELEGRAM_ALLOWED_USER_IDS"]
+
+
+@pytest.mark.unit
+class TestRunScriptInheritsEnvironment:
+    def test_run_script_does_not_override_env(self):
+        import inspect
+        from bot import run_script
+        sig = inspect.signature(subprocess.run)
+        source = inspect.getsource(run_script)
+        assert "env=" not in source, (
+            "run_script must not pass a custom env to subprocess.run, "
+            "so DOCKER_HOST is inherited automatically"
+        )

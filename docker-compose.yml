@@ -12,7 +12,7 @@ services:
   web:
     build: .
     env_file:
-      - .env
+      - /opt/boardgames-secrets/.env
     depends_on:
       db:
         condition: service_started
@@ -39,7 +39,7 @@ services:
   staging-web:
     build: .
     env_file:
-      - .env.staging
+      - /opt/boardgames-secrets/.env.staging
     depends_on:
       staging-db:
         condition: service_started
@@ -75,32 +75,58 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      EXEC: 1
+      POST: 1
+      BUILD: 1
+      NETWORKS: 0
+      VOLUMES: 0
+      PLUGINS: 0
+      AUTH: 0
+      SECRETS: 0
+      SERVICES: 1
+      TASKS: 1
+      SWARM: 0
+      SYSTEM: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
   runner:
     image: myoung34/github-runner:latest
     env_file:
-      - .env
+      - /opt/boardgames-secrets/.env
     environment:
       REPO_URL: ${GITHUB_REPO_URL}
       RUNNER_NAME: ${RUNNER_NAME:-boardgames-runner}
       RUNNER_TOKEN: ${GITHUB_RUNNER_TOKEN}
       RUNNER_WORKDIR: /home/runner/work
+      DOCKER_HOST: tcp://socket-proxy:2375
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - .:${PROJECT_DIR:-/opt/boardgames}
       - runner_data:/home/runner
+    depends_on:
+      - socket-proxy
     restart: unless-stopped
 
   telegram:
     build: ./telegram_bot
     env_file:
-      - .env
+      - /opt/boardgames-secrets/.env
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS:-}
       PROJECT_DIR: ${PROJECT_DIR:-/opt/boardgames}
+      DOCKER_HOST: tcp://socket-proxy:2375
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - .:${PROJECT_DIR:-/opt/boardgames}
+      - /opt/boardgames-secrets:/opt/boardgames-secrets:ro
+    depends_on:
+      - socket-proxy
     restart: unless-stopped
 
 volumes:
