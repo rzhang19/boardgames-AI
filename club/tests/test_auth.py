@@ -1,4 +1,5 @@
 import hashlib
+from unittest.mock import patch, MagicMock
 
 from django.test import TestCase, override_settings, tag
 from django.contrib.auth import get_user_model
@@ -805,3 +806,63 @@ class ProtectedUserTest(TestCase):
         self.assertContains(response, GENERIC_MESSAGE)
         self.assertNotContains(response, 'cannot have its password reset')
         self.assertEqual(len(mail.outbox), 0)
+
+
+@tag("unit")
+class EmailOrUsernameBackendTimingTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='backenduser', password='testpass123', email='backend@example.com'
+        )
+        from club.backends import EmailOrUsernameBackend
+        self.backend = EmailOrUsernameBackend()
+
+    def test_nonexistent_user_triggers_password_hash(self):
+        """Given a non-existent user, when authenticating, then set_password is called for timing safety"""
+        with patch.object(User, 'set_password') as mock_set_password:
+            result = self.backend.authenticate(
+                request=None, username='ghost', password='anypass'
+            )
+            mock_set_password.assert_called_once_with('anypass')
+            self.assertIsNone(result)
+
+    def test_nonexistent_user_returns_none(self):
+        """Given a non-existent user, when authenticating, then returns None"""
+        result = self.backend.authenticate(
+            request=None, username='ghost', password='anypass'
+        )
+        self.assertIsNone(result)
+
+    def test_existing_user_wrong_password_returns_none(self):
+        """Given an existing user with wrong password, when authenticating, then returns None"""
+        result = self.backend.authenticate(
+            request=None, username='backenduser', password='wrongpass'
+        )
+        self.assertIsNone(result)
+
+    def test_existing_user_correct_password_by_username(self):
+        """Given a user with correct password, when authenticating by username, then returns user"""
+        result = self.backend.authenticate(
+            request=None, username='backenduser', password='testpass123'
+        )
+        self.assertEqual(result, self.user)
+
+    def test_existing_user_correct_password_by_email(self):
+        """Given a user with correct password, when authenticating by email, then returns user"""
+        result = self.backend.authenticate(
+            request=None, username='backend@example.com', password='testpass123'
+        )
+        self.assertEqual(result, self.user)
+
+    @override_settings(REQUIRE_EMAIL_VERIFICATION=True)
+    def test_unverified_user_returns_none(self):
+        """Given an unverified user with correct password, when authenticating with verification required, then returns None"""
+        user = User.objects.create_user(
+            username='unverified', password='testpass123',
+            email='unverified@example.com', email_verified=False
+        )
+        result = self.backend.authenticate(
+            request=None, username='unverified', password='testpass123'
+        )
+        self.assertIsNone(result)
