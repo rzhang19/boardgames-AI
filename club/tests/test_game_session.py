@@ -232,7 +232,7 @@ class GameSessionDetailViewTest(TestCase):
         self.member = User.objects.create_user(
             username='member', password='testpass123'
         )
-        self.group = Group.objects.create(name='Detail Group')
+        self.group = Group.objects.create(name='Detail Group', discoverable=False)
         _make_organizer(self.organizer, self.group)
         _make_member(self.member, self.group)
         self.event = Event.objects.create(
@@ -262,6 +262,16 @@ class GameSessionDetailViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Catan')
 
+    def test_non_member_blocked_from_group_session(self):
+        outsider = User.objects.create_user(username='outsider', password='pass')
+        self.client.login(username='outsider', password='pass')
+        response = self.client.get(
+            reverse('game_session_detail', kwargs={
+                'event_pk': self.event.pk, 'pk': self.session.pk
+            })
+        )
+        self.assertEqual(response.status_code, 403)
+
     def test_unauthenticated_redirected(self):
         response = self.client.get(
             reverse('game_session_detail', kwargs={
@@ -269,6 +279,61 @@ class GameSessionDetailViewTest(TestCase):
             })
         )
         self.assertEqual(response.status_code, 302)
+
+
+@tag("integration")
+class GameSessionDetailPrivateEventTest(TestCase):
+
+    def setUp(self):
+        self.creator = User.objects.create_user(
+            username='creator', password='testpass123'
+        )
+        self.attendee = User.objects.create_user(
+            username='attendee', password='testpass123'
+        )
+        self.stranger = User.objects.create_user(
+            username='stranger', password='testpass123'
+        )
+        self.event = Event.objects.create(
+            title='Private Event',
+            date=timezone.now() + timezone.timedelta(days=7),
+            voting_deadline=timezone.now() + timezone.timedelta(days=7),
+            created_by=self.creator,
+            privacy='private',
+        )
+        EventAttendance.objects.create(user=self.attendee, event=self.event)
+        self.game = BoardGame.objects.create(name='Wingspan', owner=self.creator)
+        self.session = GameSession.objects.create(
+            event=self.event, board_game=self.game,
+            selection_method='manual', created_by=self.creator,
+        )
+
+    def test_creator_can_view_private_session(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.get(
+            reverse('game_session_detail', kwargs={
+                'event_pk': self.event.pk, 'pk': self.session.pk
+            })
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_attendee_can_view_private_session(self):
+        self.client.login(username='attendee', password='testpass123')
+        response = self.client.get(
+            reverse('game_session_detail', kwargs={
+                'event_pk': self.event.pk, 'pk': self.session.pk
+            })
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_stranger_blocked_from_private_session(self):
+        self.client.login(username='stranger', password='testpass123')
+        response = self.client.get(
+            reverse('game_session_detail', kwargs={
+                'event_pk': self.event.pk, 'pk': self.session.pk
+            })
+        )
+        self.assertEqual(response.status_code, 403)
 
 
 @tag("integration")

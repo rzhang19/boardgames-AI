@@ -2728,6 +2728,12 @@ def event_play_game(request, pk):
 def game_session_detail(request, event_pk, pk):
     event = get_object_or_404(Event, pk=event_pk)
     session = get_object_or_404(GameSession, pk=pk, event=event)
+    if event.group_id is not None:
+        if not can_view_group(request.user, event.group):
+            raise PermissionDenied
+    else:
+        if not can_view_private_event(request.user, event):
+            raise PermissionDenied
     players = session.players.all()
     context = {
         'event': event,
