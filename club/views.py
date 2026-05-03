@@ -1,3 +1,5 @@
+import hashlib
+
 from datetime import datetime, time as dt_time
 
 from django.conf import settings
@@ -83,6 +85,32 @@ def is_protected_user(user):
     if not protected:
         return False
     return user.username in [u.strip() for u in protected.split(',') if u.strip()]
+
+
+def _password_state_component(user):
+    return hashlib.sha256(user.password.encode()).hexdigest()[:16]
+
+
+def generate_password_token(user):
+    signer = TimestampSigner()
+    return signer.sign(f"{user.pk}|{_password_state_component(user)}")
+
+
+def verify_password_token(token, max_age):
+    signer = TimestampSigner()
+    try:
+        raw = signer.unsign(token, max_age=max_age)
+    except Exception:
+        return None
+    if '|' not in raw:
+        return None
+    pk_str, pw_hash = raw.split('|', 1)
+    user = User.objects.filter(pk=pk_str).first()
+    if not user:
+        return None
+    if _password_state_component(user) != pw_hash:
+        return None
+    return user
 from .timezone_utils import is_valid_timezone
 from .utils import parse_bgg_link, resize_group_image, resize_profile_picture
 
@@ -230,8 +258,7 @@ def user_add(request):
                 user.email_verified = False
                 user.save()
             if user.email:
-                signer = TimestampSigner()
-                token = signer.sign(user.pk)
+                token = generate_password_token(user)
                 set_pw_url = request.build_absolute_uri(f'/set-password/{token}/')
                 send_mail(
                     'Set your password - Board Game Club',
@@ -296,16 +323,12 @@ def user_permanent_delete(request, pk):
 
 
 def user_set_password(request, token):
-    signer = TimestampSigner()
-    try:
-        user_pk = signer.unsign(token, max_age=86400 * 3)
-    except Exception:
+    user = verify_password_token(token, max_age=86400 * 3)
+    if user is None:
         return render(request, 'registration/set_password.html', {
             'form': None,
             'invalid_token': True,
         })
-
-    user = get_object_or_404(User, pk=user_pk)
 
     if is_protected_user(user):
         return render(request, 'registration/set_password.html', {
@@ -408,8 +431,7 @@ def password_reset(request):
                     'form': form,
                     'protected': True,
                 })
-            signer = TimestampSigner()
-            token = signer.sign(user.pk)
+            token = generate_password_token(user)
             reset_url = request.build_absolute_uri(f'/password_reset/{token}/')
             send_mail(
                 'Password Reset - Board Game Club',
@@ -426,16 +448,12 @@ def password_reset(request):
 
 
 def password_reset_form(request, token):
-    signer = TimestampSigner()
-    try:
-        user_pk = signer.unsign(token, max_age=3600)
-    except Exception:
+    user = verify_password_token(token, max_age=3600)
+    if user is None:
         return render(request, 'registration/password_reset_form.html', {
             'form': None,
             'invalid_token': True,
         })
-
-    user = get_object_or_404(User, pk=user_pk)
 
     if is_protected_user(user):
         return render(request, 'registration/password_reset_form.html', {

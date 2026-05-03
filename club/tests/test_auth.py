@@ -1,3 +1,5 @@
+import hashlib
+
 from django.test import TestCase, override_settings, tag
 from django.contrib.auth import get_user_model
 from django.core import mail
@@ -5,6 +7,10 @@ from django.core.signing import TimestampSigner
 from django.urls import reverse
 
 User = get_user_model()
+
+
+def _password_state_component(user):
+    return hashlib.sha256(user.password.encode()).hexdigest()[:16]
 
 
 @tag("integration")
@@ -559,7 +565,7 @@ class PasswordResetTest(TestCase):
             password='OldPass123',
         )
         signer = TimestampSigner()
-        token = signer.sign(user.pk)
+        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
         response = self.client.get(reverse('password_reset_form', kwargs={'token': token}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'New password')
@@ -576,7 +582,7 @@ class PasswordResetTest(TestCase):
             password='OriginalPass',
         )
         signer = TimestampSigner()
-        token = signer.sign(user.pk)
+        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
         response = self.client.post(reverse('password_reset_form', kwargs={'token': token}), {
             'new_password1': 'ResetPass123',
             'new_password2': 'ResetPass123',
@@ -584,6 +590,53 @@ class PasswordResetTest(TestCase):
         self.assertEqual(response.status_code, 200)
         user.refresh_from_db()
         self.assertNotEqual(user.password, 'OriginalPass')
+
+    def test_password_reset_token_invalid_after_password_change(self):
+        user = User.objects.create_user(
+            username='tokeninval',
+            email='tokeninval@example.com',
+            password='OriginalPass123',
+        )
+        signer = TimestampSigner()
+        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
+        user.set_password('CompletelyDifferent456')
+        user.save()
+        response = self.client.get(reverse('password_reset_form', kwargs={'token': token}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Invalid')
+
+    def test_password_reset_token_rejected_after_using_reset(self):
+        user = User.objects.create_user(
+            username='usedreset',
+            email='usedreset@example.com',
+            password='OriginalPass123',
+        )
+        signer = TimestampSigner()
+        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
+        self.client.post(reverse('password_reset_form', kwargs={'token': token}), {
+            'new_password1': 'NewPass456',
+            'new_password2': 'NewPass456',
+        })
+        response = self.client.post(reverse('password_reset_form', kwargs={'token': token}), {
+            'new_password1': 'AnotherPass789',
+            'new_password2': 'AnotherPass789',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Invalid')
+        user.refresh_from_db()
+        self.assertTrue(user.check_password('NewPass456'))
+
+    def test_password_reset_old_format_token_rejected(self):
+        user = User.objects.create_user(
+            username='oldformat',
+            email='oldformat@example.com',
+            password='SomePass123',
+        )
+        signer = TimestampSigner()
+        token = signer.sign(user.pk)
+        response = self.client.get(reverse('password_reset_form', kwargs={'token': token}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Invalid')
 
 
 @tag("integration")

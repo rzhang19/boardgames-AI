@@ -1,3 +1,5 @@
+import hashlib
+
 from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.core import mail
@@ -7,6 +9,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 User = get_user_model()
+
+
+def _password_state_component(user):
+    return hashlib.sha256(user.password.encode()).hexdigest()[:16]
 
 
 def _build_formset_data(users, overrides=None):
@@ -431,7 +437,7 @@ class UserSetPasswordTest(TestCase):
             email='invited@example.com', email_verified=False
         )
         signer = TimestampSigner()
-        token = signer.sign(user.pk)
+        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
         response = self.client.get(reverse('user_set_password', kwargs={'token': token}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Set Your Password')
@@ -442,7 +448,7 @@ class UserSetPasswordTest(TestCase):
             email='invited@example.com', email_verified=False
         )
         signer = TimestampSigner()
-        token = signer.sign(user.pk)
+        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
         response = self.client.post(reverse('user_set_password', kwargs={'token': token}), {
             'new_password1': 'Str0ngP@ss123',
             'new_password2': 'Str0ngP@ss123',
@@ -464,13 +470,37 @@ class UserSetPasswordTest(TestCase):
             email='invited@example.com', email_verified=False
         )
         signer = TimestampSigner()
-        token = signer.sign(user.pk)
+        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
         response = self.client.post(reverse('user_set_password', kwargs={'token': token}), {
             'new_password1': 'Str0ngP@ss123',
             'new_password2': 'DifferentP@ss456',
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Set Your Password')
+
+    def test_set_password_token_invalid_after_password_change(self):
+        user = User.objects.create_user(
+            username='tokeninval2', password='!',
+            email='tokeninval2@example.com', email_verified=False
+        )
+        signer = TimestampSigner()
+        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
+        user.set_password('SomeNewPass123')
+        user.save()
+        response = self.client.get(reverse('user_set_password', kwargs={'token': token}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Invalid Link')
+
+    def test_set_password_old_format_token_rejected(self):
+        user = User.objects.create_user(
+            username='oldsetpw', password='!',
+            email='oldsetpw@example.com', email_verified=False
+        )
+        signer = TimestampSigner()
+        token = signer.sign(user.pk)
+        response = self.client.get(reverse('user_set_password', kwargs={'token': token}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Invalid Link')
 
 
 @tag("integration")
