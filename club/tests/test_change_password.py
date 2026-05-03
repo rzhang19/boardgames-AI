@@ -206,14 +206,9 @@ class PasswordRequirementsDisplayTest(TestCase):
             username='setuser', email='set@example.com',
             password='SomePass123',
         )
-        from django.core.signing import TimestampSigner
-        import hashlib
+        from club.views import generate_password_token
 
-        def _pw_state(u):
-            return hashlib.sha256(u.password.encode()).hexdigest()[:16]
-
-        signer = TimestampSigner()
-        token = signer.sign(f"{user.pk}|{_pw_state(user)}")
+        token = generate_password_token(user)
         response = self.client.get(reverse('user_set_password', kwargs={'token': token}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'at least 8 characters')
@@ -225,15 +220,10 @@ class PasswordRequirementsDisplayTest(TestCase):
             username='resetuser', email='reset@example.com',
             password='SomePass123',
         )
-        from django.core.signing import TimestampSigner
-        import hashlib
-
-        def _pw_state(user):
-            return hashlib.sha256(user.password.encode()).hexdigest()[:16]
+        from club.views import generate_password_token
 
         user = User.objects.get(username='resetuser')
-        signer = TimestampSigner()
-        token = signer.sign(f"{user.pk}|{_pw_state(user)}")
+        token = generate_password_token(user)
         response = self.client.get(reverse('password_reset_form', kwargs={'token': token}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'at least 8 characters')

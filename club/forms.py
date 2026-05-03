@@ -6,7 +6,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth.password_validation import validate_password
-from django.db.models import Q
 from django.utils import timezone
 
 from .models import BoardGame, Event, EventAttendance, EventInvite, Group, GroupMembership, PasswordHistory, PrivateEventCreationLog, VerifiedIcon, Vote
@@ -92,19 +91,11 @@ class PasswordResetForm(forms.Form):
         widget=forms.TextInput(attrs={'autofocus': True}),
     )
 
-    def clean(self):
-        cleaned_data = super().clean()
-        email_or_username = cleaned_data.get('email_or_username', '').strip()
-        if not email_or_username:
+    def clean_email_or_username(self):
+        value = self.cleaned_data.get('email_or_username', '').strip()
+        if not value:
             raise forms.ValidationError('Please enter your email or username.')
-
-        user = User.objects.filter(Q(email=email_or_username) | Q(username=email_or_username)).first()
-        if not user:
-            raise forms.ValidationError('No account found with that email or username.')
-        if not user.email:
-            raise forms.ValidationError('This account has no email address. Please contact an admin.')
-        cleaned_data['user'] = user
-        return cleaned_data
+        return value
 
 
 class RegistrationForm(UserCreationForm):

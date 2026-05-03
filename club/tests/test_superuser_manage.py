@@ -436,8 +436,8 @@ class UserSetPasswordTest(TestCase):
             username='invited', password='!',
             email='invited@example.com', email_verified=False
         )
-        signer = TimestampSigner()
-        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
+        from club.views import generate_password_token
+        token = generate_password_token(user)
         response = self.client.get(reverse('user_set_password', kwargs={'token': token}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Set Your Password')
@@ -447,8 +447,8 @@ class UserSetPasswordTest(TestCase):
             username='invited', password='!',
             email='invited@example.com', email_verified=False
         )
-        signer = TimestampSigner()
-        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
+        from club.views import generate_password_token
+        token = generate_password_token(user)
         response = self.client.post(reverse('user_set_password', kwargs={'token': token}), {
             'new_password1': 'Str0ngP@ss123',
             'new_password2': 'Str0ngP@ss123',
@@ -469,8 +469,8 @@ class UserSetPasswordTest(TestCase):
             username='invited', password='!',
             email='invited@example.com', email_verified=False
         )
-        signer = TimestampSigner()
-        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
+        from club.views import generate_password_token
+        token = generate_password_token(user)
         response = self.client.post(reverse('user_set_password', kwargs={'token': token}), {
             'new_password1': 'Str0ngP@ss123',
             'new_password2': 'DifferentP@ss456',
@@ -483,8 +483,8 @@ class UserSetPasswordTest(TestCase):
             username='tokeninval2', password='!',
             email='tokeninval2@example.com', email_verified=False
         )
-        signer = TimestampSigner()
-        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
+        from club.views import generate_password_token
+        token = generate_password_token(user)
         user.set_password('SomeNewPass123')
         user.save()
         response = self.client.get(reverse('user_set_password', kwargs={'token': token}))

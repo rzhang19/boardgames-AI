@@ -538,6 +538,9 @@ class PasswordHistoryTest(TestCase):
         self.assertEqual(response.status_code, 302)
 
 
+GENERIC_MESSAGE = 'If an account with that email or username exists, a reset link has been sent.'
+
+
 @tag("integration")
 class PasswordResetTest(TestCase):
 
@@ -555,8 +558,143 @@ class PasswordResetTest(TestCase):
             'email_or_username': 'reset@example.com',
         })
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'sent')
+        self.assertContains(response, GENERIC_MESSAGE)
+        self.assertNotContains(response, 'reset@example.com')
         self.assertEqual(len(mail.outbox), 1)
+
+    def test_password_reset_with_valid_username_sends_link(self):
+        User.objects.create_user(
+            username='resetuser2',
+            email='reset2@example.com',
+            password='SomePassword123',
+        )
+        response = self.client.post(reverse('password_reset'), {
+            'email_or_username': 'resetuser2',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, GENERIC_MESSAGE)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_password_reset_nonexistent_email_shows_generic_message(self):
+        response = self.client.post(reverse('password_reset'), {
+            'email_or_username': 'nonexistent@example.com',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, GENERIC_MESSAGE)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_password_reset_nonexistent_username_shows_generic_message(self):
+        response = self.client.post(reverse('password_reset'), {
+            'email_or_username': 'ghostuser',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, GENERIC_MESSAGE)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_password_reset_user_without_email_shows_generic_message(self):
+        User.objects.create_user(
+            username='noemailuser',
+            password='SomePassword123',
+        )
+        response = self.client.post(reverse('password_reset'), {
+            'email_or_username': 'noemailuser',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, GENERIC_MESSAGE)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_password_reset_does_not_reveal_email(self):
+        User.objects.create_user(
+            username='secretuser',
+            email='secret@example.com',
+            password='SomePassword123',
+        )
+        response = self.client.post(reverse('password_reset'), {
+            'email_or_username': 'secretuser',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'secret@example.com')
+
+    def test_password_reset_same_response_for_existing_and_nonexistent(self):
+        User.objects.create_user(
+            username='existsuser',
+            email='exists@example.com',
+            password='SomePassword123',
+        )
+        response_existing = self.client.post(reverse('password_reset'), {
+            'email_or_username': 'existsuser',
+        })
+        response_nonexistent = self.client.post(reverse('password_reset'), {
+            'email_or_username': 'doesnotexist',
+        })
+        self.assertEqual(response_existing.status_code, response_nonexistent.status_code)
+        self.assertContains(response_existing, GENERIC_MESSAGE)
+        self.assertContains(response_nonexistent, GENERIC_MESSAGE)
+
+    def test_password_reset_rate_limit_prevents_rapid_resend(self):
+        User.objects.create_user(
+            username='ratelimituser',
+            email='ratelimit@example.com',
+            password='SomePassword123',
+        )
+        self.client.post(reverse('password_reset'), {
+            'email_or_username': 'ratelimituser',
+        })
+        self.assertEqual(len(mail.outbox), 1)
+        response = self.client.post(reverse('password_reset'), {
+            'email_or_username': 'ratelimituser',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, GENERIC_MESSAGE)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_password_reset_rate_limit_applies_to_nonexistent_user(self):
+        self.client.post(reverse('password_reset'), {
+            'email_or_username': 'fake@example.com',
+        })
+        self.assertEqual(len(mail.outbox), 0)
+        response = self.client.post(reverse('password_reset'), {
+            'email_or_username': 'fake@example.com',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, GENERIC_MESSAGE)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_password_reset_resend_after_rate_limit_sends_new_email(self):
+        import time
+        from django.core.cache import cache
+        User.objects.create_user(
+            username='resenduser',
+            email='resend@example.com',
+            password='SomePassword123',
+        )
+        self.client.post(reverse('password_reset'), {
+            'email_or_username': 'resenduser',
+        })
+        self.assertEqual(len(mail.outbox), 1)
+        cache.delete('password_reset_rl_resenduser')
+        self.client.post(reverse('password_reset'), {
+            'email_or_username': 'resenduser',
+        })
+        self.assertEqual(len(mail.outbox), 2)
+
+    def test_password_reset_old_token_invalidated_on_resend(self):
+        User.objects.create_user(
+            username='tokeninvuser',
+            email='tokeninv@example.com',
+            password='SomePassword123',
+            reset_token_version=0,
+        )
+        from django.core.cache import cache
+        user = User.objects.get(username='tokeninvuser')
+        from club.views import generate_password_token
+        old_token = generate_password_token(user)
+        user.reset_token_version = 1
+        user.save(update_fields=['reset_token_version'])
+        cache.delete('password_reset_rl_tokeninvuser')
+        response = self.client.get(reverse('password_reset_form', kwargs={'token': old_token}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Invalid')
 
     def test_password_reset_form_valid_token(self):
         user = User.objects.create_user(
@@ -564,8 +702,8 @@ class PasswordResetTest(TestCase):
             email='form@example.com',
             password='OldPass123',
         )
-        signer = TimestampSigner()
-        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
+        from club.views import generate_password_token
+        token = generate_password_token(user)
         response = self.client.get(reverse('password_reset_form', kwargs={'token': token}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'New password')
@@ -581,8 +719,8 @@ class PasswordResetTest(TestCase):
             email='resetpass@example.com',
             password='OriginalPass',
         )
-        signer = TimestampSigner()
-        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
+        from club.views import generate_password_token
+        token = generate_password_token(user)
         response = self.client.post(reverse('password_reset_form', kwargs={'token': token}), {
             'new_password1': 'ResetPass123',
             'new_password2': 'ResetPass123',
@@ -597,8 +735,8 @@ class PasswordResetTest(TestCase):
             email='tokeninval@example.com',
             password='OriginalPass123',
         )
-        signer = TimestampSigner()
-        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
+        from club.views import generate_password_token
+        token = generate_password_token(user)
         user.set_password('CompletelyDifferent456')
         user.save()
         response = self.client.get(reverse('password_reset_form', kwargs={'token': token}))
@@ -611,8 +749,8 @@ class PasswordResetTest(TestCase):
             email='usedreset@example.com',
             password='OriginalPass123',
         )
-        signer = TimestampSigner()
-        token = signer.sign(f"{user.pk}|{_password_state_component(user)}")
+        from club.views import generate_password_token
+        token = generate_password_token(user)
         self.client.post(reverse('password_reset_form', kwargs={'token': token}), {
             'new_password1': 'NewPass456',
             'new_password2': 'NewPass456',
@@ -654,7 +792,7 @@ class ProtectedUserTest(TestCase):
         self.assertContains(response, 'cannot have its password changed')
 
     @override_settings(PROTECTED_USERNAMES='protecteduser')
-    def test_protected_user_cannot_use_password_reset(self):
+    def test_protected_user_password_reset_shows_generic_message(self):
         User.objects.create_user(
             username='protecteduser',
             email='protected@example.com',
@@ -664,4 +802,6 @@ class ProtectedUserTest(TestCase):
             'email_or_username': 'protecteduser',
         })
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'cannot have its password reset')
+        self.assertContains(response, GENERIC_MESSAGE)
+        self.assertNotContains(response, 'cannot have its password reset')
+        self.assertEqual(len(mail.outbox), 0)

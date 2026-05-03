@@ -10,7 +10,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import PermissionDenied
 from django.core.mail import send_mail
 from django.core.signing import TimestampSigner
-from django.db.models import Q
+from django.db.models import F, Q
 from django.forms import formset_factory, modelformset_factory
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -94,7 +94,7 @@ def _password_state_component(user):
 
 def generate_password_token(user):
     signer = TimestampSigner()
-    return signer.sign(f"{user.pk}|{_password_state_component(user)}")
+    return signer.sign(f"{user.pk}|{_password_state_component(user)}|{user.reset_token_version}")
 
 
 def verify_password_token(token, max_age):
@@ -103,13 +103,21 @@ def verify_password_token(token, max_age):
         raw = signer.unsign(token, max_age=max_age)
     except Exception:
         return None
-    if '|' not in raw:
+    parts = raw.split('|')
+    if len(parts) != 3:
+        if len(parts) == 2:
+            return None
         return None
-    pk_str, pw_hash = raw.split('|', 1)
+    pk_str, pw_hash, version_str = parts
     user = User.objects.filter(pk=pk_str).first()
     if not user:
         return None
     if _password_state_component(user) != pw_hash:
+        return None
+    try:
+        if user.reset_token_version != int(version_str):
+            return None
+    except (ValueError, TypeError):
         return None
     return user
 from .timezone_utils import is_valid_timezone
@@ -423,29 +431,49 @@ def beta_access(request):
 
 
 def password_reset(request):
+    import random
+    import time
+
+    from django.core.cache import cache
+
+    submitted = False
+
     if request.method == 'POST':
         form = PasswordResetForm(request.POST)
         if form.is_valid():
-            user = form.cleaned_data['user']
-            if is_protected_user(user):
-                return render(request, 'registration/password_reset.html', {
-                    'form': form,
-                    'protected': True,
-                })
-            token = generate_password_token(user)
-            reset_url = request.build_absolute_uri(f'/password_reset/{token}/')
-            send_mail(
-                'Password Reset - Board Game Club',
-                f'Reset your password here: {reset_url}',
-                settings.DEFAULT_FROM_EMAIL,
-                [user.email],
-            )
-            return render(request, 'registration/password_reset_sent.html', {
-                'email': user.email,
-            })
+            email_or_username = form.cleaned_data['email_or_username']
+            cache_key = f'password_reset_rl_{email_or_username.lower()}'
+            submitted = True
+
+            if not cache.get(cache_key):
+                user = User.objects.filter(
+                    Q(email=email_or_username) | Q(username=email_or_username)
+                ).first()
+
+                if user and user.email and not is_protected_user(user):
+                    User.objects.filter(pk=user.pk).update(
+                        reset_token_version=F('reset_token_version') + 1
+                    )
+                    user.refresh_from_db()
+                    token = generate_password_token(user)
+                    reset_url = request.build_absolute_uri(f'/password_reset/{token}/')
+                    send_mail(
+                        'Password Reset - Board Game Club',
+                        f'Reset your password here: {reset_url}',
+                        settings.DEFAULT_FROM_EMAIL,
+                        [user.email],
+                    )
+
+                cache.set(cache_key, True, 120)
+
+            time.sleep(random.uniform(0.1, 0.3))
+        form = PasswordResetForm()
     else:
         form = PasswordResetForm()
-    return render(request, 'registration/password_reset.html', {'form': form})
+    return render(request, 'registration/password_reset.html', {
+        'form': form,
+        'submitted': submitted,
+    })
 
 
 def password_reset_form(request, token):
@@ -1929,7 +1957,6 @@ def notification_delete_selected(request):
 
 @login_required
 def group_list(request):
-    from django.db.models import Q
     tab = request.GET.get('tab', 'my')
     query = request.GET.get('q', '')
 
