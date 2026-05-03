@@ -1,9 +1,14 @@
+from datetime import timedelta
+
 from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from django.utils import timezone
 
 from club.models import BoardGame, Event, EventAttendance, Group, GroupMembership, Vote
 from club.borda import calculate_borda_scores
+
+FUTURE_DATE = timezone.now() + timedelta(days=30)
 
 User = get_user_model()
 
@@ -33,8 +38,8 @@ class VoteViewAccessTest(TestCase):
         _make_organizer(self.admin, self.group)
         _make_member(self.attendee, self.group)
         self.event = Event.objects.create(
-            title='Vote Event', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Vote Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.admin, group=self.group
         )
         EventAttendance.objects.create(user=self.attendee, event=self.event)
@@ -71,8 +76,8 @@ class VoteSubmissionTest(TestCase):
         _make_organizer(self.admin, self.group)
         _make_member(self.attendee, self.group)
         self.event = Event.objects.create(
-            title='Vote Event', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Vote Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.admin, group=self.group
         )
         EventAttendance.objects.create(user=self.attendee, event=self.event)
@@ -150,8 +155,8 @@ class BordaCountTest(TestCase):
         )
         self.group = Group.objects.create(name='Borda Group')
         self.event = Event.objects.create(
-            title='Borda Event', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Borda Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.admin, group=self.group
         )
         self.game1 = BoardGame.objects.create(name='Catan', owner=self.admin)
@@ -238,8 +243,8 @@ class EventResultsViewTest(TestCase):
         _make_organizer(self.admin, self.group)
         _make_member(self.user, self.group)
         self.event = Event.objects.create(
-            title='Results Event', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Results Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.admin, group=self.group
         )
         EventAttendance.objects.create(user=self.user, event=self.event)
@@ -280,8 +285,8 @@ class VoteVisibilityToggleTest(TestCase):
         self.group = Group.objects.create(name='Toggle Group')
         _make_organizer(self.admin, self.group)
         self.event = Event.objects.create(
-            title='Toggle Event', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Toggle Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.admin, group=self.group
         )
 

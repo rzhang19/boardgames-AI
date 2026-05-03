@@ -1,8 +1,13 @@
+from datetime import timedelta
+
 from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from django.utils import timezone
 
 from club.models import BoardGame, Event, EventAttendance, Group, GroupMembership, Vote
+
+FUTURE_DATE = timezone.now() + timedelta(days=30)
 
 User = get_user_model()
 
@@ -40,8 +45,8 @@ class GroupEventResultsGatingTest(TestCase):
         _make_group_organizer(self.group_org, self.group)
         _make_member(self.member, self.group)
         self.event = Event.objects.create(
-            title='Gated Event', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Gated Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.organizer, group=self.group
         )
         EventAttendance.objects.create(user=self.member, event=self.event)
@@ -123,8 +128,8 @@ class PrivateEventResultsGatingTest(TestCase):
             username='other', password='testpass123'
         )
         self.event = Event.objects.create(
-            title='Private Event', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Private Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.creator,
             privacy='public',
         )
@@ -180,8 +185,8 @@ class PrivateEventResultsGatingTest(TestCase):
             user=self.creator, group=group, role='admin'
         )
         group_event = Event.objects.create(
-            title='Group Event', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Group Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.creator, group=group,
         )
         self.client.login(username='creator', password='testpass123')
@@ -212,8 +217,8 @@ class EventResultsTemplateTest(TestCase):
         group = Group.objects.create(name='Template Group')
         _make_organizer(self.organizer, group)
         event = Event.objects.create(
-            title='Template Event', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Template Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.organizer, group=group,
         )
         self.client.login(username='organizer', password='testpass123')
@@ -231,8 +236,8 @@ class EventResultsTemplateTest(TestCase):
 
     def test_private_event_results_back_link_uses_private_url(self):
         event = Event.objects.create(
-            title='Private Template Event', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Private Template Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.organizer,
             privacy='public',
         )
@@ -250,8 +255,8 @@ class EventResultsTemplateTest(TestCase):
         _make_organizer(self.organizer, group)
         _make_member(self.member, group)
         event = Event.objects.create(
-            title='Hide Event', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Hide Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.organizer, group=group,
         )
         self.client.login(username='member', password='testpass123')
@@ -266,8 +271,8 @@ class EventResultsTemplateTest(TestCase):
         group = Group.objects.create(name='Show Results Group')
         _make_organizer(self.organizer, group)
         event = Event.objects.create(
-            title='Show Event', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Show Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.organizer, group=group,
         )
         self.client.login(username='organizer', password='testpass123')
@@ -280,8 +285,8 @@ class EventResultsTemplateTest(TestCase):
 
     def test_private_event_detail_hides_results_link_from_attendee(self):
         event = Event.objects.create(
-            title='Private Hide', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Private Hide', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.organizer,
             privacy='public',
         )
@@ -294,8 +299,8 @@ class EventResultsTemplateTest(TestCase):
 
     def test_private_event_detail_shows_results_link_to_creator(self):
         event = Event.objects.create(
-            title='Private Show', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Private Show', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.organizer,
             privacy='public',
         )
@@ -322,8 +327,8 @@ class EventVoteBackLinkTest(TestCase):
         _make_organizer(self.organizer, group)
         _make_member(self.attendee, group)
         event = Event.objects.create(
-            title='Vote Link Event', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Vote Link Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.organizer, group=group,
         )
         EventAttendance.objects.create(user=self.attendee, event=event)
@@ -342,8 +347,8 @@ class EventVoteBackLinkTest(TestCase):
 
     def test_private_event_vote_back_link_uses_private_url(self):
         event = Event.objects.create(
-            title='Private Vote Link', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Private Vote Link', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.organizer,
             privacy='public',
         )

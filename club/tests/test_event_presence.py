@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -7,6 +9,8 @@ from club.models import (
     BoardGame, Event, EventAttendance, EventPresence,
     Group, GroupMembership,
 )
+
+FUTURE_DATE = timezone.now() + timedelta(days=30)
 
 User = get_user_model()
 
@@ -33,8 +37,8 @@ class EventPresenceModelTest(TestCase):
         _make_organizer(self.admin, self.group)
         self.event = Event.objects.create(
             title='Presence Event',
-            date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=self.admin,
             group=self.group,
         )

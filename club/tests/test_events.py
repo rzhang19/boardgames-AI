@@ -7,6 +7,8 @@ from django.utils import timezone
 
 from club.models import Event, EventAttendance, Group, GroupMembership, Notification, SiteSettings
 
+FUTURE_DATE = timezone.now() + timedelta(days=30)
+
 User = get_user_model()
 
 
@@ -25,14 +27,14 @@ class EventListViewTest(TestCase):
         cls.group = Group.objects.create(name='Test Group')
         _make_organizer(cls.admin, cls.group)
         cls.event1 = Event.objects.create(
-            title='Friday Night', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Friday Night', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             location='Community Center', created_by=cls.admin,
             group=cls.group
         )
         cls.event2 = Event.objects.create(
-            title='Saturday Bash', date='2026-06-01T12:00:00Z',
-            voting_deadline='2026-06-01T12:00:00Z',
+            title='Saturday Bash', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=cls.admin, group=cls.group
         )
 
@@ -265,8 +267,8 @@ class EventDetailViewTest(TestCase):
         cls.group = Group.objects.create(name='Detail Group')
         _make_organizer(cls.admin, cls.group)
         cls.event = Event.objects.create(
-            title='Test Event', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='Test Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             location='Hall', description='A test event',
             created_by=cls.admin, group=cls.group
         )
@@ -310,8 +312,8 @@ class EventRSVPTest(TestCase):
         _make_organizer(cls.admin, cls.group)
         GroupMembership.objects.create(user=cls.user, group=cls.group, role='member')
         cls.event = Event.objects.create(
-            title='RSVP Event', date='2026-05-01T18:00:00Z',
-            voting_deadline='2026-05-01T18:00:00Z',
+            title='RSVP Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
             created_by=cls.admin, group=cls.group
         )
 
