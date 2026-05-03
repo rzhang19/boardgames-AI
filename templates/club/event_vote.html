@@ -47,6 +47,14 @@
 {% else %}
 <p>Rank the games you want to play. Rank 1 = top choice. Leave blank to skip a row.</p>
 
+{% if vote_errors %}
+<div class="form-errors">
+    {% for error in vote_errors %}
+    <p>{{ error }}</p>
+    {% endfor %}
+</div>
+{% endif %}
+
 <form method="post">
     {% csrf_token %}
     {{ formset.management_form }}

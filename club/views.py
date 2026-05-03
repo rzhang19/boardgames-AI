@@ -1402,6 +1402,52 @@ def event_edit(request, slug, pk):
     })
 
 
+def _validate_vote_submissions(post_data, games_qs):
+    entries = []
+    errors = []
+    try:
+        total_forms = int(post_data.get('form-TOTAL_FORMS', '0'))
+    except (ValueError, TypeError):
+        return [], ['Invalid form data.']
+    valid_game_ids = set(games_qs.values_list('pk', flat=True))
+    seen_ranks = set()
+    seen_games = set()
+    for i in range(total_forms):
+        game_id_raw = post_data.get(f'form-{i}-board_game', '').strip()
+        rank_raw = post_data.get(f'form-{i}-rank', '').strip()
+        if not game_id_raw and not rank_raw:
+            continue
+        if not game_id_raw or not rank_raw:
+            errors.append(f'Row {i + 1}: Both game and rank are required.')
+            continue
+        try:
+            game_id = int(game_id_raw)
+        except (ValueError, TypeError):
+            errors.append(f'Row {i + 1}: Invalid game selection.')
+            continue
+        try:
+            rank = int(rank_raw)
+        except (ValueError, TypeError):
+            errors.append(f'Row {i + 1}: Invalid rank value.')
+            continue
+        if rank < 1:
+            errors.append(f'Row {i + 1}: Rank must be a positive number.')
+            continue
+        if game_id not in valid_game_ids:
+            errors.append(f'Row {i + 1}: Selected game is not available for this event.')
+            continue
+        if rank in seen_ranks:
+            errors.append(f'Row {i + 1}: Duplicate rank {rank}.')
+            continue
+        if game_id in seen_games:
+            errors.append(f'Row {i + 1}: Duplicate game selection.')
+            continue
+        seen_ranks.add(rank)
+        seen_games.add(game_id)
+        entries.append((game_id, rank))
+    return entries, errors
+
+
 def event_vote(request, slug, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
@@ -1446,19 +1492,27 @@ def event_vote(request, slug, pk):
         })
 
     if request.method == 'POST':
+        entries, errors = _validate_vote_submissions(request.POST, games)
+        if errors:
+            VoteFormSet = formset_factory(VoteForm, extra=max(0, 3 - len(vote_data)))
+            formset = VoteFormSet(initial=vote_data if vote_data else [])
+            return render(request, 'club/event_vote.html', {
+                'event': event,
+                'formset': formset,
+                'games': games,
+                'vote_data': vote_data,
+                'voting_closed': False,
+                'mid_submit_closed': False,
+                'vote_errors': errors,
+            })
         Vote.objects.filter(user=request.user, event=event).delete()
-
-        total_forms = int(request.POST.get('form-TOTAL_FORMS', '0'))
-        for i in range(total_forms):
-            game_id = request.POST.get(f'form-{i}-board_game', '')
-            rank = request.POST.get(f'form-{i}-rank', '')
-            if game_id and rank:
-                Vote.objects.create(
-                    user=request.user,
-                    event=event,
-                    board_game_id=int(game_id),
-                    rank=int(rank),
-                )
+        for game_id, rank in entries:
+            Vote.objects.create(
+                user=request.user,
+                event=event,
+                board_game_id=game_id,
+                rank=rank,
+            )
         return redirect('event_detail', slug=event.group.slug, pk=event.pk)
 
     VoteFormSet = formset_factory(VoteForm, extra=max(0, 3 - len(vote_data)))
@@ -3146,18 +3200,27 @@ def private_event_vote(request, pk):
         })
 
     if request.method == 'POST':
+        entries, errors = _validate_vote_submissions(request.POST, games)
+        if errors:
+            VoteFormSet = formset_factory(VoteForm, extra=max(0, 3 - len(vote_data)))
+            formset = VoteFormSet(initial=vote_data if vote_data else [])
+            return render(request, 'club/event_vote.html', {
+                'event': event,
+                'formset': formset,
+                'games': games,
+                'vote_data': vote_data,
+                'voting_closed': False,
+                'mid_submit_closed': False,
+                'vote_errors': errors,
+            })
         Vote.objects.filter(user=request.user, event=event).delete()
-        total_forms = int(request.POST.get('form-TOTAL_FORMS', '0'))
-        for i in range(total_forms):
-            game_id = request.POST.get(f'form-{i}-board_game', '')
-            rank = request.POST.get(f'form-{i}-rank', '')
-            if game_id and rank:
-                Vote.objects.create(
-                    user=request.user,
-                    event=event,
-                    board_game_id=int(game_id),
-                    rank=int(rank),
-                )
+        for game_id, rank in entries:
+            Vote.objects.create(
+                user=request.user,
+                event=event,
+                board_game_id=game_id,
+                rank=rank,
+            )
         return redirect('private_event_detail', pk=event.pk)
 
     VoteFormSet = formset_factory(VoteForm, extra=max(0, 3 - len(vote_data)))
