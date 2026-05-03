@@ -10,6 +10,14 @@
         {% csrf_token %}
         {{ form.as_p }}
         <div class="alert alert-info">
+            <strong>Password requirements:</strong>
+            <ul>
+                <li>Must not be too similar to your username or email</li>
+                <li>Must be at least 8 characters long</li>
+                <li>Must contain at least one letter and one digit</li>
+            </ul>
+        </div>
+        <div class="alert alert-info">
             Adding an email lets you become a verified user. You can always add one later in Settings.
         </div>
         <button type="submit" class="btn btn-primary">Register</button>

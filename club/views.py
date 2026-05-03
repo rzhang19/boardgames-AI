@@ -14,12 +14,13 @@ from django.db.models import Q
 from django.forms import formset_factory, modelformset_factory
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
 from .bgg import fetch_bgg_game, fetch_bgg_weight, search_bgg, weight_to_complexity
 from .borda import calculate_borda_scores
 from .forms import (
-    BetaAccessForm, BoardGameForm, EventForm, EventInviteForm, EventSettingsForm,
+    BetaAccessForm, BoardGameForm, ChangePasswordForm, EventForm, EventInviteForm, EventSettingsForm,
     GroupCreateForm, GroupSettingsForm,
     PasswordResetForm, PrivateEventForm, RecurringEventForm, SetPasswordForm,
     SettingsForm, SuccessorPickForm,
@@ -660,6 +661,28 @@ def user_settings(request):
             ).values_list('blocked_id', flat=True),
         ).order_by('username'),
     })
+
+
+def change_password(request):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    if request.user.is_superuser:
+        raise PermissionDenied
+
+    if request.method == 'POST':
+        form = ChangePasswordForm(request.POST, user=request.user)
+        if form.is_valid():
+            old_password = request.user.password
+            new_password = form.cleaned_data['new_password1']
+            request.user.set_password(new_password)
+            request.user.save()
+            save_password_history(request.user, old_password)
+            login(request, request.user)
+            return redirect(reverse('user_settings') + '?password_changed=1')
+    else:
+        form = ChangePasswordForm(user=request.user)
+
+    return render(request, 'club/change_password.html', {'form': form})
 
 
 def save_timezone(request):

@@ -8,6 +8,7 @@ urlpatterns = [
     path('', views.dashboard, name='dashboard'),
     path('beta-access/', views.beta_access, name='beta_access'),
     path('settings/', views.user_settings, name='user_settings'),
+    path('settings/change-password/', views.change_password, name='change_password'),
     path('settings/add-icon/', views.add_verified_icon, name='add_verified_icon'),
     path('settings/delete-icon/<int:pk>/', views.delete_verified_icon, name='delete_verified_icon'),
     path('admin-settings/', views.admin_settings, name='admin_settings'),

@@ -5,6 +5,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.hashers import check_password
+from django.contrib.auth.password_validation import validate_password
 from django.db.models import Q
 from django.utils import timezone
 
@@ -386,6 +387,54 @@ class SettingsForm(forms.Form):
         if file and not validate_image_size(file):
             raise forms.ValidationError('Image must be smaller than 2MB.')
         return file
+
+
+class ChangePasswordForm(forms.Form):
+    current_password = forms.CharField(
+        label='Current password',
+        widget=forms.PasswordInput,
+    )
+    new_password1 = forms.CharField(
+        label='New password',
+        widget=forms.PasswordInput,
+    )
+    new_password2 = forms.CharField(
+        label='Confirm new password',
+        widget=forms.PasswordInput,
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+
+    def clean_current_password(self):
+        current = self.cleaned_data.get('current_password')
+        if self.user and not self.user.check_password(current):
+            raise forms.ValidationError('Your current password is incorrect.')
+        return current
+
+    def clean(self):
+        cleaned_data = super().clean()
+        pw1 = cleaned_data.get('new_password1')
+        pw2 = cleaned_data.get('new_password2')
+        if pw1 and pw2 and pw1 != pw2:
+            raise forms.ValidationError('Passwords do not match.')
+
+        if self.user and pw1:
+            try:
+                validate_password(pw1, user=self.user)
+            except forms.ValidationError as e:
+                self.add_error('new_password1', e)
+
+            history = PasswordHistory.objects.filter(
+                user=self.user
+            ).order_by('-created_at')[:5]
+            for record in history:
+                if check_password(pw1, record.password):
+                    raise forms.ValidationError(
+                        'Password cannot be one of the last 5 passwords you used.'
+                    )
+        return cleaned_data
 
 
 class BetaAccessForm(forms.Form):

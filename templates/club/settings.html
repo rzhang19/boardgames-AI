@@ -8,6 +8,12 @@
 <div class="form-container">
     <h1>Settings</h1>
 
+    {% if request.GET.password_changed == '1' %}
+    <div class="alert alert-success password-success-banner" id="password-success-banner">
+        Password successfully changed
+    </div>
+    {% endif %}
+
     <div class="card">
         <h2>Account</h2>
         <p><strong>Username:</strong> <a href="{% url 'public_profile' user.username %}">{{ user.username }}</a>{% verified_badge user %}</p>
@@ -19,6 +25,14 @@
             {% endif %}
         </p>
     </div>
+
+    {% if not user.is_superuser %}
+    <div class="card">
+        <h2>Password</h2>
+        <p>Change your account password.</p>
+        <a href="{% url 'change_password' %}" class="btn btn-primary">Change Password</a>
+    </div>
+    {% endif %}
 
     <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
@@ -248,6 +262,23 @@
             cropper.destroy();
             cropper = null;
         }
+    }
+})();
+</script>
+<script>
+(function() {
+    var banner = document.getElementById('password-success-banner');
+    if (banner) {
+        setTimeout(function() {
+            banner.style.transition = 'opacity 0.5s ease-out';
+            banner.style.opacity = '0';
+            setTimeout(function() {
+                banner.remove();
+                var url = new URL(window.location);
+                url.searchParams.delete('password_changed');
+                window.history.replaceState({}, '', url);
+            }, 500);
+        }, 3000);
     }
 })();
 </script>
