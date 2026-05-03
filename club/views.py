@@ -493,6 +493,10 @@ def public_profile(request, username):
     if not request.user.is_authenticated:
         return redirect('/login/')
     profile_user = get_object_or_404(User, username=username)
+
+    if profile_user.is_superuser and request.user != profile_user:
+        raise Http404
+
     is_own = request.user == profile_user
 
     context = {
@@ -2870,6 +2874,7 @@ def users_page(request):
                 pk__in=[request.user.pk] + list(blocked_ids),
             ).filter(
                 deleted_at__isnull=True,
+                is_superuser=False,
             ).order_by('username')
 
             query = request.GET.get('q', '').strip()

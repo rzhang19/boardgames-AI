@@ -121,11 +121,52 @@ class AllUsersTabTest(TestCase):
         usernames = [u.username for u in resp.context['page_obj'].object_list]
         self.assertNotIn('alice', usernames)
 
+    def test_superuser_excluded_from_list(self):
+        User.objects.create_superuser(username='sysop', password='SysPass123!')
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse('users_page') + '?tab=all')
+        usernames = [u.username for u in resp.context['page_obj'].object_list]
+        self.assertNotIn('sysop', usernames)
+
+    def test_superuser_excluded_from_search(self):
+        User.objects.create_superuser(username='sysop', password='SysPass123!')
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse('users_page') + '?tab=all&q=sysop')
+        usernames = [u.username for u in resp.context['page_obj'].object_list]
+        self.assertNotIn('sysop', usernames)
+
     def test_verified_badge_shown_for_verified_users(self):
         _create_verified_user('verified_bob')
         self.client.force_login(self.user)
         resp = self.client.get(reverse('users_page') + '?tab=all&q=verified_bob')
         self.assertContains(resp, 'verified-badge')
+
+
+# ---------------------------------------------------------------------------
+# Superuser profile hidden
+# ---------------------------------------------------------------------------
+
+@tag("integration")
+class SuperuserProfileHiddenTest(TestCase):
+
+    def test_superuser_profile_returns_404(self):
+        User.objects.create_superuser(username='sysop', password='SysPass123!')
+        user = _create_verified_user('alice')
+        self.client.force_login(user)
+        resp = self.client.get(reverse('public_profile', kwargs={'username': 'sysop'}))
+        self.assertEqual(resp.status_code, 404)
+
+    def test_superuser_profile_redirects_for_anonymous(self):
+        User.objects.create_superuser(username='sysop', password='SysPass123!')
+        resp = self.client.get(reverse('public_profile', kwargs={'username': 'sysop'}))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn('/login/', resp.url)
+
+    def test_superuser_can_view_own_profile(self):
+        su = User.objects.create_superuser(username='sysop', password='SysPass123!')
+        self.client.force_login(su)
+        resp = self.client.get(reverse('public_profile', kwargs={'username': 'sysop'}))
+        self.assertEqual(resp.status_code, 200)
 
 
 # ---------------------------------------------------------------------------
