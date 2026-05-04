@@ -5,7 +5,7 @@ from django.core.signing import TimestampSigner
 from django.test import TestCase, override_settings, tag
 from django.urls import reverse
 
-from club.models import SiteSettings
+from club.models import SiteSettings, VerifiedIcon
 
 User = get_user_model()
 
@@ -200,3 +200,98 @@ class GlobalVotingOffsetMovedToAdminSettingsTest(TestCase):
         self.client.login(username='regular', password='testpass123')
         response = self.client.get(reverse('user_settings'))
         self.assertNotContains(response, 'Default Voting Deadline Offset')
+
+
+@tag("integration")
+class SettingsRemoveEmailTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='testuser', password='testpass123',
+            email='test@example.com', email_verified=True,
+        )
+        self.client.login(username='testuser', password='testpass123')
+
+    def test_remove_email_clears_email(self):
+        response = self.client.post(reverse('remove_email'))
+        self.assertEqual(response.status_code, 302)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, '')
+
+    def test_remove_email_resets_email_verified(self):
+        self.client.post(reverse('remove_email'))
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.email_verified)
+
+    def test_remove_email_clears_verified_icon(self):
+        icon = VerifiedIcon.objects.create(name='Test Icon', image='test.png')
+        self.user.verified_icon = icon
+        self.user.save()
+        self.client.post(reverse('remove_email'))
+        self.user.refresh_from_db()
+        self.assertIsNone(self.user.verified_icon)
+
+    def test_remove_email_redirects_to_settings(self):
+        response = self.client.post(reverse('remove_email'))
+        self.assertRedirects(response, reverse('user_settings'))
+
+    def test_remove_email_requires_login(self):
+        self.client.logout()
+        response = self.client.post(reverse('remove_email'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_remove_email_requires_post(self):
+        response = self.client.get(reverse('remove_email'))
+        self.assertEqual(response.status_code, 405)
+
+    def test_remove_email_does_not_affect_other_fields(self):
+        self.user.timezone = 'America/New_York'
+        self.user.bio = 'Hello world'
+        self.user.show_games = False
+        self.user.save()
+        self.client.post(reverse('remove_email'))
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.timezone, 'America/New_York')
+        self.assertEqual(self.user.bio, 'Hello world')
+        self.assertFalse(self.user.show_games)
+
+
+@tag("integration")
+class SettingsRemoveEmailUITest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='testuser', password='testpass123',
+            email='test@example.com', email_verified=True,
+        )
+        self.no_email_user = User.objects.create_user(
+            username='noemail', password='testpass123',
+        )
+
+    def test_settings_shows_remove_button_when_email_present(self):
+        self.client.login(username='testuser', password='testpass123')
+        response = self.client.get(reverse('user_settings'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'remove-email-btn')
+
+    def test_settings_does_not_show_remove_button_when_no_email(self):
+        self.client.login(username='noemail', password='testpass123')
+        response = self.client.get(reverse('user_settings'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'remove-email-btn')
+
+    def test_settings_shows_email_display_when_email_present(self):
+        self.client.login(username='testuser', password='testpass123')
+        response = self.client.get(reverse('user_settings'))
+        self.assertContains(response, 'email-display-value')
+
+    def test_settings_shows_email_input_when_no_email(self):
+        self.client.login(username='noemail', password='testpass123')
+        response = self.client.get(reverse('user_settings'))
+        self.assertContains(response, 'id_email')
+
+    def test_settings_shows_remove_email_confirmation_modal(self):
+        self.client.login(username='testuser', password='testpass123')
+        response = self.client.get(reverse('user_settings'))
+        self.assertContains(response, 'remove-email-modal')

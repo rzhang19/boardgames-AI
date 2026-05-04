@@ -691,6 +691,20 @@ def user_settings(request):
     })
 
 
+@login_required
+def remove_email(request):
+    from django.http import HttpResponseNotAllowed
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+
+    user = request.user
+    user.email = ''
+    user.email_verified = False
+    user.verified_icon = None
+    user.save(update_fields=['email', 'email_verified', 'verified_icon'])
+    return redirect('user_settings')
+
+
 def change_password(request):
     if not request.user.is_authenticated:
         return redirect('/login/')

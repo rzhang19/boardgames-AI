@@ -2097,3 +2097,16 @@ thead th a:hover {
         transform: translateX(50px);
     }
 }
+
+.email-display-value {
+    font-size: 1rem;
+    margin: 0 0 8px;
+    padding: 8px 12px;
+    background: var(--surface-alt);
+    border-radius: var(--radius);
+    color: var(--text);
+}
+
+.email-actions {
+    margin-top: 8px;
+}

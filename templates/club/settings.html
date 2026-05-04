@@ -64,6 +64,15 @@
                 <div class="alert alert-success">{{ message }}</div>
                 {% endfor %}
             {% endif %}
+            {% if user.email %}
+            <div>
+                <p class="email-display-value">{{ user.email }}</p>
+                <p class="helptext">Your email is used for password recovery and account verification.</p>
+                <div class="email-actions">
+                    <button type="button" id="remove-email-btn" class="btn btn-secondary">Remove Email</button>
+                </div>
+            </div>
+            {% else %}
             <div>
                 <label for="id_email">Email address:</label>
                 {{ form.email }}
@@ -75,8 +84,25 @@
                 </ul>
                 {% endif %}
             </div>
-            <p class="helptext">Add or update your email to verify your account. Leave blank to remove your email.</p>
+            <p class="helptext">Add an email to enable password recovery and verify your account.</p>
+            {% endif %}
         </div>
+
+        {% if user.email %}
+        <div id="remove-email-modal" class="filter-modal-overlay">
+            <div class="modal-box filter-modal" style="padding:24px;">
+                <h3 style="margin:0 0 16px;">Remove Email</h3>
+                <p>Removing your email means you will <strong>not</strong> be able to reset your password if you forget it. Are you sure?</p>
+                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+                    <form method="post" action="{% url 'remove_email' %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger">Remove Email</button>
+                    </form>
+                    <button type="button" id="remove-email-cancel" class="btn btn-neutral">Cancel</button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <div class="card">
             <h2>Timezone</h2>
@@ -282,4 +308,33 @@
     }
 })();
 </script>
+{% if user.email %}
+<script>
+(function() {
+    var removeBtn = document.getElementById('remove-email-btn');
+    var removeModal = document.getElementById('remove-email-modal');
+    var cancelBtn = document.getElementById('remove-email-cancel');
+
+    if (removeBtn && removeModal) {
+        removeBtn.addEventListener('click', function() {
+            removeModal.classList.add('active');
+        });
+    }
+
+    if (cancelBtn && removeModal) {
+        cancelBtn.addEventListener('click', function() {
+            removeModal.classList.remove('active');
+        });
+    }
+
+    if (removeModal) {
+        removeModal.addEventListener('click', function(e) {
+            if (e.target === removeModal) {
+                removeModal.classList.remove('active');
+            }
+        });
+    }
+})();
+</script>
+{% endif %}
 {% endblock %}
