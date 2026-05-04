@@ -2,7 +2,7 @@ from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from club.models import BoardGame, Group, GroupMembership
+from club.models import BoardGame, Event, EventAttendance, Group, GroupMembership
 
 User = get_user_model()
 
@@ -1230,3 +1230,188 @@ class GameDetailVisibilityTest(TestCase):
             reverse('game_detail', kwargs={'pk': self.group_game.pk})
         )
         self.assertEqual(response.status_code, 200)
+
+
+@tag("integration")
+class GameListNonGroupEventVisibilityTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.utils import timezone as tz
+
+        cls.alice = User.objects.create_user(username='alice_lst', password='testpass123')
+        cls.bob = User.objects.create_user(username='bob_lst', password='testpass123')
+        cls.charlie = User.objects.create_user(username='charlie_lst', password='testpass123')
+        cls.dave = User.objects.create_user(username='dave_lst', password='testpass123')
+
+        cls.alice_game = BoardGame.objects.create(name='Alice List Game', owner=cls.alice)
+        cls.bob_game = BoardGame.objects.create(name='Bob List Game', owner=cls.bob)
+        cls.dave_game = BoardGame.objects.create(name='Dave List Game', owner=cls.dave)
+
+        cls.future_event = Event.objects.create(
+            title='Future List Event',
+            date=tz.now() + tz.timedelta(days=7),
+            voting_deadline=tz.now() + tz.timedelta(days=7),
+            created_by=cls.charlie,
+        )
+        EventAttendance.objects.create(user=cls.alice, event=cls.future_event)
+        EventAttendance.objects.create(user=cls.bob, event=cls.future_event)
+
+        cls.other_event = Event.objects.create(
+            title='Other List Event',
+            date=tz.now() + tz.timedelta(days=7),
+            voting_deadline=tz.now() + tz.timedelta(days=7),
+            created_by=cls.dave,
+        )
+
+    def test_co_attendee_game_appears_in_game_list(self):
+        """Given Alice and Bob are co-attendees of a future non-group event,
+        when Alice views the game list, then Bob's game is visible"""
+        self.client.login(username='alice_lst', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertContains(response, 'Bob List Game')
+
+    def test_organizer_game_appears_in_attendee_game_list(self):
+        """Given Charlie organizes a future non-group event that Alice attends,
+        when Alice views the game list, then Charlie's game is visible"""
+        BoardGame.objects.create(name='Charlie List Game', owner=self.charlie)
+        self.client.login(username='alice_lst', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertContains(response, 'Charlie List Game')
+
+    def test_non_co_attendee_game_not_in_game_list(self):
+        """Given Dave is not in any shared event with Alice,
+        when Alice views the game list, then Dave's game is not visible"""
+        self.client.login(username='alice_lst', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertNotContains(response, 'Dave List Game')
+
+
+@tag("integration")
+class GameDetailNonGroupEventVisibilityTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.utils import timezone as tz
+
+        cls.alice = User.objects.create_user(username='alice_evt', password='testpass123')
+        cls.bob = User.objects.create_user(username='bob_evt', password='testpass123')
+        cls.charlie = User.objects.create_user(username='charlie_evt', password='testpass123')
+        cls.dave = User.objects.create_user(username='dave_evt', password='testpass123')
+
+        cls.alice_game = BoardGame.objects.create(name='Alice Event Game', owner=cls.alice)
+        cls.bob_game = BoardGame.objects.create(name='Bob Event Game', owner=cls.bob)
+        cls.charlie_game = BoardGame.objects.create(name='Charlie Event Game', owner=cls.charlie)
+        cls.dave_game = BoardGame.objects.create(name='Dave Event Game', owner=cls.dave)
+
+        cls.future_event = Event.objects.create(
+            title='Future Event',
+            date=tz.now() + tz.timedelta(days=7),
+            voting_deadline=tz.now() + tz.timedelta(days=7),
+            created_by=cls.charlie,
+        )
+        EventAttendance.objects.create(user=cls.alice, event=cls.future_event)
+        EventAttendance.objects.create(user=cls.bob, event=cls.future_event)
+
+        cls.past_event = Event.objects.create(
+            title='Past Event',
+            date=tz.now() - tz.timedelta(days=1),
+            voting_deadline=tz.now() - tz.timedelta(days=1),
+            created_by=cls.charlie,
+        )
+        EventAttendance.objects.create(user=cls.alice, event=cls.past_event)
+        EventAttendance.objects.create(user=cls.dave, event=cls.past_event)
+
+        cls.inactive_event = Event.objects.create(
+            title='Inactive Event',
+            date=tz.now() + tz.timedelta(days=7),
+            voting_deadline=tz.now() + tz.timedelta(days=7),
+            created_by=cls.charlie,
+            is_active=False,
+        )
+        EventAttendance.objects.create(user=cls.alice, event=cls.inactive_event)
+        EventAttendance.objects.create(user=cls.dave, event=cls.inactive_event)
+
+        cls.other_event = Event.objects.create(
+            title='Other Event',
+            date=tz.now() + tz.timedelta(days=7),
+            voting_deadline=tz.now() + tz.timedelta(days=7),
+            created_by=cls.dave,
+        )
+        EventAttendance.objects.create(user=cls.charlie, event=cls.other_event)
+
+        cls.test_group = Group.objects.create(
+            name='Event Visibility Group', created_by=cls.alice,
+        )
+        GroupMembership.objects.create(user=cls.alice, group=cls.test_group, role='admin')
+        cls.group_event = Event.objects.create(
+            title='Group Event',
+            date=tz.now() + tz.timedelta(days=7),
+            voting_deadline=tz.now() + tz.timedelta(days=7),
+            created_by=cls.alice,
+            group=cls.test_group,
+        )
+        EventAttendance.objects.create(user=cls.dave, event=cls.group_event)
+
+    def test_co_attendees_can_view_each_others_games(self):
+        """Given Alice and Bob are co-attendees of a future non-group event,
+        when Alice views Bob's game detail, then 200"""
+        self.client.login(username='alice_evt', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.bob_game.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_organizer_can_view_attendee_game(self):
+        """Given Charlie organizes a future non-group event that Alice attends,
+        when Charlie views Alice's game detail, then 200"""
+        self.client.login(username='charlie_evt', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.alice_game.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_attendee_can_view_organizer_game(self):
+        """Given Alice attends a future non-group event organized by Charlie,
+        when Alice views Charlie's game detail, then 200"""
+        self.client.login(username='alice_evt', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.charlie_game.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_different_event_users_cannot_view_each_others_games(self):
+        """Given Dave is only in a different non-group event than Alice,
+        when Dave views Alice's game detail, then 404"""
+        self.client.login(username='dave_evt', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.alice_game.pk})
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_past_event_co_attendance_does_not_grant_visibility(self):
+        """Given Alice and Dave were co-attendees of a past non-group event,
+        when Dave views Alice's game detail, then 404"""
+        self.client.login(username='dave_evt', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.alice_game.pk})
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_inactive_event_co_attendance_does_not_grant_visibility(self):
+        """Given Alice and Dave are co-attendees of an inactive non-group event,
+        when Dave views Alice's game detail, then 404"""
+        self.client.login(username='dave_evt', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.alice_game.pk})
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_group_event_co_attendance_does_not_grant_visibility(self):
+        """Given Dave attends a group event with Alice but is not a group member,
+        when Dave views Alice's game detail, then 404"""
+        self.client.login(username='dave_evt', password='testpass123')
+        response = self.client.get(
+            reverse('game_detail', kwargs={'pk': self.alice_game.pk})
+        )
+        self.assertEqual(response.status_code, 404)

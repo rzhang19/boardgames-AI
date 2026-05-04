@@ -3,7 +3,7 @@ from django.core.exceptions import PermissionDenied
 from django.utils import timezone
 from datetime import timedelta
 
-from club.models import BoardGame, GroupCreationLog, GroupMembership, PrivateEventCreationLog, SiteSettings
+from club.models import BoardGame, Event, EventAttendance, GroupCreationLog, GroupMembership, PrivateEventCreationLog, SiteSettings
 
 
 def is_group_admin(user, group):
@@ -62,16 +62,51 @@ def can_view_game(user, game):
     user_group_ids = set(GroupMembership.objects.filter(
         user=user,
     ).values_list('group_id', flat=True))
-    if not user_group_ids:
-        return False
-    if game.group_id and game.group_id in user_group_ids:
-        return True
-    if game.owner_id and GroupMembership.objects.filter(
-        user_id=game.owner_id,
-        group_id__in=user_group_ids,
-        role__in=['admin', 'organizer', 'member'],
-    ).exists():
-        return True
+    if user_group_ids:
+        if game.group_id and game.group_id in user_group_ids:
+            return True
+        if game.owner_id and GroupMembership.objects.filter(
+            user_id=game.owner_id,
+            group_id__in=user_group_ids,
+            role__in=['admin', 'organizer', 'member'],
+        ).exists():
+            return True
+    if game.owner_id:
+        user_event_ids = set()
+        user_event_ids.update(EventAttendance.objects.filter(
+            user=user,
+            event__group_id__isnull=True,
+            event__is_active=True,
+            event__date__gt=timezone.now(),
+        ).values_list('event_id', flat=True))
+        user_event_ids.update(Event.objects.filter(
+            created_by=user,
+            group_id__isnull=True,
+            is_active=True,
+            date__gt=timezone.now(),
+        ).values_list('pk', flat=True))
+        user_event_ids.update(Event.objects.filter(
+            additional_organizers=user,
+            group_id__isnull=True,
+            is_active=True,
+            date__gt=timezone.now(),
+        ).values_list('pk', flat=True))
+        if user_event_ids:
+            if EventAttendance.objects.filter(
+                user_id=game.owner_id,
+                event_id__in=user_event_ids,
+            ).exists():
+                return True
+            if Event.objects.filter(
+                pk__in=user_event_ids,
+                created_by_id=game.owner_id,
+            ).exists():
+                return True
+            if Event.objects.filter(
+                pk__in=user_event_ids,
+                additional_organizers__id=game.owner_id,
+            ).exists():
+                return True
     return False
 
 

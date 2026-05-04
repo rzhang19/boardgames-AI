@@ -920,6 +920,41 @@ def game_list(request):
             user=request.user,
         ).values_list('group_id', flat=True))
 
+        event_user_ids = set()
+        user_event_ids = set()
+        user_event_ids.update(EventAttendance.objects.filter(
+            user=request.user,
+            event__group_id__isnull=True,
+            event__is_active=True,
+            event__date__gt=timezone.now(),
+        ).values_list('event_id', flat=True))
+        user_event_ids.update(Event.objects.filter(
+            created_by=request.user,
+            group_id__isnull=True,
+            is_active=True,
+            date__gt=timezone.now(),
+        ).values_list('pk', flat=True))
+        user_event_ids.update(Event.objects.filter(
+            additional_organizers=request.user,
+            group_id__isnull=True,
+            is_active=True,
+            date__gt=timezone.now(),
+        ).values_list('pk', flat=True))
+        if user_event_ids:
+            event_user_ids = set(
+                EventAttendance.objects.filter(event_id__in=user_event_ids)
+                .values_list('user_id', flat=True)
+            )
+            event_user_ids.update(
+                Event.objects.filter(pk__in=user_event_ids)
+                .values_list('created_by_id', flat=True)
+            )
+            event_user_ids.update(
+                get_user_model().objects.filter(
+                    co_organized_events__pk__in=user_event_ids,
+                ).values_list('pk', flat=True)
+            )
+
         base_games = BoardGame.objects.select_related('owner', 'group').filter(
             Q(owner=request.user)
             | Q(group_id__in=user_group_ids)
@@ -927,6 +962,7 @@ def game_list(request):
                 owner__membership__group_id__in=user_group_ids,
                 owner__membership__role__in=['admin', 'organizer', 'member'],
             )
+            | Q(owner_id__in=event_user_ids)
         ).distinct()
 
     visible_owners = User.objects.filter(
