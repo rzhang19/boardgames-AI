@@ -612,6 +612,7 @@ def user_settings(request):
             new_show_games = form.cleaned_data.get('show_games', True)
             new_show_events = form.cleaned_data.get('show_events', True)
             new_show_date_joined = form.cleaned_data.get('show_date_joined', True)
+            new_theme = form.cleaned_data.get('theme', 'system')
             user = request.user
 
             email_changed = new_email != user.email
@@ -625,6 +626,7 @@ def user_settings(request):
                 or new_show_events != user.show_events
                 or new_show_date_joined != user.show_date_joined
             )
+            theme_changed = new_theme != user.theme
 
             if email_changed:
                 user.email = new_email
@@ -655,7 +657,10 @@ def user_settings(request):
             user.show_events = new_show_events
             user.show_date_joined = new_show_date_joined
 
-            if email_changed or tz_changed or icon_changed or bio_changed or new_picture or privacy_changed:
+            if theme_changed:
+                user.theme = new_theme
+
+            if email_changed or tz_changed or icon_changed or bio_changed or new_picture or privacy_changed or theme_changed:
                 user.save()
                 if email_changed and new_email:
                     signer = TimestampSigner()
@@ -678,6 +683,7 @@ def user_settings(request):
             'show_games': request.user.show_games,
             'show_events': request.user.show_events,
             'show_date_joined': request.user.show_date_joined,
+            'theme': request.user.theme or 'system',
         })
 
     return render(request, 'club/settings.html', {
@@ -703,6 +709,21 @@ def remove_email(request):
     user.verified_icon = None
     user.save(update_fields=['email', 'email_verified', 'verified_icon'])
     return redirect('user_settings')
+
+
+@login_required
+def toggle_theme(request):
+    from django.http import HttpResponseNotAllowed, JsonResponse
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+
+    theme = request.POST.get('theme', '')
+    if theme not in ('light', 'dark', 'system'):
+        return JsonResponse({'error': 'Invalid theme'}, status=400)
+
+    request.user.theme = theme
+    request.user.save(update_fields=['theme'])
+    return JsonResponse({'theme': theme})
 
 
 def change_password(request):

@@ -120,6 +120,25 @@
             <p class="helptext">Dates and times across the site will be displayed in your selected timezone.</p>
         </div>
 
+        <div class="card">
+            <h2>Theme</h2>
+            <div class="theme-options">
+                <label class="privacy-toggle">
+                    <input type="radio" name="theme" value="light" {% if form.theme.value == "light" %}checked{% endif %}>
+                    <span>Light</span>
+                </label>
+                <label class="privacy-toggle">
+                    <input type="radio" name="theme" value="dark" {% if form.theme.value == "dark" %}checked{% endif %}>
+                    <span>Dark</span>
+                </label>
+                <label class="privacy-toggle">
+                    <input type="radio" name="theme" value="system" {% if form.theme.value == "system" %}checked{% endif %}>
+                    <span>System</span>
+                </label>
+            </div>
+            <p class="helptext">Choose your preferred appearance. "System" follows your device settings.</p>
+        </div>
+
         <div class="card verified-icon-picker{% if not user.email_verified %} disabled{% endif %}">
             <h2>Verified Icon</h2>
             {% if not user.email_verified %}

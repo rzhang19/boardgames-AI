@@ -2110,3 +2110,79 @@ thead th a:hover {
 .email-actions {
     margin-top: 8px;
 }
+
+[data-applied-theme="dark"] {
+    --bg: #111827;
+    --surface: #1f2937;
+    --surface-alt: #1f2937;
+    --nav-bg: #0f172a;
+    --nav-text: #e2e8f0;
+    --text: #f3f4f6;
+    --text-light: #9ca3af;
+    --text-muted: #9ca3af;
+    --border: #374151;
+    --border-focus: #3b82f6;
+    --primary-bg: #1e3a5f;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-lg: 0 4px 6px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+[data-applied-theme="dark"] input,
+[data-applied-theme="dark"] select,
+[data-applied-theme="dark"] textarea {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border);
+}
+
+[data-applied-theme="dark"] table {
+    border-color: var(--border);
+}
+
+[data-applied-theme="dark"] .card {
+    background: var(--surface);
+    border-color: var(--border);
+}
+
+[data-applied-theme="dark"] .toast-success {
+    background: #065f46;
+    color: #d1fae5;
+}
+
+[data-applied-theme="dark"] .badge-admin {
+    background: #1e3a5f;
+    color: #93c5fd;
+}
+
+[data-applied-theme="dark"] .alert-success {
+    background: #065f46;
+    color: #d1fae5;
+}
+
+[data-applied-theme="dark"] .view-only-banner {
+    background: #78350f;
+    color: #fef3c7;
+}
+
+.nav-theme-toggle {
+    background: none;
+    border: none;
+    color: var(--nav-text);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: var(--radius);
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+}
+
+.nav-theme-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 600px) {
+    .nav-theme-toggle {
+        display: none;
+    }
+}

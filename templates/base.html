@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="{{ user_theme }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -39,6 +39,7 @@
                 {% endif %}
             </a>
             <a href="{% url 'user_settings' %}" class="nav-settings">&#9881;</a>
+            <button class="nav-theme-toggle" id="theme-toggle-btn" title="Toggle theme">&#9789;</button>
             <form method="post" action="{% url 'logout' %}" style="display:inline;">
                 {% csrf_token %}
                 <button type="submit">Logout</button>
@@ -162,5 +163,76 @@
     })();
     </script>
     {% block extra_script %}{% endblock %}
+{% if user.is_authenticated %}
+<script id="theme-toggle-script">
+(function() {
+    function getStoredTheme() {
+        return document.documentElement.getAttribute('data-theme') || 'system';
+    }
+
+    function resolveTheme(theme) {
+        if (theme === 'system') {
+            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        return theme;
+    }
+
+    function applyTheme() {
+        var theme = getStoredTheme();
+        var resolved = resolveTheme(theme);
+        document.documentElement.setAttribute('data-applied-theme', resolved);
+        updateToggleIcon(resolved);
+    }
+
+    function updateToggleIcon(resolved) {
+        var btn = document.getElementById('theme-toggle-btn');
+        if (!btn) return;
+        if (resolved === 'dark') {
+            btn.innerHTML = '&#9788;';
+            btn.title = 'Switch to light mode';
+        } else {
+            btn.innerHTML = '&#9789;';
+            btn.title = 'Switch to dark mode';
+        }
+    }
+
+    function cycleTheme(current) {
+        if (current === 'system') return 'dark';
+        if (current === 'dark') return 'light';
+        return 'system';
+    }
+
+    applyTheme();
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+        if (getStoredTheme() === 'system') {
+            applyTheme();
+        }
+    });
+
+    var btn = document.getElementById('theme-toggle-btn');
+    if (btn) {
+        btn.addEventListener('click', function() {
+            var current = getStoredTheme();
+            var newTheme = cycleTheme(current);
+            document.documentElement.setAttribute('data-theme', newTheme);
+            applyTheme();
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '{% url "toggle_theme" %}', true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.setRequestHeader('X-CSRFToken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+            xhr.send('theme=' + encodeURIComponent(newTheme));
+        });
+    }
+})();
+</script>
+{% else %}
+<script>
+(function() {
+    var resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-applied-theme', resolved);
+})();
+</script>
+{% endif %}
 </body>
 </html>

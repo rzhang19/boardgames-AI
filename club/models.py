@@ -76,6 +76,11 @@ class User(AbstractUser):
     must_change_password = models.BooleanField(default=False)
     reset_token_version = models.PositiveIntegerField(default=0)
     group_creation_override = models.PositiveIntegerField(default=0)
+    theme = models.CharField(
+        max_length=10,
+        choices=[('light', 'Light'), ('dark', 'Dark'), ('system', 'System')],
+        default='system',
+    )
     is_view_only = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
     deleted_by = models.ForeignKey(

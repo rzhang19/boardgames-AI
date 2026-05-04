@@ -26,3 +26,9 @@ def view_only_status(request):
             and getattr(request.user, 'is_view_only', False)
         ),
     }
+
+
+def user_theme(request):
+    if request.user.is_authenticated:
+        return {'user_theme': request.user.theme}
+    return {'user_theme': 'system'}

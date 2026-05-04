@@ -75,6 +75,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'club.context_processors.unread_notification_count',
                 'club.context_processors.view_only_status',
+                'club.context_processors.user_theme',
             ],
         },
     },
