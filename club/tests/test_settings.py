@@ -295,3 +295,57 @@ class SettingsRemoveEmailUITest(TestCase):
         self.client.login(username='testuser', password='testpass123')
         response = self.client.get(reverse('user_settings'))
         self.assertContains(response, 'remove-email-modal')
+
+
+@tag("integration")
+class SettingsShowInSearchTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='testuser', password='testpass123',
+        )
+        self.client.login(username='testuser', password='testpass123')
+
+    def test_show_in_search_defaults_to_true(self):
+        self.assertTrue(self.user.show_in_search)
+
+    def test_settings_page_has_show_in_search_checkbox(self):
+        response = self.client.get(reverse('user_settings'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="show_in_search"')
+
+    def test_show_in_search_unchecked_saves_as_false(self):
+        self.user.show_in_search = True
+        self.user.save()
+        self.client.post(reverse('user_settings'), {
+            'timezone': 'UTC',
+        })
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.show_in_search)
+
+    def test_show_in_search_checked_saves_as_true(self):
+        self.user.show_in_search = False
+        self.user.save()
+        self.client.post(reverse('user_settings'), {
+            'show_in_search': 'on',
+            'timezone': 'UTC',
+        })
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.show_in_search)
+
+    def test_show_in_search_unchanged_when_true(self):
+        self.client.post(reverse('user_settings'), {
+            'show_in_search': 'on',
+            'timezone': 'UTC',
+        })
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.show_in_search)
+
+    def test_show_in_search_unchanged_when_false(self):
+        self.user.show_in_search = False
+        self.user.save()
+        self.client.post(reverse('user_settings'), {
+            'timezone': 'UTC',
+        })
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.show_in_search)

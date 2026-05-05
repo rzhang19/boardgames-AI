@@ -76,6 +76,7 @@ class User(AbstractUser):
     show_games = models.BooleanField(default=True)
     show_events = models.BooleanField(default=True)
     show_date_joined = models.BooleanField(default=True)
+    show_in_search = models.BooleanField(default=True)
     must_change_password = models.BooleanField(default=False)
     reset_token_version = models.PositiveIntegerField(default=0)
     group_creation_override = models.PositiveIntegerField(default=0)

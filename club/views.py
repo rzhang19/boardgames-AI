@@ -613,6 +613,7 @@ def user_settings(request):
             new_show_games = form.cleaned_data.get('show_games', True)
             new_show_events = form.cleaned_data.get('show_events', True)
             new_show_date_joined = form.cleaned_data.get('show_date_joined', True)
+            new_show_in_search = form.cleaned_data.get('show_in_search', True)
             new_theme = form.cleaned_data.get('theme', 'system')
             user = request.user
 
@@ -626,6 +627,7 @@ def user_settings(request):
                 new_show_games != user.show_games
                 or new_show_events != user.show_events
                 or new_show_date_joined != user.show_date_joined
+                or new_show_in_search != user.show_in_search
             )
             theme_changed = new_theme != user.theme
 
@@ -657,6 +659,7 @@ def user_settings(request):
             user.show_games = new_show_games
             user.show_events = new_show_events
             user.show_date_joined = new_show_date_joined
+            user.show_in_search = new_show_in_search
 
             if theme_changed:
                 user.theme = new_theme
@@ -684,6 +687,7 @@ def user_settings(request):
             'show_games': request.user.show_games,
             'show_events': request.user.show_events,
             'show_date_joined': request.user.show_date_joined,
+            'show_in_search': request.user.show_in_search,
             'theme': request.user.theme or 'system',
         })
 
@@ -3114,6 +3118,7 @@ def users_page(request):
             ).filter(
                 deleted_at__isnull=True,
                 is_superuser=False,
+                show_in_search=True,
             ).order_by('username')
 
             query = request.GET.get('q', '').strip()

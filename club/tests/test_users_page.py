@@ -447,3 +447,61 @@ class UsersNavLinkTest(TestCase):
     def test_nav_hides_users_link_when_unauthenticated(self):
         resp = self.client.get(reverse('dashboard'))
         self.assertNotContains(resp, reverse('users_page'))
+
+
+# ---------------------------------------------------------------------------
+# show_in_search visibility tests
+# ---------------------------------------------------------------------------
+
+@tag("integration")
+class ShowInSearchVisibilityTest(TestCase):
+
+    def setUp(self):
+        self.viewer = _create_verified_user('viewer')
+        self.visible = _create_verified_user('visible_user')
+        self.hidden = _create_verified_user(
+            'hidden_user', show_in_search=False,
+        )
+
+    def test_hidden_user_excluded_from_all_users_list(self):
+        self.client.force_login(self.viewer)
+        resp = self.client.get(reverse('users_page') + '?tab=all')
+        usernames = [u.username for u in resp.context['page_obj'].object_list]
+        self.assertIn('visible_user', usernames)
+        self.assertNotIn('hidden_user', usernames)
+
+    def test_hidden_user_excluded_from_search(self):
+        self.client.force_login(self.viewer)
+        resp = self.client.get(reverse('users_page') + '?tab=all&q=hidden')
+        usernames = [u.username for u in resp.context['page_obj'].object_list]
+        self.assertNotIn('hidden_user', usernames)
+
+    def test_visible_user_found_in_search(self):
+        self.client.force_login(self.viewer)
+        resp = self.client.get(reverse('users_page') + '?tab=all&q=visible')
+        usernames = [u.username for u in resp.context['page_obj'].object_list]
+        self.assertIn('visible_user', usernames)
+
+    def test_hidden_user_profile_still_accessible_directly(self):
+        self.client.force_login(self.viewer)
+        resp = self.client.get(
+            reverse('public_profile', kwargs={'username': 'hidden_user'}),
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_hidden_user_still_in_friends_tab(self):
+        Friendship.objects.create(
+            requester=self.viewer, receiver=self.hidden, status='accepted',
+        )
+        self.client.force_login(self.viewer)
+        resp = self.client.get(reverse('users_page') + '?tab=friends')
+        friend_usernames = [u.username for u in resp.context['friends']]
+        self.assertIn('hidden_user', friend_usernames)
+
+    def test_new_user_default_searchable(self):
+        new_user = _create_verified_user('newbie')
+        self.assertTrue(new_user.show_in_search)
+        self.client.force_login(self.viewer)
+        resp = self.client.get(reverse('users_page') + '?tab=all')
+        usernames = [u.username for u in resp.context['page_obj'].object_list]
+        self.assertIn('newbie', usernames)
