@@ -124,72 +124,6 @@ class SettingsPageThemeTest(TestCase):
 
 
 @tag("integration")
-class ThemeToggleEndpointTest(TestCase):
-
-    def setUp(self):
-        self.user = User.objects.create_user(
-            username='testuser', password='testpass123'
-        )
-        self.client.login(username='testuser', password='testpass123')
-
-    def test_toggle_theme_requires_login(self):
-        self.client.logout()
-        response = self.client.post(reverse('toggle_theme'))
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('/login/', response.url)
-
-    def test_toggle_theme_requires_post(self):
-        response = self.client.get(reverse('toggle_theme'))
-        self.assertEqual(response.status_code, 405)
-
-    def test_toggle_theme_saves_dark(self):
-        response = self.client.post(
-            reverse('toggle_theme'),
-            {'theme': 'dark'},
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
-        )
-        self.assertEqual(response.status_code, 200)
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.theme, 'dark')
-
-    def test_toggle_theme_saves_light(self):
-        response = self.client.post(
-            reverse('toggle_theme'),
-            {'theme': 'light'},
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
-        )
-        self.assertEqual(response.status_code, 200)
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.theme, 'light')
-
-    def test_toggle_theme_saves_system(self):
-        response = self.client.post(
-            reverse('toggle_theme'),
-            {'theme': 'system'},
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
-        )
-        self.assertEqual(response.status_code, 200)
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.theme, 'system')
-
-    def test_toggle_theme_rejects_invalid(self):
-        response = self.client.post(
-            reverse('toggle_theme'),
-            {'theme': 'neon'},
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
-        )
-        self.assertEqual(response.status_code, 400)
-
-    def test_toggle_theme_rejects_empty(self):
-        response = self.client.post(
-            reverse('toggle_theme'),
-            {},
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
-        )
-        self.assertEqual(response.status_code, 400)
-
-
-@tag("integration")
 class ThemeContextProcessorTest(TestCase):
 
     def test_authenticated_user_theme_in_context(self):
@@ -219,17 +153,13 @@ class BaseTemplateThemeTest(TestCase):
         source = _read_base_template()
         self.assertIn('data-theme', source)
 
-    def test_base_template_has_theme_toggle_button(self):
+    def test_base_template_has_theme_resolve_script(self):
         source = _read_base_template()
-        self.assertIn('theme-toggle', source)
+        self.assertIn('data-applied-theme', source)
 
-    def test_base_template_has_theme_script(self):
+    def test_base_template_has_system_preference_detection(self):
         source = _read_base_template()
-        self.assertIn('theme-toggle', source)
-
-    def test_base_template_has_nav_theme_toggle_class(self):
-        source = _read_base_template()
-        self.assertIn('nav-theme-toggle', source)
+        self.assertIn('prefers-color-scheme', source)
 
 
 @tag("integration")
@@ -256,14 +186,8 @@ class DarkModeCSSTest(TestCase):
     def test_dark_theme_overrides_border(self):
         self.assertIn('--border:', self.css)
 
-    def test_dark_theme_has_nav_toggle_styles(self):
-        self.assertIn('.nav-theme-toggle', self.css)
-
-    def test_nav_toggle_hidden_on_mobile(self):
-        blocks_start = self.css.find('@media (max-width: 600px)')
-        self.assertNotEqual(blocks_start, -1)
-        mobile_css = self.css[blocks_start:]
-        self.assertIn('nav-theme-toggle', mobile_css)
+    def test_nav_toggle_not_present(self):
+        self.assertNotIn('.nav-theme-toggle', self.css)
 
 
 @tag("integration")

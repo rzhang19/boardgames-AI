@@ -711,21 +711,6 @@ def remove_email(request):
     return redirect('user_settings')
 
 
-@login_required
-def toggle_theme(request):
-    from django.http import HttpResponseNotAllowed, JsonResponse
-    if request.method != 'POST':
-        return HttpResponseNotAllowed(['POST'])
-
-    theme = request.POST.get('theme', '')
-    if theme not in ('light', 'dark', 'system'):
-        return JsonResponse({'error': 'Invalid theme'}, status=400)
-
-    request.user.theme = theme
-    request.user.save(update_fields=['theme'])
-    return JsonResponse({'theme': theme})
-
-
 def change_password(request):
     if not request.user.is_authenticated:
         return redirect('/login/')

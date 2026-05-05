@@ -2163,26 +2163,3 @@ thead th a:hover {
     background: #78350f;
     color: #fef3c7;
 }
-
-.nav-theme-toggle {
-    background: none;
-    border: none;
-    color: var(--nav-text);
-    font-size: 1.2rem;
-    cursor: pointer;
-    padding: 6px 10px;
-    border-radius: var(--radius);
-    transition: background 0.2s;
-    display: flex;
-    align-items: center;
-}
-
-.nav-theme-toggle:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-@media (max-width: 600px) {
-    .nav-theme-toggle {
-        display: none;
-    }
-}

@@ -9,7 +9,6 @@ urlpatterns = [
     path('beta-access/', views.beta_access, name='beta_access'),
     path('settings/', views.user_settings, name='user_settings'),
     path('settings/remove-email/', views.remove_email, name='remove_email'),
-    path('settings/theme/', views.toggle_theme, name='toggle_theme'),
     path('settings/change-password/', views.change_password, name='change_password'),
     path('settings/add-icon/', views.add_verified_icon, name='add_verified_icon'),
     path('settings/delete-icon/<int:pk>/', views.delete_verified_icon, name='delete_verified_icon'),
