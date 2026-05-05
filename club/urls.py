@@ -99,4 +99,13 @@ urlpatterns = [
     path('events/<int:pk>/play/', views.event_play_game, name='event_play_game'),
     path('events/<int:event_pk>/sessions/<int:pk>/', views.game_session_detail, name='game_session_detail'),
     path('events/<int:event_pk>/sessions/<int:pk>/delete/', views.game_session_delete, name='game_session_delete'),
+    path('tags/game/search/', views.game_tag_search, name='game_tag_search'),
+    path('tags/event/search/', views.event_tag_search, name='event_tag_search'),
+    path('tags/request/', views.tag_request_submit, name='tag_request_submit'),
+    path('admin-settings/tags/', views.admin_tags, name='admin_tags'),
+    path('admin-settings/tags/game/add/', views.admin_tag_add, name='admin_tag_add_game', kwargs={'tag_type': 'game'}),
+    path('admin-settings/tags/event/add/', views.admin_tag_add, name='admin_tag_add_event', kwargs={'tag_type': 'event'}),
+    path('admin-settings/tags/<str:tag_type>/<int:pk>/delete/', views.admin_tag_delete, name='admin_tag_delete'),
+    path('admin-settings/tags/request/<int:pk>/approve/', views.admin_tag_request_approve, name='admin_tag_request_approve'),
+    path('admin-settings/tags/request/<int:pk>/reject/', views.admin_tag_request_reject, name='admin_tag_request_reject'),
 ]

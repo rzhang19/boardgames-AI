@@ -8,6 +8,7 @@
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
+        {% include "club/includes/tag_widget.html" with tag_type="event" %}
         <input type="hidden" name="voting_deadline_offset_minutes" value="{{ voting_offset }}">
         <button type="submit" class="btn btn-primary">{{ action }} Event</button>
         {% if action == 'Create' %}

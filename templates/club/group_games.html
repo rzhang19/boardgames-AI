@@ -36,6 +36,23 @@
         {% endfor %}
     </div>
     {% endif %}
+    {% if all_game_tags %}
+    <div class="filter-group">
+        <label>Tags</label>
+        <div class="filter-tag-list">
+            <label class="inline-checkbox">
+                <input type="checkbox" name="tag" value="__none__" {% if "__none__" in tag_filter %}checked{% endif %} onchange="this.form.submit();">
+                No tags
+            </label>
+            {% for tag in all_game_tags %}
+            <label class="inline-checkbox" style="display: block; margin-left: 1rem;">
+                <input type="checkbox" name="tag" value="{{ tag.name }}" {% if tag.name in tag_filter %}checked{% endif %} onchange="this.form.submit();">
+                {{ tag.name }}
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
     <div class="filter-actions">
         <a href="{% url 'group_games' group.slug %}" class="btn btn-neutral btn-sm">Clear Filters</a>
     </div>

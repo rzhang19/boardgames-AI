@@ -49,6 +49,23 @@
                 <label for="filter-players">Players</label>
                 <input type="number" id="filter-players" name="players" value="{{ players_filter }}" placeholder="e.g. 4" class="filter-players-input">
             </div>
+            {% if all_game_tags %}
+            <div class="filter-group">
+                <label>Tags</label>
+                <div class="filter-tag-list">
+                    <label class="inline-checkbox">
+                        <input type="checkbox" name="tag" value="__none__" {% if "__none__" in tag_filter %}checked{% endif %}>
+                        No tags
+                    </label>
+                    {% for tag in all_game_tags %}
+                    <label class="inline-checkbox" style="display: block; margin-left: 1rem;">
+                        <input type="checkbox" name="tag" value="{{ tag.name }}" {% if tag.name in tag_filter %}checked{% endif %}>
+                        {{ tag.name }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
             <div class="filter-modal-footer">
                 <a href="{% url 'game_list' %}?tab={{ active_tab }}" class="btn btn-neutral">Clear</a>
                 <button type="submit" class="btn btn-primary filter-apply-btn">Apply</button>

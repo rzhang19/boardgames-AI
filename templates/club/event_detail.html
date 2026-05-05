@@ -7,6 +7,14 @@
 <div class="card">
     <h1>{{ event.title }}</h1>
 
+    {% if event.tags.exists %}
+    <div class="tag-pill-container">
+        {% for tag in event.tags.all %}
+        <span class="tag-pill">{{ tag.name }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     <p><strong>Date:</strong> {{ event.date|date:"N j, Y" }}{% if event.date.time != time_midnight %} at {{ event.date|date:"g:i A" }}{% endif %}</p>
 
     {% if event.location %}

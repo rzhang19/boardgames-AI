@@ -26,7 +26,8 @@ from .forms import (
     SettingsForm, SuccessorPickForm,
     UserAddForm, UserManageForm, RegistrationForm, VerifiedIconForm, VoteForm,
 )
-from .models import BoardGame, Block, Event, EventAttendance, EventGameOverride, EventInvite, EventPresence, GameSession, GameSessionPlayer, Group, GroupCreationLog, GroupInvite, GroupJoinRequest, GroupMembership, Friendship, Notification, PasswordHistory, PrivateEventCreationLog, SiteSettings, VerifiedIcon, Vote
+from .models import BoardGame, Block, Event, EventAttendance, EventGameOverride, EventInvite, EventPresence, EventTag, GameSession, GameSessionPlayer, GameTag, Group, GroupCreationLog, GroupInvite, GroupJoinRequest, GroupMembership, Friendship, Notification, PasswordHistory, PrivateEventCreationLog, SiteSettings, TagRequest, VerifiedIcon, Vote
+from .models import TAG_MAX_LENGTH
 from .notifications import (
     generate_missing_complexity_notifications,
     generate_missing_max_players_notifications,
@@ -1028,6 +1029,13 @@ def game_list(request):
         except (ValueError, TypeError):
             pass
 
+    tag_param = request.GET.getlist('tag')
+    if tag_param:
+        if '__none__' in tag_param:
+            games = games.filter(tags__isnull=True)
+        else:
+            games = games.filter(tags__name__in=tag_param).distinct()
+
     sort_param = request.GET.get('sort', 'name_asc')
     sort_map = {
         'name_asc': 'name',
@@ -1053,6 +1061,8 @@ def game_list(request):
         active_filter_count += 1
     if group_filter:
         active_filter_count += 1
+    if tag_param:
+        active_filter_count += 1
 
     return render(request, 'club/game_list.html', {
         'games': games,
@@ -1064,6 +1074,8 @@ def game_list(request):
         'players_filter': players_param,
         'group_filter': group_filter,
         'active_filter_count': active_filter_count,
+        'all_game_tags': GameTag.objects.all(),
+        'tag_filter': tag_param,
     })
 
 
@@ -1077,10 +1089,13 @@ def game_add(request):
             game.owner = request.user
             _process_bgg_link(game, form)
             game.save()
+            tag_id_list = form.cleaned_data.get('tag_id_list', [])
+            if tag_id_list:
+                game.tags.set(tag_id_list)
             return redirect('game_detail', pk=game.pk)
     else:
         form = BoardGameForm()
-    return render(request, 'club/game_form.html', {'form': form, 'action': 'Add'})
+    return render(request, 'club/game_form.html', {'form': form, 'action': 'Add', 'initial_tags': []})
 
 
 def group_game_add(request, slug):
@@ -1098,6 +1113,9 @@ def group_game_add(request, slug):
             game.group = group
             _process_bgg_link(game, form)
             game.save()
+            tag_id_list = form.cleaned_data.get('tag_id_list', [])
+            if tag_id_list:
+                game.tags.set(tag_id_list)
             notify_group_game_added(group, game, request.user)
             return redirect('game_detail', pk=game.pk)
     else:
@@ -1106,6 +1124,7 @@ def group_game_add(request, slug):
         'form': form,
         'action': 'Add Group Game',
         'group': group,
+        'initial_tags': [],
     })
 
 
@@ -1146,6 +1165,8 @@ def game_edit(request, pk):
         if form.is_valid():
             _process_bgg_link(game, form)
             form.save()
+            tag_id_list = form.cleaned_data.get('tag_id_list', [])
+            game.tags.set(tag_id_list)
             if game.complexity:
                 Notification.objects.filter(
                     user=request.user,
@@ -1168,6 +1189,7 @@ def game_edit(request, pk):
         'action': 'Edit',
         'is_superuser_editing_others': is_superuser_editing_others,
         'game': game,
+        'initial_tags': list(game.tags.all()),
     })
 
 
@@ -1213,11 +1235,18 @@ def event_list(request):
             )
             groups.sort(key=lambda g: (0 if g.id in fav_ids else 1, g.name))
 
+    tag_param = request.GET.getlist('tag')
+
     event_groups = []
     for group in groups:
         group_events = Event.objects.filter(
             group=group,
         ).select_related('created_by').order_by('date')
+        if tag_param:
+            if '__none__' in tag_param:
+                group_events = group_events.filter(tags__isnull=True)
+            else:
+                group_events = group_events.filter(tags__name__in=tag_param).distinct()
         is_organizer = (
             request.user.is_authenticated
             and is_group_organizer(request.user, group)
@@ -1231,6 +1260,8 @@ def event_list(request):
     return render(request, 'club/event_list.html', {
         'event_groups': event_groups,
         'time_midnight': dt_time(0, 0),
+        'all_event_tags': EventTag.objects.all(),
+        'tag_filter': tag_param,
     })
 
 
@@ -1242,11 +1273,19 @@ def group_event_list(request, slug):
         request.user.is_authenticated
         and is_group_organizer(request.user, group)
     )
+    tag_param = request.GET.getlist('tag')
     events = Event.objects.filter(group=group).select_related('created_by')
+    if tag_param:
+        if '__none__' in tag_param:
+            events = events.filter(tags__isnull=True)
+        else:
+            events = events.filter(tags__name__in=tag_param).distinct()
     return render(request, 'club/event_list.html', {
         'event_groups': [{'group': group, 'events': events, 'is_organizer': is_organizer}],
         'time_midnight': dt_time(0, 0),
         'group': group,
+        'all_event_tags': EventTag.objects.all(),
+        'tag_filter': tag_param,
     })
 
 
@@ -1271,6 +1310,13 @@ def group_games(request, slug):
     if selected_owners:
         games = games.filter(owner__username__in=selected_owners)
 
+    tag_param = request.GET.getlist('tag')
+    if tag_param:
+        if '__none__' in tag_param:
+            games = games.filter(tags__isnull=True)
+        else:
+            games = games.filter(tags__name__in=tag_param).distinct()
+
     member_owners = User.objects.filter(
         boardgame__in=group.games().filter(owner__isnull=False),
     ).distinct().order_by('username')
@@ -1283,6 +1329,8 @@ def group_games(request, slug):
         'show_group_owned': show_group_owned,
         'selected_owners': selected_owners,
         'total_count': total_count,
+        'all_game_tags': GameTag.objects.all(),
+        'tag_filter': tag_param,
     })
 
 
@@ -1307,6 +1355,9 @@ def event_add(request, slug):
             else:
                 event.voting_deadline = event.date - timezone.timedelta(minutes=offset)
             event.save()
+            tag_id_list = form.cleaned_data.get('tag_id_list', [])
+            if tag_id_list:
+                event.tags.set(tag_id_list)
             notify_group_event_created(group, event, request.user)
             return redirect('event_detail', slug=event.group.slug, pk=event.pk)
     else:
@@ -1318,6 +1369,7 @@ def event_add(request, slug):
         'action': 'Create',
         'voting_offset': SiteSettings.load().default_voting_offset_minutes,
         'group': group,
+        'initial_tags': [],
     })
 
 
@@ -1513,6 +1565,8 @@ def event_edit(request, slug, pk):
             else:
                 event.voting_deadline = event.date - timezone.timedelta(minutes=offset)
             event.save()
+            tag_id_list = form.cleaned_data.get('tag_id_list', [])
+            event.tags.set(tag_id_list)
             notify_group_event_updated(event.group, event, request.user)
             return redirect('event_detail', slug=event.group.slug, pk=event.pk)
     else:
@@ -1524,6 +1578,7 @@ def event_edit(request, slug, pk):
         'action': 'Edit',
         'voting_offset': event.voting_deadline_offset_minutes,
         'group': event.group,
+        'initial_tags': list(event.tags.all()),
     })
 
 
@@ -3123,6 +3178,9 @@ def private_event_create(request):
             else:
                 event.voting_deadline = event.date - timezone.timedelta(minutes=offset)
             event.save()
+            tag_id_list = form.cleaned_data.get('tag_id_list', [])
+            if tag_id_list:
+                event.tags.set(tag_id_list)
             PrivateEventCreationLog.objects.create(user=request.user, event=event)
             return redirect('private_event_detail', pk=event.pk)
     else:
@@ -3134,6 +3192,7 @@ def private_event_create(request):
         'form': form,
         'action': 'Create',
         'voting_offset': SiteSettings.load().default_voting_offset_minutes,
+        'initial_tags': [],
     })
 
 
@@ -3209,6 +3268,8 @@ def private_event_edit(request, pk):
             else:
                 event.voting_deadline = event.date - timezone.timedelta(minutes=offset)
             event.save()
+            tag_id_list = form.cleaned_data.get('tag_id_list', [])
+            event.tags.set(tag_id_list)
             return redirect('private_event_detail', pk=event.pk)
     else:
         form = PrivateEventForm(instance=event, initial={
@@ -3220,6 +3281,7 @@ def private_event_edit(request, pk):
         'action': 'Edit',
         'voting_offset': event.voting_deadline_offset_minutes,
         'event': event,
+        'initial_tags': list(event.tags.all()),
     })
 
 
@@ -3505,3 +3567,195 @@ def event_invite_respond(request, pk, invite_pk, status):
         return redirect('private_event_detail', pk=invite.event.pk)
 
     return redirect('notification_list')
+
+
+# ---------------------------------------------------------------------------
+# Tag views
+# ---------------------------------------------------------------------------
+
+@login_required
+def game_tag_search(request):
+    query = request.GET.get('q', '').strip().lower()
+    if not query:
+        return JsonResponse([], safe=False)
+    tags = GameTag.objects.filter(name__icontains=query).values('pk', 'name')[:10]
+    return JsonResponse([{'id': t['pk'], 'name': t['name']} for t in tags], safe=False)
+
+
+@login_required
+def event_tag_search(request):
+    query = request.GET.get('q', '').strip().lower()
+    if not query:
+        return JsonResponse([], safe=False)
+    tags = EventTag.objects.filter(name__icontains=query).values('pk', 'name')[:10]
+    return JsonResponse([{'id': t['pk'], 'name': t['name']} for t in tags], safe=False)
+
+
+@login_required
+def tag_request_submit(request):
+    import json as _json
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    user = request.user
+    if not user.email_verified:
+        raise PermissionDenied
+    if user.is_superuser or user.is_site_admin:
+        raise PermissionDenied
+
+    try:
+        body = _json.loads(request.body)
+    except (_json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    name = body.get('name', '').strip().lower()
+    tag_type = body.get('tag_type', '').strip()
+
+    if not name:
+        return JsonResponse({'error': 'Name is required'}, status=400)
+    if len(name) > TAG_MAX_LENGTH:
+        return JsonResponse({'error': f'Name must be {TAG_MAX_LENGTH} characters or less'}, status=400)
+    if tag_type not in ('game', 'event'):
+        return JsonResponse({'error': 'Invalid tag type'}, status=400)
+
+    if GameTag.objects.filter(name=name).exists() if tag_type == 'game' else EventTag.objects.filter(name=name).exists():
+        return JsonResponse({'error': 'Tag already exists'}, status=400)
+
+    if TagRequest.objects.filter(name=name, tag_type=tag_type, status='pending').exists():
+        return JsonResponse({'error': 'A pending request for this tag already exists'}, status=400)
+
+    req = TagRequest.objects.create(name=name, tag_type=tag_type, requested_by=user)
+    return JsonResponse({'status': 'submitted', 'name': req.name, 'tag_type': req.tag_type})
+
+
+def _tag_admin_required(request):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    if not (request.user.is_superuser or request.user.is_site_admin):
+        raise PermissionDenied
+    return None
+
+
+def admin_tags(request):
+    redirect_resp = _tag_admin_required(request)
+    if redirect_resp:
+        return redirect_resp
+
+    tab = request.GET.get('tab', 'game')
+    if tab not in ('game', 'event', 'requests'):
+        tab = 'game'
+
+    game_tags = GameTag.objects.all()
+    event_tags = EventTag.objects.all()
+    pending_requests = TagRequest.objects.filter(status='pending').select_related('requested_by')
+
+    return render(request, 'club/admin_tags.html', {
+        'game_tags': game_tags,
+        'event_tags': event_tags,
+        'pending_requests': pending_requests,
+        'tab': tab,
+    })
+
+
+def admin_tag_add(request, tag_type):
+    import json as _json
+    redirect_resp = _tag_admin_required(request)
+    if redirect_resp:
+        return redirect_resp
+
+    if request.method != 'POST':
+        return redirect('admin_tags')
+
+    if tag_type not in ('game', 'event'):
+        return JsonResponse({'error': 'Invalid tag type'}, status=400)
+
+    try:
+        body = _json.loads(request.body)
+    except (_json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    name = body.get('name', '').strip().lower()
+    if not name:
+        return JsonResponse({'error': 'Name is required'}, status=400)
+    if len(name) > TAG_MAX_LENGTH:
+        return JsonResponse({'error': f'Name must be {TAG_MAX_LENGTH} characters or less'}, status=400)
+
+    model = GameTag if tag_type == 'game' else EventTag
+    if model.objects.filter(name=name).exists():
+        return JsonResponse({'error': 'Tag already exists'}, status=400)
+
+    tag = model.objects.create(name=name, created_by=request.user)
+    return JsonResponse({'id': tag.pk, 'name': tag.name})
+
+
+def admin_tag_delete(request, tag_type, pk):
+    redirect_resp = _tag_admin_required(request)
+    if redirect_resp:
+        return redirect_resp
+
+    if not request.user.is_superuser:
+        raise PermissionDenied
+
+    if tag_type not in ('game', 'event'):
+        raise Http404
+
+    model = GameTag if tag_type == 'game' else EventTag
+    tag = get_object_or_404(model, pk=pk)
+
+    if request.method == 'POST':
+        tag.delete()
+        return redirect('admin_tags')
+
+    if tag_type == 'game':
+        usage_count = tag.tagged_games.count()
+    else:
+        usage_count = tag.tagged_events.count()
+
+    return render(request, 'club/admin_tag_delete_confirm.html', {
+        'tag': tag,
+        'tag_type': tag_type,
+        'usage_count': usage_count,
+    })
+
+
+def admin_tag_request_approve(request, pk):
+    redirect_resp = _tag_admin_required(request)
+    if redirect_resp:
+        return redirect_resp
+
+    if request.method != 'POST':
+        return redirect('admin_tags')
+
+    req = get_object_or_404(TagRequest, pk=pk, status='pending')
+    req.status = 'approved'
+    req.reviewed_by = request.user
+    req.reviewed_at = timezone.now()
+    req.save()
+
+    model = GameTag if req.tag_type == 'game' else EventTag
+    tag, _ = model.objects.get_or_create(name=req.name, defaults={'created_by': request.user})
+
+    Notification.objects.create(
+        user=req.requested_by,
+        message=f'Your tag request "{req.name}" has been approved.',
+        notification_type='tag_request_approved',
+    )
+
+    return redirect('admin_tags')
+
+
+def admin_tag_request_reject(request, pk):
+    redirect_resp = _tag_admin_required(request)
+    if redirect_resp:
+        return redirect_resp
+
+    if request.method != 'POST':
+        return redirect('admin_tags')
+
+    req = get_object_or_404(TagRequest, pk=pk, status='pending')
+    req.status = 'rejected'
+    req.reviewed_by = request.user
+    req.reviewed_at = timezone.now()
+    req.save()
+
+    return redirect('admin_tags')

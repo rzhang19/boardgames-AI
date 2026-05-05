@@ -8,6 +8,9 @@ from django.utils import timezone
 from django.utils.text import slugify
 from uuid import uuid4
 
+MAX_TAGS_PER_ITEM = 5
+TAG_MAX_LENGTH = 25
+
 
 class ClubUserManager(UserManager):
 
@@ -374,6 +377,9 @@ class BoardGame(models.Model):
         max_digits=3, decimal_places=2,
         null=True, blank=True,
     )
+    tags = models.ManyToManyField(
+        'GameTag', blank=True, related_name='tagged_games',
+    )
 
     def __str__(self):
         return self.name
@@ -430,6 +436,9 @@ class Event(models.Model):
     organizers_can_edit_title = models.BooleanField(default=True)
     organizers_can_edit_description = models.BooleanField(default=True)
     organizers_can_edit_datetime = models.BooleanField(default=True)
+    tags = models.ManyToManyField(
+        'EventTag', blank=True, related_name='tagged_events',
+    )
 
     def __str__(self):
         return self.title
@@ -845,3 +854,89 @@ class GameSessionPlayer(models.Model):
             raise ValidationError('A player cannot be both a registered user and a guest.')
         if not self.user and not self.guest_name:
             raise ValidationError('A player must be either a registered user or a guest.')
+
+
+class GameTag(models.Model):
+    name = models.CharField(max_length=TAG_MAX_LENGTH, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+    )
+
+    class Meta:
+        ordering = ['name']
+
+    def save(self, *args, **kwargs):
+        self.name = self.name.lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
+class EventTag(models.Model):
+    name = models.CharField(max_length=TAG_MAX_LENGTH, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+    )
+
+    class Meta:
+        ordering = ['name']
+
+    def save(self, *args, **kwargs):
+        self.name = self.name.lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
+class TagRequest(models.Model):
+    TAG_TYPE_CHOICES = [
+        ('game', 'Game'),
+        ('event', 'Event'),
+    ]
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    name = models.CharField(max_length=TAG_MAX_LENGTH)
+    tag_type = models.CharField(max_length=5, choices=TAG_TYPE_CHOICES)
+    requested_by = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='tag_requests',
+    )
+    status = models.CharField(
+        max_length=10, choices=STATUS_CHOICES, default='pending',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='reviewed_tag_requests',
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['name', 'tag_type'],
+                condition=models.Q(status='pending'),
+                name='unique_pending_tag_request',
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.name = self.name.lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.name} ({self.tag_type}) - {self.status}'

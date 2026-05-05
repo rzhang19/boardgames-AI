@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Delete Tag: "{{ tag.name }}"</h1>
+
+<p>This tag is used by <strong>{{ usage_count }}</strong> {{ tag_type }}{{ usage_count|pluralize }}.</p>
+
+<form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn-danger">Confirm Delete</button>
+    <a href="{% url 'admin_tags' %}">Cancel</a>
+</form>
+{% endblock %}

@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Tag Management</h1>
+
+<div class="tabs">
+    <a href="{% url 'admin_tags' %}?tab=game" class="tab-link {% if tab == 'game' %}active{% endif %}">Game Tags</a>
+    <a href="{% url 'admin_tags' %}?tab=event" class="tab-link {% if tab == 'event' %}active{% endif %}">Event Tags</a>
+    <a href="{% url 'admin_tags' %}?tab=requests" class="tab-link {% if tab == 'requests' %}active{% endif %}">Tag Requests</a>
+</div>
+
+{% if tab == 'game' %}
+<div class="tag-section">
+    <h2>Game Tags</h2>
+
+    <div id="game-tag-add-form">
+        <input type="text" id="game-tag-add-input" placeholder="New tag name" maxlength="25">
+        <button onclick="addGameTag()">Add Tag</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Created By</th>
+                <th>Created At</th>
+                {% if request.user.is_superuser %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for tag in game_tags %}
+            <tr>
+                <td>{{ tag.name }}</td>
+                <td>{{ tag.created_by|default:"System" }}</td>
+                <td>{{ tag.created_at }}</td>
+                {% if request.user.is_superuser %}
+                <td>
+                    <a href="{% url 'admin_tag_delete' 'game' tag.pk %}" class="btn-danger">Delete</a>
+                </td>
+                {% endif %}
+            </tr>
+            {% empty %}
+            <tr><td colspan="4">No game tags.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% elif tab == 'event' %}
+<div class="tag-section">
+    <h2>Event Tags</h2>
+
+    <div id="event-tag-add-form">
+        <input type="text" id="event-tag-add-input" placeholder="New tag name" maxlength="25">
+        <button onclick="addEventTag()">Add Tag</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Created By</th>
+                <th>Created At</th>
+                {% if request.user.is_superuser %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for tag in event_tags %}
+            <tr>
+                <td>{{ tag.name }}</td>
+                <td>{{ tag.created_by|default:"System" }}</td>
+                <td>{{ tag.created_at }}</td>
+                {% if request.user.is_superuser %}
+                <td>
+                    <a href="{% url 'admin_tag_delete' 'event' tag.pk %}" class="btn-danger">Delete</a>
+                </td>
+                {% endif %}
+            </tr>
+            {% empty %}
+            <tr><td colspan="4">No event tags.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% elif tab == 'requests' %}
+<div class="tag-section">
+    <h2>Pending Tag Requests</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Requested By</th>
+                <th>Requested At</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for req in pending_requests %}
+            <tr>
+                <td>{{ req.name }}</td>
+                <td>{{ req.get_tag_type_display }}</td>
+                <td>{{ req.requested_by.username }}</td>
+                <td>{{ req.created_at }}</td>
+                <td>
+                    <form method="post" action="{% url 'admin_tag_request_approve' req.pk %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn-success">Approve</button>
+                    </form>
+                    <form method="post" action="{% url 'admin_tag_request_reject' req.pk %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn-danger">Reject</button>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5">No pending tag requests.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<p><a href="{% url 'admin_settings' %}">Back to Admin Settings</a></p>
+
+<script>
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function addGameTag() {
+    const input = document.getElementById('game-tag-add-input');
+    const name = input.value.trim();
+    if (!name) return;
+    fetch('{% url "admin_tag_add_game" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: JSON.stringify({name: name}),
+    }).then(r => {
+        if (r.ok) window.location.reload();
+        else r.json().then(d => alert(d.error || 'Error'));
+    });
+}
+
+function addEventTag() {
+    const input = document.getElementById('event-tag-add-input');
+    const name = input.value.trim();
+    if (!name) return;
+    fetch('{% url "admin_tag_add_event" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: JSON.stringify({name: name}),
+    }).then(r => {
+        if (r.ok) window.location.reload();
+        else r.json().then(d => alert(d.error || 'Error'));
+    });
+}
+</script>
+{% endblock %}

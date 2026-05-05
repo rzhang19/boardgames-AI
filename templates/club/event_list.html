@@ -6,6 +6,30 @@
 {% block content %}
 <h1>Events</h1>
 
+{% if all_event_tags %}
+<form method="get" class="filter-bar">
+    {% if group %}
+    <input type="hidden" name="group" value="{{ group.slug }}">
+    {% endif %}
+    <div class="filter-group">
+        <label>Tags</label>
+        <label class="inline-checkbox">
+            <input type="checkbox" name="tag" value="__none__" {% if "__none__" in tag_filter %}checked{% endif %} onchange="this.form.submit();">
+            No tags
+        </label>
+        {% for tag in all_event_tags %}
+        <label class="inline-checkbox" style="display: block; margin-left: 1rem;">
+            <input type="checkbox" name="tag" value="{{ tag.name }}" {% if tag.name in tag_filter %}checked{% endif %} onchange="this.form.submit();">
+            {{ tag.name }}
+        </label>
+        {% endfor %}
+    </div>
+    <div class="filter-actions">
+        <a href="{% url 'event_list' %}" class="btn btn-neutral btn-sm">Clear Filters</a>
+    </div>
+</form>
+{% endif %}
+
 {% for eg in event_groups %}
 <div class="card">
     <h2>

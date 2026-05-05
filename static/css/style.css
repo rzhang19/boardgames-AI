@@ -2163,3 +2163,21 @@ thead th a:hover {
     background: #78350f;
     color: #fef3c7;
 }
+
+.tag-pill-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.5rem;
+}
+
+.tag-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: var(--surface-alt, #e9ecef);
+    color: var(--text, #333);
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.85em;
+}

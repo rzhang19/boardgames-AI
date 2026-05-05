@@ -9,6 +9,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
 
 from .models import BoardGame, Event, EventAttendance, EventInvite, Group, GroupMembership, PasswordHistory, PrivateEventCreationLog, VerifiedIcon, Vote
+from .models import MAX_TAGS_PER_ITEM
 from .timezone_utils import get_timezone_choices, is_valid_timezone
 from .utils import MAX_FILE_SIZE, parse_bgg_link, validate_image_size
 
@@ -137,6 +138,10 @@ class BoardGameForm(forms.ModelForm):
         widget=forms.NumberInput(attrs={'min': '1', 'class': 'player-count-input'}),
     )
     max_players_unlimited = forms.BooleanField(required=False)
+    tag_ids = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
+    )
 
     class Meta:
         model = BoardGame
@@ -146,6 +151,8 @@ class BoardGameForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk and self.instance.bgg_link:
             self.fields['bgg_link_input'].initial = self.instance.bgg_link
+        if self.instance and self.instance.pk and self.instance.tags.exists():
+            self.fields['tag_ids'].initial = ','.join(str(t.pk) for t in self.instance.tags.all())
 
     def clean_bgg_link_input(self):
         value = self.cleaned_data.get('bgg_link_input', '')
@@ -174,6 +181,17 @@ class BoardGameForm(forms.ModelForm):
         elif min_p is not None and max_p is not None and max_p < min_p:
             self.add_error('max_players', 'Max players cannot be less than min players.')
 
+        tag_ids_raw = cleaned_data.get('tag_ids', '')
+        tag_id_list = [int(x) for x in tag_ids_raw.split(',') if x.strip()] if tag_ids_raw else []
+        if len(tag_id_list) > MAX_TAGS_PER_ITEM:
+            self.add_error('tag_ids', f'Maximum {MAX_TAGS_PER_ITEM} tags allowed.')
+        from .models import GameTag
+        valid_ids = set(GameTag.objects.filter(pk__in=tag_id_list).values_list('pk', flat=True))
+        invalid_ids = set(tag_id_list) - valid_ids
+        if invalid_ids:
+            self.add_error('tag_ids', 'Invalid tag selection.')
+        cleaned_data['tag_id_list'] = tag_id_list
+
         return cleaned_data
 
 
@@ -197,6 +215,10 @@ class EventForm(forms.ModelForm):
         required=False,
         widget=forms.HiddenInput,
     )
+    tag_ids = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
+    )
 
     class Meta:
         model = Event
@@ -212,6 +234,8 @@ class EventForm(forms.ModelForm):
                 self.fields['voting_deadline_date'].initial = self.instance.voting_deadline.date()
                 if self.instance.voting_deadline.time() != dt_time(0, 0):
                     self.fields['voting_deadline_time'].initial = self.instance.voting_deadline.time()
+            if self.instance.pk and self.instance.tags.exists():
+                self.fields['tag_ids'].initial = ','.join(str(t.pk) for t in self.instance.tags.all())
 
     def clean(self):
         cleaned_data = super().clean()
@@ -254,6 +278,16 @@ class EventForm(forms.ModelForm):
         else:
             cleaned_data['voting_deadline'] = None
 
+        tag_ids_raw = cleaned_data.get('tag_ids', '')
+        tag_id_list = [int(x) for x in tag_ids_raw.split(',') if x.strip()] if tag_ids_raw else []
+        if len(tag_id_list) > MAX_TAGS_PER_ITEM:
+            self.add_error('tag_ids', f'Maximum {MAX_TAGS_PER_ITEM} tags allowed.')
+        from .models import EventTag
+        valid_ids = set(EventTag.objects.filter(pk__in=tag_id_list).values_list('pk', flat=True))
+        invalid_ids = set(tag_id_list) - valid_ids
+        if invalid_ids:
+            self.add_error('tag_ids', 'Invalid tag selection.')
+        cleaned_data['tag_id_list'] = tag_id_list
         return cleaned_data
 
 
@@ -524,6 +558,10 @@ class PrivateEventForm(forms.ModelForm):
         initial='nobody',
     )
     auto_add_games = forms.BooleanField(required=False, initial=False)
+    tag_ids = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
+    )
 
     class Meta:
         model = Event
@@ -539,6 +577,8 @@ class PrivateEventForm(forms.ModelForm):
                 self.fields['voting_deadline_date'].initial = self.instance.voting_deadline.date()
                 if self.instance.voting_deadline.time() != dt_time(0, 0):
                     self.fields['voting_deadline_time'].initial = self.instance.voting_deadline.time()
+            if self.instance.pk and self.instance.tags.exists():
+                self.fields['tag_ids'].initial = ','.join(str(t.pk) for t in self.instance.tags.all())
 
     def clean(self):
         cleaned_data = super().clean()
@@ -580,6 +620,17 @@ class PrivateEventForm(forms.ModelForm):
             cleaned_data['voting_deadline'] = vd_combined
         else:
             cleaned_data['voting_deadline'] = None
+
+        tag_ids_raw = cleaned_data.get('tag_ids', '')
+        tag_id_list = [int(x) for x in tag_ids_raw.split(',') if x.strip()] if tag_ids_raw else []
+        if len(tag_id_list) > MAX_TAGS_PER_ITEM:
+            self.add_error('tag_ids', f'Maximum {MAX_TAGS_PER_ITEM} tags allowed.')
+        from .models import EventTag
+        valid_ids = set(EventTag.objects.filter(pk__in=tag_id_list).values_list('pk', flat=True))
+        invalid_ids = set(tag_id_list) - valid_ids
+        if invalid_ids:
+            self.add_error('tag_ids', 'Invalid tag selection.')
+        cleaned_data['tag_id_list'] = tag_id_list
 
         return cleaned_data
 

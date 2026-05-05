@@ -87,6 +87,8 @@
         </div>
 
         {{ form.bgg_id }}
+        {{ form.tag_ids }}
+        {% include "club/includes/tag_widget.html" with tag_type="game" %}
         <div id="bgg-complexity-suggestion" class="bgg-suggestion" style="display:none; color: #666; font-size: 0.9em; margin-top: -10px;"></div>
         <div class="btn-group">
             <button type="submit" class="btn btn-primary">{{ action }} Game</button>
