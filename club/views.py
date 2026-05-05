@@ -448,7 +448,7 @@ def password_reset(request):
 
             if not cache.get(cache_key):
                 user = User.objects.filter(
-                    Q(email=email_or_username) | Q(username=email_or_username)
+                    Q(email__iexact=email_or_username) | Q(username__iexact=email_or_username)
                 ).first()
 
                 if user and user.email and not is_protected_user(user):
@@ -540,7 +540,7 @@ def dashboard(request):
 def public_profile(request, username):
     if not request.user.is_authenticated:
         return redirect('/login/')
-    profile_user = get_object_or_404(User, username=username)
+    profile_user = get_object_or_404(User, username__iexact=username)
 
     if profile_user.is_superuser and request.user != profile_user:
         raise Http404
@@ -2007,7 +2007,7 @@ def notification_list(request):
         username = parts[-1] if parts else ''
         if not username:
             continue
-        requester = User.objects.filter(username=username).first()
+        requester = User.objects.filter(username__iexact=username).first()
         if not requester:
             continue
         friendship = Friendship.objects.filter(
@@ -2579,7 +2579,7 @@ def block_user(request, username):
     if request.method != 'POST':
         return HttpResponseNotAllowed(['POST'])
 
-    target = get_object_or_404(User, username=username)
+    target = get_object_or_404(User, username__iexact=username)
     if target == request.user:
         raise PermissionDenied
 
@@ -2610,7 +2610,7 @@ def unblock_user(request, username):
     if request.method != 'POST':
         return HttpResponseNotAllowed(['POST'])
 
-    target = get_object_or_404(User, username=username)
+    target = get_object_or_404(User, username__iexact=username)
     Block.objects.filter(blocker=request.user, blocked=target).delete()
     return redirect('public_profile', username=username)
 
@@ -2621,7 +2621,7 @@ def unblock_user(request, username):
 
 @login_required
 def send_friend_request(request, username):
-    target = get_object_or_404(User, username=username)
+    target = get_object_or_404(User, username__iexact=username)
     if target == request.user:
         raise PermissionDenied
     if Block.is_blocked(request.user, target):
@@ -3021,7 +3021,7 @@ def cancel_friend_request(request, pk):
 
 @login_required
 def remove_friend(request, username):
-    target = get_object_or_404(User, username=username)
+    target = get_object_or_404(User, username__iexact=username)
     friendship = Friendship.objects.filter(
         status='accepted',
     ).filter(
@@ -3144,7 +3144,7 @@ def user_search(request):
 
 @login_required
 def friends_list(request, username):
-    profile_user = get_object_or_404(User, username=username)
+    profile_user = get_object_or_404(User, username__iexact=username)
     friends = Friendship.get_friends_of(profile_user)
     if profile_user == request.user:
         blocked_ids = Block.get_blocked_user_ids(request.user)

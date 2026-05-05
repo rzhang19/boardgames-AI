@@ -37,6 +37,12 @@ class UserAddForm(forms.ModelForm):
         model = User
         fields = ['username', 'email']
 
+    def clean_username(self):
+        username = self.cleaned_data.get('username')
+        if username and User.objects.filter(username__iexact=username).exists():
+            raise forms.ValidationError('A user with that username already exists.')
+        return username
+
     def clean(self):
         cleaned_data = super().clean()
         email = cleaned_data.get('email')
@@ -105,6 +111,12 @@ class RegistrationForm(UserCreationForm):
     class Meta:
         model = User
         fields = ['username', 'email']
+
+    def clean_username(self):
+        username = self.cleaned_data.get('username')
+        if username and User.objects.filter(username__iexact=username).exists():
+            raise forms.ValidationError('A user with that username already exists.')
+        return username
 
 
 class EmailOrUsernameLoginForm(AuthenticationForm):

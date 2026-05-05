@@ -866,3 +866,166 @@ class EmailOrUsernameBackendTimingTest(TestCase):
             request=None, username='unverified', password='testpass123'
         )
         self.assertIsNone(result)
+
+
+@tag("integration")
+class CaseInsensitiveLoginTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='TestUser', password='testpass123', email='Test@Example.com'
+        )
+
+    def test_login_with_lowercase_username(self):
+        response = self.client.post(reverse('login'), {
+            'username': 'testuser',
+            'password': 'testpass123',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('dashboard'))
+
+    def test_login_with_uppercase_username(self):
+        response = self.client.post(reverse('login'), {
+            'username': 'TESTUSER',
+            'password': 'testpass123',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('dashboard'))
+
+    def test_login_with_mixed_case_email(self):
+        response = self.client.post(reverse('login'), {
+            'username': 'test@example.com',
+            'password': 'testpass123',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('dashboard'))
+
+    def test_username_stored_as_originally_entered(self):
+        User.objects.create_user(
+            username='StoredCase', password='testpass123'
+        )
+        user = User.objects.get(username='StoredCase')
+        self.assertEqual(user.username, 'StoredCase')
+
+
+@tag("integration")
+class CaseInsensitiveRegistrationTest(TestCase):
+
+    def test_register_with_case_variant_of_existing_username_fails(self):
+        User.objects.create_user(username='testuser', password='testpass123')
+        response = self.client.post(reverse('register'), {
+            'username': 'TestUser',
+            'email': 'new@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username='TestUser').exists())
+
+    def test_register_with_exact_same_username_fails(self):
+        User.objects.create_user(username='testuser', password='testpass123')
+        response = self.client.post(reverse('register'), {
+            'username': 'testuser',
+            'email': 'new@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(User.objects.filter(username='testuser').count(), 1)
+
+    def test_register_with_all_uppercase_variant_fails(self):
+        User.objects.create_user(username='testuser', password='testpass123')
+        response = self.client.post(reverse('register'), {
+            'username': 'TESTUSER',
+            'email': 'new@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username='TESTUSER').exists())
+
+    def test_register_with_new_username_succeeds(self):
+        response = self.client.post(reverse('register'), {
+            'username': 'BrandNewUser',
+            'email': 'new@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(User.objects.filter(username='BrandNewUser').exists())
+
+
+@tag("unit")
+class CaseInsensitiveBackendTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='TestUser', password='testpass123', email='Test@Example.com'
+        )
+        from club.backends import EmailOrUsernameBackend
+        self.backend = EmailOrUsernameBackend()
+
+    def test_authenticate_with_lowercase_username(self):
+        result = self.backend.authenticate(
+            request=None, username='testuser', password='testpass123'
+        )
+        self.assertEqual(result, self.user)
+
+    def test_authenticate_with_uppercase_username(self):
+        result = self.backend.authenticate(
+            request=None, username='TESTUSER', password='testpass123'
+        )
+        self.assertEqual(result, self.user)
+
+    def test_authenticate_with_lowercase_email(self):
+        result = self.backend.authenticate(
+            request=None, username='test@example.com', password='testpass123'
+        )
+        self.assertEqual(result, self.user)
+
+    def test_authenticate_with_uppercase_email(self):
+        result = self.backend.authenticate(
+            request=None, username='TEST@EXAMPLE.COM', password='testpass123'
+        )
+        self.assertEqual(result, self.user)
+
+
+@tag("integration")
+class CaseInsensitivePasswordResetTest(TestCase):
+
+    def test_password_reset_with_different_case_username_sends_email(self):
+        User.objects.create_user(
+            username='ResetUser',
+            email='reset@example.com',
+            password='SomePassword123',
+        )
+        response = self.client.post(reverse('password_reset'), {
+            'email_or_username': 'resetuser',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, GENERIC_MESSAGE)
+        self.assertEqual(len(mail.outbox), 1)
+
+
+@tag("integration")
+class CaseInsensitiveProfileLookupTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='ProfileUser', password='testpass123'
+        )
+        self.client.login(username='ProfileUser', password='testpass123')
+
+    def test_profile_with_lowercase_username(self):
+        response = self.client.get(
+            reverse('public_profile', kwargs={'username': 'profileuser'})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'ProfileUser')
+
+    def test_profile_with_uppercase_username(self):
+        response = self.client.get(
+            reverse('public_profile', kwargs={'username': 'PROFILEUSER'})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'ProfileUser')

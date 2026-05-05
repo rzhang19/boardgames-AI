@@ -10,10 +10,10 @@ class EmailOrUsernameBackend(ModelBackend):
     def authenticate(self, request, username=None, password=None, **kwargs):
         user = None
         try:
-            user = User.objects.get(email=username)
+            user = User.objects.get(email__iexact=username)
         except User.DoesNotExist:
             try:
-                user = User.objects.get(username=username)
+                user = User.objects.get(username__iexact=username)
             except User.DoesNotExist:
                 pass
 
