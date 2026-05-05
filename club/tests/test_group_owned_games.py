@@ -448,7 +448,8 @@ class GroupGameEditViewTest(TestCase):
         response = self.client.get(
             reverse('game_edit', kwargs={'pk': self.game.pk})
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
 
     def test_group_admin_can_edit_group_game(self):
         admin = User.objects.create_user(
@@ -557,7 +558,8 @@ class GroupGameDeleteViewTest(TestCase):
         response = self.client.post(
             reverse('game_delete', kwargs={'pk': self.game.pk})
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
 
     def test_group_admin_can_delete_group_game(self):
         admin = User.objects.create_user(

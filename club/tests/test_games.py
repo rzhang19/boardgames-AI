@@ -465,10 +465,11 @@ class GameDetailViewTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn('/login/', response.url)
 
-    def test_game_detail_nonexistent_game_returns_404(self):
+    def test_game_detail_nonexistent_game_returns_not_available(self):
         self.client.login(username='owner', password='testpass123')
         response = self.client.get(reverse('game_detail', kwargs={'pk': 9999}))
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
 
     def test_game_detail_shows_edit_link_for_owner(self):
         self.client.login(username='owner', password='testpass123')
@@ -529,7 +530,8 @@ class GameUpdateViewTest(TestCase):
     def test_non_owner_cannot_access_edit_page(self):
         self.client.login(username='other', password='testpass123')
         response = self.client.get(reverse('game_edit', kwargs={'pk': self.game.pk}))
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
 
     def test_owner_can_update_game(self):
         self.client.login(username='owner', password='testpass123')
@@ -552,7 +554,8 @@ class GameUpdateViewTest(TestCase):
         response = self.client.post(reverse('game_edit', kwargs={'pk': self.game.pk}), {
             'name': 'Hacked Name',
         })
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
         self.game.refresh_from_db()
         self.assertEqual(self.game.name, 'Catan')
 
@@ -670,7 +673,8 @@ class GameDeleteViewTest(TestCase):
     def test_non_owner_cannot_access_delete_page(self):
         self.client.login(username='other', password='testpass123')
         response = self.client.get(reverse('game_delete', kwargs={'pk': self.game.pk}))
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
 
     def test_owner_can_delete_game(self):
         self.client.login(username='owner', password='testpass123')
@@ -682,7 +686,8 @@ class GameDeleteViewTest(TestCase):
     def test_non_owner_cannot_delete_game(self):
         self.client.login(username='other', password='testpass123')
         response = self.client.post(reverse('game_delete', kwargs={'pk': self.game.pk}))
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
         self.assertTrue(BoardGame.objects.filter(pk=self.game.pk).exists())
 
     def test_superuser_can_access_delete_page_for_others_game(self):
@@ -1176,28 +1181,31 @@ class GameDetailVisibilityTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_outsider_cannot_view_game_with_no_shared_group(self):
-        """Given a game owned by a user with no shared group, when an outsider views detail, then 404"""
+        """Given a game owned by a user with no shared group, when an outsider views detail, then not available"""
         self.client.login(username='outsider', password='testpass123')
         response = self.client.get(
             reverse('game_detail', kwargs={'pk': self.owned_game.pk})
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
 
     def test_outsider_cannot_view_group_assigned_game(self):
-        """Given a game assigned to a group, when a non-member views detail, then 404"""
+        """Given a game assigned to a group, when a non-member views detail, then not available"""
         self.client.login(username='outsider', password='testpass123')
         response = self.client.get(
             reverse('game_detail', kwargs={'pk': self.group_game.pk})
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
 
     def test_outsider_cannot_view_game_owned_by_group_member(self):
-        """Given a game owned by a group member, when an outsider views detail, then 404"""
+        """Given a game owned by a group member, when an outsider views detail, then not available"""
         self.client.login(username='outsider', password='testpass123')
         response = self.client.get(
             reverse('game_detail', kwargs={'pk': self.other_member_game.pk})
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
 
     def test_superuser_can_view_any_game(self):
         """Given any game, when a superuser views detail, then 200"""
@@ -1230,6 +1238,92 @@ class GameDetailVisibilityTest(TestCase):
             reverse('game_detail', kwargs={'pk': self.group_game.pk})
         )
         self.assertEqual(response.status_code, 200)
+
+    def test_edit_nonexistent_game_returns_not_available(self):
+        """Given a non-existent game, when any user tries to edit, then not available"""
+        self.client.login(username='outsider', password='testpass123')
+        response = self.client.get(reverse('game_edit', kwargs={'pk': 9999}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
+
+    def test_edit_nonexistent_game_post_returns_not_available(self):
+        """Given a non-existent game, when any user POSTs to edit, then not available"""
+        self.client.login(username='outsider', password='testpass123')
+        response = self.client.post(reverse('game_edit', kwargs={'pk': 9999}), {
+            'name': 'Hacked',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
+
+    def test_edit_non_viewable_game_returns_not_available(self):
+        """Given an existing game the user can't view, when they try to edit, then not available"""
+        self.client.login(username='outsider', password='testpass123')
+        response = self.client.get(
+            reverse('game_edit', kwargs={'pk': self.owned_game.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
+
+    def test_edit_non_viewable_game_post_returns_not_available(self):
+        """Given an existing game the user can't view, when they POST to edit, then not available"""
+        self.client.login(username='outsider', password='testpass123')
+        response = self.client.post(
+            reverse('game_edit', kwargs={'pk': self.owned_game.pk}),
+            {'name': 'Hacked'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
+        self.owned_game.refresh_from_db()
+        self.assertEqual(self.owned_game.name, 'Owned Game')
+
+    def test_edit_viewable_but_non_ownable_game_returns_403(self):
+        """Given a game the user can view but can't edit, when they try to edit, then 403"""
+        self.client.login(username='groupmember', password='testpass123')
+        response = self.client.get(
+            reverse('game_edit', kwargs={'pk': self.owned_game.pk})
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_delete_nonexistent_game_returns_not_available(self):
+        """Given a non-existent game, when any user tries to delete, then not available"""
+        self.client.login(username='outsider', password='testpass123')
+        response = self.client.get(reverse('game_delete', kwargs={'pk': 9999}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
+
+    def test_delete_nonexistent_game_post_returns_not_available(self):
+        """Given a non-existent game, when any user POSTs to delete, then not available"""
+        self.client.login(username='outsider', password='testpass123')
+        response = self.client.post(reverse('game_delete', kwargs={'pk': 9999}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
+
+    def test_delete_non_viewable_game_returns_not_available(self):
+        """Given an existing game the user can't view, when they try to delete, then not available"""
+        self.client.login(username='outsider', password='testpass123')
+        response = self.client.get(
+            reverse('game_delete', kwargs={'pk': self.owned_game.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
+
+    def test_delete_non_viewable_game_post_returns_not_available(self):
+        """Given an existing game the user can't view, when they POST to delete, then not available"""
+        self.client.login(username='outsider', password='testpass123')
+        response = self.client.post(
+            reverse('game_delete', kwargs={'pk': self.owned_game.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
+        self.assertTrue(BoardGame.objects.filter(pk=self.owned_game.pk).exists())
+
+    def test_delete_viewable_but_non_ownable_game_returns_403(self):
+        """Given a game the user can view but can't delete, when they try to delete, then 403"""
+        self.client.login(username='groupmember', password='testpass123')
+        response = self.client.get(
+            reverse('game_delete', kwargs={'pk': self.owned_game.pk})
+        )
+        self.assertEqual(response.status_code, 403)
 
 
 @tag("integration")
@@ -1382,36 +1476,40 @@ class GameDetailNonGroupEventVisibilityTest(TestCase):
 
     def test_different_event_users_cannot_view_each_others_games(self):
         """Given Dave is only in a different non-group event than Alice,
-        when Dave views Alice's game detail, then 404"""
+        when Dave views Alice's game detail, then not available"""
         self.client.login(username='dave_evt', password='testpass123')
         response = self.client.get(
             reverse('game_detail', kwargs={'pk': self.alice_game.pk})
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
 
     def test_past_event_co_attendance_does_not_grant_visibility(self):
         """Given Alice and Dave were co-attendees of a past non-group event,
-        when Dave views Alice's game detail, then 404"""
+        when Dave views Alice's game detail, then not available"""
         self.client.login(username='dave_evt', password='testpass123')
         response = self.client.get(
             reverse('game_detail', kwargs={'pk': self.alice_game.pk})
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
 
     def test_inactive_event_co_attendance_does_not_grant_visibility(self):
         """Given Alice and Dave are co-attendees of an inactive non-group event,
-        when Dave views Alice's game detail, then 404"""
+        when Dave views Alice's game detail, then not available"""
         self.client.login(username='dave_evt', password='testpass123')
         response = self.client.get(
             reverse('game_detail', kwargs={'pk': self.alice_game.pk})
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')
 
     def test_group_event_co_attendance_does_not_grant_visibility(self):
         """Given Dave attends a group event with Alice but is not a group member,
-        when Dave views Alice's game detail, then 404"""
+        when Dave views Alice's game detail, then not available"""
         self.client.login(username='dave_evt', password='testpass123')
         response = self.client.get(
             reverse('game_detail', kwargs={'pk': self.alice_game.pk})
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'not available')

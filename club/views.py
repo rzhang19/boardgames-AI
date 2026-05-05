@@ -1135,9 +1135,9 @@ def group_game_add(request, slug):
 def game_detail(request, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
-    game = get_object_or_404(BoardGame, pk=pk)
-    if not can_view_game(request.user, game):
-        raise Http404
+    game = BoardGame.objects.filter(pk=pk).first()
+    if not game or not can_view_game(request.user, game):
+        return render(request, 'club/game_not_available.html')
     can_edit = (
         game.owner == request.user
         or request.user.is_superuser
@@ -1152,7 +1152,9 @@ def game_detail(request, pk):
 def game_edit(request, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
-    game = get_object_or_404(BoardGame, pk=pk)
+    game = BoardGame.objects.filter(pk=pk).first()
+    if not game or not can_view_game(request.user, game):
+        return render(request, 'club/game_not_available.html')
     is_superuser_editing_others = (
         request.user.is_superuser and game.owner != request.user
     )
@@ -1200,7 +1202,9 @@ def game_edit(request, pk):
 def game_delete(request, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
-    game = get_object_or_404(BoardGame, pk=pk)
+    game = BoardGame.objects.filter(pk=pk).first()
+    if not game or not can_view_game(request.user, game):
+        return render(request, 'club/game_not_available.html')
     is_group_organizer_deleting = (
         game.group
         and is_group_organizer(request.user, game.group)

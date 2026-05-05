@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Game Not Available{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>Game Not Available</h1>
+    <p>This game is not available.</p>
+    <a href="{% url 'game_list' %}" class="btn btn-neutral">Back to Games</a>
+</div>
+{% endblock %}
