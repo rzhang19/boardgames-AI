@@ -268,6 +268,64 @@ class EventResultsViewTest(TestCase):
 
 
 @tag("integration")
+class VotePageNoGamesTest(TestCase):
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='admin', password='testpass123', is_site_admin=True
+        )
+        self.attendee = User.objects.create_user(
+            username='attendee', password='testpass123'
+        )
+        self.group = Group.objects.create(name='No Games Group')
+        _make_organizer(self.admin, self.group)
+        _make_member(self.attendee, self.group)
+        self.event = Event.objects.create(
+            title='No Games Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            created_by=self.admin, group=self.group
+        )
+        EventAttendance.objects.create(user=self.attendee, event=self.event)
+
+    def test_vote_page_shows_no_games_message_when_zero_games(self):
+        self.client.login(username='attendee', password='testpass123')
+        response = self.client.get(
+            reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No games available to vote on')
+        self.assertNotContains(response, 'add-row-btn')
+
+    def test_vote_page_shows_add_game_link_when_zero_games(self):
+        self.client.login(username='attendee', password='testpass123')
+        response = self.client.get(
+            reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
+        )
+        self.assertContains(response, reverse('game_add'))
+        self.assertContains(response, 'Add Game')
+
+    def test_vote_page_shows_back_link_when_zero_games(self):
+        self.client.login(username='attendee', password='testpass123')
+        response = self.client.get(
+            reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
+        )
+        self.assertContains(
+            response,
+            reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
+        )
+
+    def test_vote_page_shows_voting_form_when_games_exist(self):
+        BoardGame.objects.create(name='Catan', owner=self.admin)
+        self.client.login(username='attendee', password='testpass123')
+        response = self.client.get(
+            reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'No games available to vote on')
+        self.assertContains(response, 'add-row-btn')
+
+
+@tag("integration")
 class VoteVisibilityToggleTest(TestCase):
 
     def setUp(self):

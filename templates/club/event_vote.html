@@ -44,7 +44,7 @@
     {% endif %}
 </div>
 
-{% else %}
+{% elif games %}
 <p>Rank the games you want to play. The top row is your first choice.</p>
 
 {% if vote_errors %}
@@ -65,7 +65,7 @@
     <div id="vote-rows"></div>
 
     <div class="btn-group" style="margin-top: 0.5rem;">
-        <button type="button" id="add-row-btn" class="btn btn-neutral">+ Add Row</button>
+        <button type="button" id="add-row-btn" class="btn btn-neutral" style="visibility: hidden;">+ Add Row</button>
     </div>
 
     <div class="btn-group" style="margin-top: 1rem;">
@@ -203,7 +203,7 @@
 
     function updateAddBtn() {
         var count = container.querySelectorAll('.vote-row').length;
-        addBtn.disabled = count >= maxRows;
+        addBtn.style.visibility = count >= maxRows ? 'hidden' : 'visible';
     }
 
     addBtn.addEventListener('click', function() {
@@ -222,5 +222,20 @@
     }
 })();
 </script>
+
+{% else %}
+<div class="card" style="margin-bottom: 1rem;">
+    <p><strong>No games available to vote on.</strong></p>
+    <p>Add a game to your collection to get started.</p>
+</div>
+
+<div class="btn-group">
+    <a href="{% url 'game_add' %}" class="btn btn-primary">Add Game</a>
+    {% if event.group %}
+    <a href="{% url 'event_detail' event.group.slug event.pk %}" class="btn btn-neutral">Back to Event</a>
+    {% else %}
+    <a href="{% url 'private_event_detail' event.pk %}" class="btn btn-neutral">Back to Event</a>
+    {% endif %}
+</div>
 {% endif %}
 {% endblock %}
