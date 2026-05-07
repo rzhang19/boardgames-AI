@@ -14,6 +14,83 @@
         {% endif %}
     </div>
 
+    {% if user.is_superuser %}
+    <div class="card">
+        <h2>Site Lockdown</h2>
+        {% if site_settings.site_lockdown_active %}
+        <p class="helptext" style="color: var(--danger, #dc3545); font-weight: bold;">Lockdown is currently ACTIVE. All non-superuser users are blocked from making changes.</p>
+        <form method="post" id="lockdown-deactivate-form">
+            {% csrf_token %}
+            <input type="hidden" name="site_lockdown_deactivate" value="1">
+            <button type="button" class="btn btn-primary" onclick="document.getElementById('lockdown-confirm-modal').classList.add('active')">Deactivate Lockdown</button>
+        </form>
+        {% else %}
+        <p class="helptext">Activate lockdown to block all non-superuser users from making changes. Registration will also be disabled.</p>
+        <form method="post" id="lockdown-activate-form">
+            {% csrf_token %}
+            <input type="hidden" name="site_lockdown_active" value="on">
+            <button type="button" class="btn btn-danger" onclick="document.getElementById('lockdown-confirm-modal').classList.add('active')">Activate Lockdown</button>
+        </form>
+        {% endif %}
+
+        {% if site_settings.site_lockdown_active %}
+        <div style="margin-top: 1rem;">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="site_lockdown_active" value="on">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" name="site_lockdown_allow_site_admins" {% if site_settings.site_lockdown_allow_site_admins %}checked{% endif %} onchange="this.form.submit()">
+                    Allow site admins to edit during lockdown
+                </label>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if user.is_superuser %}
+    <div id="lockdown-confirm-modal" class="filter-modal-overlay" onclick="if(event.target===this)this.classList.remove('active')">
+        <div class="filter-modal" style="max-width: 480px;">
+            <div class="filter-modal-header">
+                <h2>Confirm Lockdown Change</h2>
+                <button type="button" class="filter-modal-close" onclick="document.getElementById('lockdown-confirm-modal').classList.remove('active')">&times;</button>
+            </div>
+            <div class="filter-modal-body">
+                <p id="lockdown-confirm-message"></p>
+            </div>
+            <div class="filter-modal-footer">
+                <button type="button" class="btn btn-outline" onclick="document.getElementById('lockdown-confirm-modal').classList.remove('active')">Cancel</button>
+                <button type="button" class="btn btn-danger" id="lockdown-confirm-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        var activateForm = document.getElementById('lockdown-activate-form');
+        var deactivateForm = document.getElementById('lockdown-deactivate-form');
+        var msg = document.getElementById('lockdown-confirm-message');
+        var confirmBtn = document.getElementById('lockdown-confirm-btn');
+
+        if (activateForm) {
+            var activateBtn = activateForm.querySelector('button[type="button"]');
+            activateBtn.addEventListener('click', function() {
+                msg.textContent = 'Are you sure you want to activate site lockdown? All non-superuser users will be unable to make any changes. Registration will be disabled.';
+                confirmBtn.onclick = function() { activateForm.submit(); };
+            });
+        }
+
+        if (deactivateForm) {
+            var deactivateBtn = deactivateForm.querySelector('button[type="button"]');
+            deactivateBtn.addEventListener('click', function() {
+                msg.textContent = 'Are you sure you want to deactivate site lockdown? All users will regain edit access.';
+                confirmBtn.onclick = function() { deactivateForm.submit(); };
+            });
+        }
+    })();
+    </script>
+    {% endif %}
+
     <div class="card">
         <h2>Site Admins</h2>
         <table>

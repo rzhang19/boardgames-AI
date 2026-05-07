@@ -31,6 +31,8 @@ class VerifiedIcon(models.Model):
 class SiteSettings(models.Model):
     default_voting_offset_minutes = models.IntegerField(default=0)
     allow_site_admins_to_delete_groups = models.BooleanField(default=False)
+    site_lockdown_active = models.BooleanField(default=False)
+    site_lockdown_allow_site_admins = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         self.pk = 1

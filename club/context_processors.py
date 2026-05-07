@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 
-from club.models import Notification
+from club.models import Notification, SiteSettings
 
 User = get_user_model()
 
@@ -25,6 +25,13 @@ def view_only_status(request):
             request.user.is_authenticated
             and getattr(request.user, 'is_view_only', False)
         ),
+    }
+
+
+def site_lockdown_status(request):
+    site_settings = SiteSettings.load()
+    return {
+        'site_lockdown_active': site_settings.site_lockdown_active,
     }
 
 

@@ -10,6 +10,46 @@ import zoneinfo as _zoneinfo
 EXEMPT_PATHS = ('/beta-access/', '/static/', '/admin/')
 
 
+class SiteLockdownMiddleware:
+
+    EXEMPT_PATHS = ('/login/', '/logout/', '/admin/', '/static/')
+    LOCKDOWN_BLOCKED_GET_PATHS = ('/register/',)
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        from club.models import SiteSettings
+        site_settings = SiteSettings.load()
+
+        if not site_settings.site_lockdown_active:
+            return self.get_response(request)
+
+        if request.user.is_authenticated and request.user.is_superuser:
+            return self.get_response(request)
+
+        if (
+            request.user.is_authenticated
+            and request.user.is_site_admin
+            and site_settings.site_lockdown_allow_site_admins
+        ):
+            return self.get_response(request)
+
+        if request.path.startswith(self.EXEMPT_PATHS):
+            return self.get_response(request)
+
+        for blocked_path in self.LOCKDOWN_BLOCKED_GET_PATHS:
+            if request.path.startswith(blocked_path):
+                return redirect('/login/')
+
+        if request.method == 'POST':
+            return HttpResponseForbidden(
+                'This action is not available during site lockdown.'
+            )
+
+        return self.get_response(request)
+
+
 class MustChangePasswordMiddleware:
 
     def __init__(self, get_response):

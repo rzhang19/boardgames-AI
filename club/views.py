@@ -755,6 +755,11 @@ def save_timezone(request):
 
 
 def register(request):
+    site_settings = SiteSettings.load()
+    if site_settings.site_lockdown_active:
+        if not (request.user.is_authenticated and request.user.is_superuser):
+            return redirect('/login/')
+
     if request.method == 'POST':
         form = RegistrationForm(request.POST)
         if form.is_valid():
@@ -1856,6 +1861,20 @@ def admin_settings(request):
     offset_mins = current_total % 60
 
     if request.method == 'POST':
+        if request.user.is_superuser and 'site_lockdown_active' in request.POST:
+            site_settings.site_lockdown_active = True
+            site_settings.site_lockdown_allow_site_admins = (
+                'site_lockdown_allow_site_admins' in request.POST
+            )
+            site_settings.save()
+            return redirect('admin_settings')
+
+        if request.user.is_superuser and 'site_lockdown_deactivate' in request.POST:
+            site_settings.site_lockdown_active = False
+            site_settings.site_lockdown_allow_site_admins = False
+            site_settings.save()
+            return redirect('admin_settings')
+
         offset_hours = request.POST.get('default_voting_offset_hours', '0')
         offset_mins_val = request.POST.get('default_voting_offset_minutes_field', '0')
         try:

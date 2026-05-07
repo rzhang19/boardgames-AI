@@ -46,6 +46,9 @@
         </div>
         {% endif %}
     </nav>
+    {% if site_lockdown_active %}
+    <div class="site-lockdown-banner">This site is currently in lockdown mode. Only administrators can make changes.</div>
+    {% endif %}
     {% if is_view_only %}
     <div class="view-only-banner">Welcome, View Only Visitor</div>
     {% endif %}
