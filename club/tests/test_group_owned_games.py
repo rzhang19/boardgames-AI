@@ -833,7 +833,6 @@ class GroupGameVotingIntegrationTest(TestCase):
                 'form-MIN_NUM_FORMS': '0',
                 'form-MAX_NUM_FORMS': '1000',
                 'form-0-board_game': str(group_game.pk),
-                'form-0-rank': '1',
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -1183,7 +1182,6 @@ class GroupOwnedGameFullFlowTest(TestCase):
                 'form-MIN_NUM_FORMS': '0',
                 'form-MAX_NUM_FORMS': '1000',
                 'form-0-board_game': str(game.pk),
-                'form-0-rank': '1',
             },
         )
         self.assertEqual(response.status_code, 302)

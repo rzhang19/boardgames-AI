@@ -92,14 +92,12 @@ class VoteSubmissionTest(TestCase):
             'form-MIN_NUM_FORMS': '0',
             'form-MAX_NUM_FORMS': '1000',
             'form-0-board_game': str(self.game1.pk),
-            'form-0-rank': '1',
             'form-1-board_game': str(self.game2.pk),
-            'form-1-rank': '2',
         })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Vote.objects.filter(user=self.attendee, event=self.event).count(), 2)
 
-    def test_submit_zero_votes_is_allowed(self):
+    def test_submit_zero_votes_is_rejected(self):
         self.client.login(username='attendee', password='testpass123')
         response = self.client.post(reverse('event_vote', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}), {
             'form-TOTAL_FORMS': '0',
@@ -107,9 +105,8 @@ class VoteSubmissionTest(TestCase):
             'form-MIN_NUM_FORMS': '0',
             'form-MAX_NUM_FORMS': '1000',
         })
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(Vote.objects.filter(user=self.attendee, event=self.event).count(), 0)
-        self.assertEqual(response.url, reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
 
     def test_submit_votes_replaces_existing_votes(self):
         Vote.objects.create(user=self.attendee, event=self.event,
@@ -121,7 +118,6 @@ class VoteSubmissionTest(TestCase):
             'form-MIN_NUM_FORMS': '0',
             'form-MAX_NUM_FORMS': '1000',
             'form-0-board_game': str(self.game2.pk),
-            'form-0-rank': '1',
         })
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Vote.objects.filter(
@@ -140,7 +136,6 @@ class VoteSubmissionTest(TestCase):
             'form-MIN_NUM_FORMS': '0',
             'form-MAX_NUM_FORMS': '1000',
             'form-0-board_game': str(self.game1.pk),
-            'form-0-rank': '1',
         })
         self.assertEqual(response.status_code, 403)
         self.assertEqual(Vote.objects.count(), 0)

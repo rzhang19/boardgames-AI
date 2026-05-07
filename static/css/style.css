@@ -434,6 +434,27 @@ li {
 .vote-row select,
 .vote-row input {
     margin-bottom: 0;
+    flex: 1;
+}
+
+.vote-label {
+    font-weight: 600;
+    min-width: 90px;
+    white-space: nowrap;
+}
+
+.vote-delete-btn {
+    background: none;
+    border: none;
+    font-size: 1.4rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0 4px;
+    line-height: 1;
+}
+
+.vote-delete-btn:hover {
+    color: var(--danger);
 }
 
 .alert {

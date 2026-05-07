@@ -109,7 +109,6 @@ class FullGroupLifecycleTest(TestCase):
                 'form-MIN_NUM_FORMS': '0',
                 'form-MAX_NUM_FORMS': '1000',
                 'form-0-board_game': str(game.pk),
-                'form-0-rank': '1',
             })
             self.assertEqual(resp.status_code, 302)
         self.assertEqual(Vote.objects.filter(event=event).count(), 2)

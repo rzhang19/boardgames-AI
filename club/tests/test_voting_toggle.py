@@ -419,7 +419,6 @@ class VoteViewWhenVotingClosedTest(TestCase):
                 'form-MIN_NUM_FORMS': '0',
                 'form-MAX_NUM_FORMS': '1000',
                 'form-0-board_game': str(self.game1.pk),
-                'form-0-rank': '1',
             }
         )
         self.assertEqual(response.status_code, 200)
@@ -486,7 +485,6 @@ class VoteViewWhenVotingClosedTest(TestCase):
                 'form-MIN_NUM_FORMS': '0',
                 'form-MAX_NUM_FORMS': '1000',
                 'form-0-board_game': str(self.game1.pk),
-                'form-0-rank': '2',
             }
         )
         self.assertTrue(Vote.objects.filter(
