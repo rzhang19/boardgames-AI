@@ -1903,15 +1903,18 @@ thead th a:hover {
 }
 
 .unsaved-changes-banner {
-    background: var(--warning);
+    background: rgba(217, 119, 6, 0.85);
+    backdrop-filter: blur(4px);
     color: #fff;
     text-align: center;
     padding: 10px 16px;
     font-weight: 600;
     font-size: 0.938rem;
     letter-spacing: 0.02em;
-    position: sticky;
+    position: fixed;
     top: 56px;
+    left: 0;
+    width: 100%;
     z-index: 100;
     display: flex;
     align-items: center;
@@ -2232,7 +2235,8 @@ thead th a:hover {
 }
 
 [data-applied-theme="dark"] .unsaved-changes-banner {
-    background: #78350f;
+    background: rgba(120, 53, 15, 0.85);
+    backdrop-filter: blur(4px);
     color: #fef3c7;
 }
 

@@ -184,9 +184,9 @@ class UnsavedChangesStaticFilesTest(TestCase):
         css = _read_css()
         self.assertIn('.unsaved-changes-banner', css)
 
-    def test_css_has_sticky_position(self):
+    def test_css_has_fixed_position(self):
         css = _read_css()
-        self.assertIn('position: sticky', css)
+        self.assertIn('position: fixed', css)
 
     def test_css_banner_has_dark_theme_support(self):
         css = _read_css()
