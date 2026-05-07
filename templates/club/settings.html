@@ -5,6 +5,10 @@
 {% block title %}Settings{% endblock %}
 
 {% block content %}
+<div class="unsaved-changes-banner" id="unsaved-banner">
+    <span>You have unsaved changes</span>
+    <button type="button" class="btn btn-primary" id="unsaved-save-btn">Save Settings</button>
+</div>
 <div class="form-container">
     <h1>Settings</h1>
 
@@ -34,7 +38,7 @@
     </div>
     {% endif %}
 
-    <form method="post" enctype="multipart/form-data">
+    <form method="post" enctype="multipart/form-data" data-unsaved-form>
         {% csrf_token %}
         <div class="card">
             <h2>Profile</h2>
@@ -223,7 +227,6 @@
             {% endif %}
         </div>
 
-        <button type="submit" class="btn btn-primary">Save Settings</button>
     </form>
 </div>
 
@@ -360,4 +363,5 @@
 })();
 </script>
 {% endif %}
+<script src="{% static 'js/unsaved-changes.js' %}"></script>
 {% endblock %}

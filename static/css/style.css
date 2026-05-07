@@ -1902,6 +1902,43 @@ thead th a:hover {
     }
 }
 
+.unsaved-changes-banner {
+    background: var(--warning);
+    color: #fff;
+    text-align: center;
+    padding: 10px 16px;
+    font-weight: 600;
+    font-size: 0.938rem;
+    letter-spacing: 0.02em;
+    position: sticky;
+    top: 56px;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    transform: translateY(-100%);
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: transform 0.25s ease, opacity 0.25s ease, max-height 0.25s ease, padding 0.25s ease;
+    padding: 0 16px;
+}
+
+.unsaved-changes-banner.active {
+    transform: translateY(0);
+    opacity: 1;
+    max-height: 60px;
+    padding: 10px 16px;
+}
+
+.unsaved-changes-banner .btn {
+    margin: 0;
+    padding: 4px 16px;
+    font-size: 0.813rem;
+    white-space: nowrap;
+}
+
 .view-only-banner {
     background: var(--warning);
     color: #fff;
@@ -1915,6 +1952,15 @@ thead th a:hover {
 @media (max-width: 600px) {
     .view-only-banner {
         font-size: 0.813rem;
+        padding: 8px 12px;
+    }
+
+    .unsaved-changes-banner {
+        font-size: 0.813rem;
+        flex-wrap: wrap;
+    }
+
+    .unsaved-changes-banner.active {
         padding: 8px 12px;
     }
 }
@@ -2183,6 +2229,16 @@ thead th a:hover {
 [data-applied-theme="dark"] .view-only-banner {
     background: #78350f;
     color: #fef3c7;
+}
+
+[data-applied-theme="dark"] .unsaved-changes-banner {
+    background: #78350f;
+    color: #fef3c7;
+}
+
+[data-applied-theme="dark"] .unsaved-changes-banner .btn-primary {
+    background: var(--warning);
+    border-color: var(--warning);
 }
 
 .tag-pill-container {
