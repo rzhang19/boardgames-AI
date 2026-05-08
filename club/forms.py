@@ -738,3 +738,18 @@ class EventInviteForm(forms.Form):
             return [int(x) for x in raw.split(',') if x.strip()]
         except (ValueError, TypeError):
             raise forms.ValidationError('Invalid user IDs.')
+
+
+FEEDBACK_TYPE_CHOICES = [
+    ('bug', 'Bug Report'),
+    ('feature', 'Feature Request'),
+    ('admin', 'Administrative Request'),
+    ('community', 'Community Request'),
+    ('other', 'Other'),
+]
+
+
+class FeedbackForm(forms.Form):
+    feedback_type = forms.ChoiceField(choices=FEEDBACK_TYPE_CHOICES)
+    email = forms.EmailField()
+    message = forms.CharField(max_length=1000, widget=forms.Textarea)

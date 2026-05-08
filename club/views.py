@@ -20,6 +20,7 @@ from .bgg import fetch_bgg_game, fetch_bgg_weight, search_bgg, weight_to_complex
 from .borda import calculate_borda_scores
 from .forms import (
     BetaAccessForm, BoardGameForm, ChangePasswordForm, EventForm, EventInviteForm, EventSettingsForm,
+    FeedbackForm, FEEDBACK_TYPE_CHOICES,
     GroupCreateForm, GroupSettingsForm,
     PasswordResetForm, PrivateEventForm, RecurringEventForm, SetPasswordForm,
     SettingsForm, SuccessorPickForm,
@@ -3888,3 +3889,50 @@ def admin_tag_request_reject(request, pk):
     req.save()
 
     return redirect('admin_tags')
+
+
+def feedback(request):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    if not request.user.email_verified:
+        from django.contrib import messages
+        messages.error(request, 'You must verify your email before submitting feedback.')
+        return redirect('dashboard')
+
+    target_email = getattr(settings, 'FEEDBACK_TARGET_EMAIL', '')
+    if not target_email:
+        return render(request, 'club/feedback.html', {
+            'form': None,
+            'unavailable': True,
+        })
+
+    if request.method == 'POST':
+        form = FeedbackForm(request.POST)
+        if form.is_valid():
+            feedback_type = form.cleaned_data['feedback_type']
+            email = form.cleaned_data['email']
+            message = form.cleaned_data['message']
+            type_display = dict(FEEDBACK_TYPE_CHOICES).get(feedback_type, feedback_type)
+            subject = f'[Board Game Club Feedback] {type_display} — from {request.user.username}'
+            body = (
+                f'Feedback Type: {type_display}\n'
+                f'From: {request.user.username}\n'
+                f'Email: {email}\n\n'
+                f'{message}'
+            )
+            send_mail(
+                subject,
+                body,
+                settings.DEFAULT_FROM_EMAIL,
+                [target_email],
+            )
+            from django.contrib import messages
+            messages.success(request, 'Thank you for your feedback!')
+            return redirect('feedback')
+    else:
+        form = FeedbackForm(initial={'email': request.user.email})
+
+    return render(request, 'club/feedback.html', {
+        'form': form,
+        'unavailable': False,
+    })

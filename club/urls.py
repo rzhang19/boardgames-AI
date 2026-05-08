@@ -5,6 +5,7 @@ from club import views
 from club.forms import EmailOrUsernameLoginForm
 
 urlpatterns = [
+    path('feedback/', views.feedback, name='feedback'),
     path('', views.dashboard, name='dashboard'),
     path('beta-access/', views.beta_access, name='beta_access'),
     path('settings/', views.user_settings, name='user_settings'),

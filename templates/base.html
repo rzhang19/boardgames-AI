@@ -31,6 +31,11 @@
             {% if user.is_superuser or user.is_site_admin %}
             <a href="{% url 'admin_settings' %}" class="nav-admin">Admin</a>
             {% endif %}
+            {% if user.email_verified %}
+            <a href="{% url 'feedback' %}" class="nav-feedback">
+                <img src="{% static 'img/feedback.png' %}" alt="Feedback" class="nav-bell-icon">
+            </a>
+            {% endif %}
             <a href="{% url 'notification_list' %}" class="nav-notification">
                 {% if unread_notification_count > 0 %}
                 <img src="{% static 'img/bell-ring.png' %}" alt="Notifications" class="nav-bell-icon">
