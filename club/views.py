@@ -3891,6 +3891,13 @@ def admin_tag_request_reject(request, pk):
     return redirect('admin_tags')
 
 
+def _get_feedback_connection():
+    if getattr(settings, 'SEND_REAL_EMAILS', False):
+        from django.core.mail import get_connection
+        return get_connection(backend='django.core.mail.backends.smtp.EmailBackend')
+    return None
+
+
 def feedback(request):
     if not request.user.is_authenticated:
         return redirect('/login/')
@@ -3925,6 +3932,7 @@ def feedback(request):
                 body,
                 settings.DEFAULT_FROM_EMAIL,
                 [target_email],
+                connection=_get_feedback_connection(),
             )
             from django.contrib import messages
             messages.success(request, 'Thank you for your feedback!')

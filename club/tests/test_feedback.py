@@ -261,3 +261,19 @@ class FeedbackNavButtonTest(TestCase):
     def test_feedback_button_hidden_for_anonymous(self):
         response = self.client.get(reverse('dashboard'))
         self.assertNotContains(response, reverse('feedback'))
+
+
+@tag("unit")
+class FeedbackConnectionTest(TestCase):
+
+    def test_send_real_emails_false_returns_none(self):
+        from club.views import _get_feedback_connection
+        with self.settings(SEND_REAL_EMAILS=False):
+            self.assertIsNone(_get_feedback_connection())
+
+    def test_send_real_emails_true_returns_smtp_connection(self):
+        from django.core.mail.backends.smtp import EmailBackend
+        from club.views import _get_feedback_connection
+        with self.settings(SEND_REAL_EMAILS=True):
+            connection = _get_feedback_connection()
+            self.assertIsInstance(connection, EmailBackend)
