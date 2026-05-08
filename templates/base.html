@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
 </head>
 <body>
+    <div class="sticky-header">
     <nav>
         <a href="{% url 'dashboard' %}">Home</a>
         <button class="nav-hamburger" aria-label="Menu" id="nav-hamburger-btn">&#9776;</button>
@@ -52,6 +53,7 @@
     {% if is_view_only %}
     <div class="view-only-banner">Welcome, View Only Visitor</div>
     {% endif %}
+    </div>
     <main>
         {% block content %}{% endblock %}
     {% if messages %}

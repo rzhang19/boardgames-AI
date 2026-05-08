@@ -94,6 +94,12 @@ nav form button:hover {
     background: rgba(255, 255, 255, 0.25);
 }
 
+.sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
 main {
     max-width: 960px;
     margin: 0 auto;
@@ -1953,7 +1959,17 @@ thead th a:hover {
 }
 
 @media (max-width: 600px) {
-    .view-only-banner {
+.site-lockdown-banner {
+    background: var(--danger);
+    color: #fff;
+    text-align: center;
+    padding: 10px 16px;
+    font-weight: 600;
+    font-size: 0.938rem;
+    letter-spacing: 0.02em;
+}
+
+.view-only-banner {
         font-size: 0.813rem;
         padding: 8px 12px;
     }
