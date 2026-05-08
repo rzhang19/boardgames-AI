@@ -17,8 +17,61 @@
         <div id="bgg-image-preview" class="bgg-image-preview" style="display:none;"></div>
     </div>
 
-    <form method="post">
+    <form method="post" id="game-form">
         {% csrf_token %}
+
+        <div class="field-group">
+            <h2>Ownership</h2>
+            <div class="ownership-widget" id="ownership-widget">
+                <div class="ownership-display" id="ownership-display" tabindex="0" role="button" aria-label="Select ownership">
+                    <span id="ownership-display-label">Self</span>
+                    <span class="ownership-arrow">&#9662;</span>
+                </div>
+                <div class="ownership-menu" id="ownership-menu" style="display:none;">
+                    <div class="ownership-level" id="ownership-level-main">
+                        <div class="ownership-item ownership-category" data-category="suggested">
+                            <span class="ownership-category-label">Suggested</span>
+                            <span class="ownership-arrow-right">&#8250;</span>
+                        </div>
+                        {% if org_groups %}
+                        <div class="ownership-item ownership-category" data-category="groups">
+                            <span class="ownership-category-label">Groups</span>
+                            <span class="ownership-arrow-right">&#8250;</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="ownership-level" id="ownership-level-suggested" style="display:none;">
+                        <div class="ownership-back" id="ownership-back-suggested">&larr; Back</div>
+                        <div class="ownership-item ownership-option" data-value="self">
+                            <span class="ownership-option-label">Self</span>
+                        </div>
+                        {% for g in org_groups %}
+                        {% if g.slug in suggested_groups %}
+                        <div class="ownership-item ownership-option" data-value="group:{{ g.slug }}" data-group-slug="{{ g.slug }}" data-group-name="{{ g.name }}">
+                            <span class="ownership-option-label">{{ g.name }}</span>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% if org_groups %}
+                    <div class="ownership-level" id="ownership-level-groups" style="display:none;">
+                        <div class="ownership-back" id="ownership-back-groups">&larr; Back</div>
+                        {% for g in org_groups %}
+                        <div class="ownership-item ownership-option" data-value="group:{{ g.slug }}" data-group-slug="{{ g.slug }}" data-group-name="{{ g.name }}">
+                            <span class="ownership-option-label">{{ g.name }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div id="ownership-change-warning" class="ownership-warning" style="display:none;">
+                Ownership will change!
+            </div>
+            {% if form.ownership_target.errors %}
+            <div class="form-errors">{{ form.ownership_target.errors }}</div>
+            {% endif %}
+        </div>
 
         <div class="field-group">
             <h2>Game Details</h2>
@@ -88,6 +141,7 @@
 
         {{ form.bgg_id }}
         {{ form.tag_ids }}
+        {{ form.ownership_target }}
         {% include "club/includes/tag_widget.html" with tag_type="game" %}
         <div id="bgg-complexity-suggestion" class="bgg-suggestion" style="display:none; color: #666; font-size: 0.9em; margin-top: -10px;"></div>
         <div class="btn-group">
@@ -109,7 +163,214 @@
         font-size: 0.875rem;
         font-weight: 400;
     }
+    .ownership-widget {
+        position: relative;
+        display: inline-block;
+        min-width: 250px;
+    }
+    .ownership-display {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border, #ccc);
+        border-radius: 4px;
+        cursor: pointer;
+        background: var(--bg-primary, #fff);
+        font-size: 0.95rem;
+    }
+    .ownership-display:hover {
+        border-color: var(--primary, #007bff);
+    }
+    .ownership-arrow {
+        font-size: 0.75rem;
+        color: #666;
+        margin-left: 0.5rem;
+    }
+    .ownership-menu {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        z-index: 200;
+        min-width: 260px;
+        background: var(--bg-primary, #fff);
+        border: 1px solid var(--border, #ccc);
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        margin-top: 4px;
+        overflow: hidden;
+    }
+    .ownership-level {
+        padding: 0.25rem 0;
+    }
+    .ownership-item {
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .ownership-item:hover {
+        background: var(--bg-hover, #f0f0f0);
+    }
+    .ownership-category-label {
+        font-weight: 600;
+    }
+    .ownership-arrow-right {
+        color: #999;
+        font-size: 1.1rem;
+    }
+    .ownership-back {
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+        font-size: 0.85rem;
+        color: var(--primary, #007bff);
+        border-bottom: 1px solid var(--border, #eee);
+    }
+    .ownership-back:hover {
+        background: var(--bg-hover, #f0f0f0);
+    }
+    .ownership-warning {
+        margin-top: 0.35rem;
+        padding: 0.35rem 0.6rem;
+        border-radius: 4px;
+        font-size: 0.85em;
+        background: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffc107;
+    }
 </style>
+
+<script>
+(function() {
+    var displayEl = document.getElementById('ownership-display');
+    var displayLabel = document.getElementById('ownership-display-label');
+    var menuEl = document.getElementById('ownership-menu');
+    var mainLevel = document.getElementById('ownership-level-main');
+    var suggestedLevel = document.getElementById('ownership-level-suggested');
+    var groupsLevel = document.getElementById('ownership-level-groups');
+    var hiddenField = document.getElementById('id_ownership_target');
+    var warningEl = document.getElementById('ownership-change-warning');
+    var currentOwnership = '{{ current_ownership|default:"self" }}';
+    var selectedValue = '{{ default_ownership|default:"self" }}';
+
+    function setInitialValue() {
+        hiddenField.value = selectedValue;
+        updateDisplay(selectedValue);
+        checkOwnershipChange();
+    }
+
+    function updateDisplay(value) {
+        if (value === 'self') {
+            displayLabel.textContent = 'Self';
+        } else if (value && value.startsWith('group:')) {
+            var slug = value.substring('group:'.length);
+            var label = slug;
+            var allOptions = document.querySelectorAll('.ownership-option');
+            for (var i = 0; i < allOptions.length; i++) {
+                if (allOptions[i].getAttribute('data-value') === value) {
+                    label = allOptions[i].querySelector('.ownership-option-label').textContent;
+                    break;
+                }
+            }
+            displayLabel.textContent = 'Group: ' + label;
+        }
+    }
+
+    function checkOwnershipChange() {
+        if (!warningEl) return;
+        if (!currentOwnership || currentOwnership === '') currentOwnership = 'self';
+        var current = hiddenField.value || 'self';
+        if (current !== currentOwnership) {
+            warningEl.style.display = 'block';
+        } else {
+            warningEl.style.display = 'none';
+        }
+    }
+
+    function showLevel(levelEl) {
+        mainLevel.style.display = 'none';
+        if (suggestedLevel) suggestedLevel.style.display = 'none';
+        if (groupsLevel) groupsLevel.style.display = 'none';
+        levelEl.style.display = 'block';
+    }
+
+    function openMenu() {
+        menuEl.style.display = 'block';
+        showLevel(mainLevel);
+    }
+
+    function closeMenu() {
+        menuEl.style.display = 'none';
+    }
+
+    if (displayEl) {
+        displayEl.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (menuEl.style.display === 'none' || !menuEl.style.display) {
+                openMenu();
+            } else {
+                closeMenu();
+            }
+        });
+    }
+
+    var categories = document.querySelectorAll('.ownership-category');
+    for (var c = 0; c < categories.length; c++) {
+        categories[c].addEventListener('click', function(e) {
+            e.stopPropagation();
+            var cat = this.getAttribute('data-category');
+            if (cat === 'suggested' && suggestedLevel) {
+                showLevel(suggestedLevel);
+            } else if (cat === 'groups' && groupsLevel) {
+                showLevel(groupsLevel);
+            }
+        });
+    }
+
+    var backBtns = document.querySelectorAll('.ownership-back');
+    for (var b = 0; b < backBtns.length; b++) {
+        backBtns[b].addEventListener('click', function(e) {
+            e.stopPropagation();
+            showLevel(mainLevel);
+        });
+    }
+
+    var options = document.querySelectorAll('.ownership-option');
+    for (var o = 0; o < options.length; o++) {
+        options[o].addEventListener('click', function(e) {
+            e.stopPropagation();
+            var value = this.getAttribute('data-value');
+            selectedValue = value;
+            hiddenField.value = value;
+            updateDisplay(value);
+            checkOwnershipChange();
+            closeMenu();
+        });
+    }
+
+    document.addEventListener('click', function(e) {
+        if (!document.getElementById('ownership-widget').contains(e.target)) {
+            closeMenu();
+        }
+    });
+
+    var gameForm = document.getElementById('game-form');
+    if (gameForm) {
+        gameForm.addEventListener('submit', function(e) {
+            var current = hiddenField.value || 'self';
+            if (currentOwnership && current !== currentOwnership) {
+                if (!confirm('Are you sure you want to change ownership?')) {
+                    e.preventDefault();
+                }
+            }
+        });
+    }
+
+    setInitialValue();
+})();
+</script>
 
 <script>
 (function() {

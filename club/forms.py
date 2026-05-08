@@ -154,17 +154,46 @@ class BoardGameForm(forms.ModelForm):
         required=False,
         widget=forms.HiddenInput(),
     )
+    ownership_target = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
+    )
 
     class Meta:
         model = BoardGame
         fields = ['name', 'description', 'min_players', 'max_players', 'complexity', 'bgg_id']
 
     def __init__(self, *args, **kwargs):
+        self.ownership_user = kwargs.pop('ownership_user', None)
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk and self.instance.bgg_link:
             self.fields['bgg_link_input'].initial = self.instance.bgg_link
         if self.instance and self.instance.pk and self.instance.tags.exists():
             self.fields['tag_ids'].initial = ','.join(str(t.pk) for t in self.instance.tags.all())
+
+    def clean_ownership_target(self):
+        value = self.cleaned_data.get('ownership_target', '')
+        if not value or value.strip() == '':
+            return 'self'
+        if value == 'self':
+            return 'self'
+        if value.startswith('group:'):
+            slug = value[len('group:'):]
+            if not slug:
+                raise forms.ValidationError('Invalid group selection.')
+            try:
+                group = Group.objects.get(slug=slug)
+            except Group.DoesNotExist:
+                raise forms.ValidationError('Selected group does not exist.')
+            user = self.ownership_user
+            if not user or not user.is_authenticated:
+                raise forms.ValidationError('You must be logged in to assign games to a group.')
+            if not GroupMembership.objects.filter(
+                user=user, group=group, role__in=['admin', 'organizer']
+            ).exists():
+                raise forms.ValidationError('You do not have permission to add games to this group.')
+            return value
+        raise forms.ValidationError('Invalid ownership selection.')
 
     def clean_bgg_link_input(self):
         value = self.cleaned_data.get('bgg_link_input', '')

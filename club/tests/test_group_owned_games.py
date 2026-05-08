@@ -211,7 +211,8 @@ class GroupGameAddViewTest(TestCase):
         response = self.client.get(
             reverse('group_game_add', kwargs={'slug': self.group.slug})
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('group=', response.url)
 
     def test_member_cannot_access_add_page(self):
         self.client.login(username='member', password='testpass123')
@@ -237,6 +238,7 @@ class GroupGameAddViewTest(TestCase):
                 'min_players': 3,
                 'max_players': 4,
                 'complexity': 'medium',
+                'ownership_target': f'group:{self.group.slug}',
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -260,6 +262,7 @@ class GroupGameAddViewTest(TestCase):
                 'min_players': 2,
                 'max_players': 2,
                 'complexity': 'light',
+                'ownership_target': f'group:{self.group.slug}',
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -299,6 +302,7 @@ class GroupGameAddViewTest(TestCase):
                 'min_players': 2,
                 'max_players': 6,
                 'complexity': 'medium',
+                'ownership_target': f'group:{self.group.slug}',
             },
         )
         self.assertIn(
@@ -315,6 +319,7 @@ class GroupGameAddViewTest(TestCase):
                 'max_players': 4,
                 'bgg_id': 42,
                 'complexity': 'medium',
+                'ownership_target': f'group:{self.group.slug}',
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -330,6 +335,7 @@ class GroupGameAddViewTest(TestCase):
                 'min_players': 2,
                 'max_players_unlimited': 'on',
                 'complexity': 'light',
+                'ownership_target': f'group:{self.group.slug}',
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -347,7 +353,8 @@ class GroupGameAddViewTest(TestCase):
         response = self.client.get(
             reverse('group_game_add', kwargs={'slug': self.group.slug})
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('group=', response.url)
 
     def test_nonexistent_group_returns_404(self):
         self.client.login(username='organizer', password='testpass123')
@@ -412,6 +419,7 @@ class GroupGameEditViewTest(TestCase):
                 'min_players': 3,
                 'max_players': 6,
                 'complexity': 'medium_heavy',
+                'ownership_target': f'group:{self.group.slug}',
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -1148,6 +1156,7 @@ class GroupOwnedGameFullFlowTest(TestCase):
                 'min_players': 3,
                 'max_players': 4,
                 'complexity': 'medium',
+                'ownership_target': f'group:{self.group.slug}',
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -1211,12 +1220,14 @@ class GroupOwnedGameFullFlowTest(TestCase):
                 'min_players': 3,
                 'max_players': 6,
                 'complexity': 'medium_heavy',
+                'ownership_target': f'group:{self.group.slug}',
             },
         )
         self.assertEqual(response.status_code, 302)
         game.refresh_from_db()
         self.assertEqual(game.name, 'Group Catan: Updated')
         self.assertEqual(game.max_players, 6)
+        self.assertEqual(game.group, self.group)
 
         Notification.objects.all().delete()
 

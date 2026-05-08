@@ -1087,23 +1087,83 @@ def game_list(request):
     })
 
 
+def _get_user_org_groups(user):
+    if not user.is_authenticated:
+        return Group.objects.none()
+    return Group.objects.filter(
+        membership__user=user,
+        membership__role__in=['admin', 'organizer'],
+    ).distinct()
+
+
+def _resolve_default_ownership(request):
+    group_slug = request.GET.get('group', '')
+    event_pk = request.GET.get('event', '')
+    suggested_groups = ['self']
+    default = 'self'
+
+    if event_pk:
+        try:
+            event = Event.objects.get(pk=int(event_pk))
+            if event.group_id is not None:
+                group_slug = event.group.slug
+        except (Event.DoesNotExist, ValueError, TypeError):
+            pass
+
+    if group_slug:
+        try:
+            group = Group.objects.get(slug=group_slug)
+            if _get_user_org_groups(request.user).filter(pk=group.pk).exists():
+                default = f'group:{group.slug}'
+                if group.slug not in suggested_groups:
+                    suggested_groups.append(group.slug)
+        except Group.DoesNotExist:
+            pass
+
+    return default, suggested_groups
+
+
+def _apply_ownership(game, ownership_target, user):
+    if ownership_target and ownership_target.startswith('group:'):
+        slug = ownership_target[len('group:'):]
+        group = Group.objects.get(slug=slug)
+        game.owner = None
+        game.group = group
+    else:
+        game.owner = user
+        game.group = None
+
+
 def game_add(request):
     if not request.user.is_authenticated:
         return redirect('/login/')
+    org_groups = _get_user_org_groups(request.user)
+    default_ownership, suggested_groups = _resolve_default_ownership(request)
     if request.method == 'POST':
-        form = BoardGameForm(request.POST)
+        form = BoardGameForm(request.POST, ownership_user=request.user)
         if form.is_valid():
             game = form.save(commit=False)
-            game.owner = request.user
+            ownership = form.cleaned_data.get('ownership_target', 'self') or 'self'
+            _apply_ownership(game, ownership, request.user)
             _process_bgg_link(game, form)
             game.save()
             tag_id_list = form.cleaned_data.get('tag_id_list', [])
             if tag_id_list:
                 game.tags.set(tag_id_list)
+            if game.group:
+                notify_group_game_added(game.group, game, request.user)
             return redirect('game_detail', pk=game.pk)
     else:
-        form = BoardGameForm()
-    return render(request, 'club/game_form.html', {'form': form, 'action': 'Add', 'initial_tags': []})
+        form = BoardGameForm(ownership_user=request.user)
+    return render(request, 'club/game_form.html', {
+        'form': form,
+        'action': 'Add',
+        'initial_tags': [],
+        'org_groups': org_groups,
+        'default_ownership': default_ownership,
+        'suggested_groups': suggested_groups,
+        'current_ownership': default_ownership,
+    })
 
 
 def group_game_add(request, slug):
@@ -1115,10 +1175,11 @@ def group_game_add(request, slug):
     if not is_group_organizer(request.user, group):
         raise PermissionDenied
     if request.method == 'POST':
-        form = BoardGameForm(request.POST)
+        form = BoardGameForm(request.POST, ownership_user=request.user)
         if form.is_valid():
             game = form.save(commit=False)
-            game.group = group
+            ownership = form.cleaned_data.get('ownership_target', 'self') or 'self'
+            _apply_ownership(game, ownership, request.user)
             _process_bgg_link(game, form)
             game.save()
             tag_id_list = form.cleaned_data.get('tag_id_list', [])
@@ -1126,14 +1187,18 @@ def group_game_add(request, slug):
                 game.tags.set(tag_id_list)
             notify_group_game_added(group, game, request.user)
             return redirect('game_detail', pk=game.pk)
-    else:
-        form = BoardGameForm()
-    return render(request, 'club/group_game_form.html', {
-        'form': form,
-        'action': 'Add Group Game',
-        'group': group,
-        'initial_tags': [],
-    })
+        org_groups = _get_user_org_groups(request.user)
+        return render(request, 'club/game_form.html', {
+            'form': form,
+            'action': 'Add Group Game',
+            'group': group,
+            'initial_tags': [],
+            'org_groups': org_groups,
+            'default_ownership': f'group:{group.slug}',
+            'suggested_groups': ['self', group.slug],
+            'current_ownership': f'group:{group.slug}',
+        })
+    return redirect(f'{reverse("game_add")}?group={group.slug}')
 
 
 def game_detail(request, pk):
@@ -1166,15 +1231,58 @@ def game_edit(request, pk):
         game.group
         and is_group_organizer(request.user, game.group)
     )
-    if (game.owner != request.user
-            and not is_superuser_editing_others
-            and not is_group_organizer_editing):
+    is_group_admin_editing = (
+        game.group
+        and is_group_admin(request.user, game.group)
+    )
+    can_edit = (
+        game.owner == request.user
+        or is_superuser_editing_others
+        or is_group_organizer_editing
+        or is_group_admin_editing
+    )
+    if not can_edit:
         raise PermissionDenied
+
+    org_groups = _get_user_org_groups(request.user)
+    if game.owner_id is not None and game.group_id is None:
+        current_ownership = 'self'
+    elif game.group_id is not None:
+        current_ownership = f'group:{game.group.slug}'
+    else:
+        current_ownership = 'self'
+
     if request.method == 'POST':
-        form = BoardGameForm(request.POST, instance=game)
+        form = BoardGameForm(request.POST, instance=game, ownership_user=request.user)
         if form.is_valid():
+            ownership = form.cleaned_data.get('ownership_target', 'self') or 'self'
+            old_ownership = current_ownership
             _process_bgg_link(game, form)
             form.save()
+            if ownership != old_ownership:
+                can_change = False
+                if old_ownership == 'self' and ownership.startswith('group:'):
+                    can_change = (game.owner == request.user) or is_superuser_editing_others
+                elif old_ownership.startswith('group:') and ownership == 'self':
+                    can_change = is_group_organizer_editing or is_group_admin_editing or is_superuser_editing_others
+                elif old_ownership.startswith('group:') and ownership.startswith('group:'):
+                    can_change = is_group_organizer_editing or is_group_admin_editing or is_superuser_editing_others
+                if can_change:
+                    _apply_ownership(game, ownership, request.user)
+                    game.save()
+                else:
+                    form.add_error('ownership_target', 'You do not have permission to change ownership.')
+                    return render(request, 'club/game_form.html', {
+                        'form': form,
+                        'action': 'Edit',
+                        'is_superuser_editing_others': is_superuser_editing_others,
+                        'game': game,
+                        'initial_tags': list(game.tags.all()),
+                        'org_groups': org_groups,
+                        'default_ownership': ownership,
+                        'current_ownership': old_ownership,
+                        'suggested_groups': ['self'],
+                    })
             tag_id_list = form.cleaned_data.get('tag_id_list', [])
             game.tags.set(tag_id_list)
             if game.complexity:
@@ -1193,13 +1301,17 @@ def game_edit(request, pk):
                 ).update(is_read=True)
             return redirect('game_detail', pk=game.pk)
     else:
-        form = BoardGameForm(instance=game)
+        form = BoardGameForm(instance=game, ownership_user=request.user)
     return render(request, 'club/game_form.html', {
         'form': form,
         'action': 'Edit',
         'is_superuser_editing_others': is_superuser_editing_others,
         'game': game,
         'initial_tags': list(game.tags.all()),
+        'org_groups': org_groups,
+        'default_ownership': current_ownership,
+        'current_ownership': current_ownership,
+        'suggested_groups': ['self'],
     })
 
 
