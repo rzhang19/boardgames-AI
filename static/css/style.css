@@ -98,6 +98,16 @@ nav form button:hover {
     position: sticky;
     top: 0;
     z-index: 100;
+    background: var(--nav-bg);
+    box-shadow: var(--shadow);
+}
+
+nav {
+    background: var(--nav-bg);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    height: 56px;
 }
 
 main {
