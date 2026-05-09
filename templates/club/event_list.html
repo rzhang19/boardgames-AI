@@ -61,7 +61,7 @@
             {% for event in eg.events %}
             <tr>
                 <td data-label="Title"><a href="{% url 'event_detail' event.group.slug event.pk %}">{{ event.title }}</a></td>
-                <td data-label="Date">{{ event.date|date:"N j, Y" }}{% if event.date.time != time_midnight %} {{ event.date|date:"g:i A" }}{% endif %}</td>
+                <td data-label="Date">{{ event.date|date:"N j, Y" }}{% if event.date.time != time_midnight %} {{ event.date|date:"g:i A" }}{% endif %} ({{ event.duration_minutes }}min)</td>
                 <td data-label="Location">{{ event.location|default:"-" }}</td>
                 <td data-label="Created By"><a href="{% url 'public_profile' event.created_by.username %}">{{ event.created_by.username }}</a>{% verified_badge event.created_by %}</td>
             </tr>

@@ -180,6 +180,16 @@
             </div>
             <button type="submit" class="btn btn-primary">Save Offset</button>
         </div>
+
+        <div class="card">
+            <h2>Default Event Duration</h2>
+            <div class="field-group">
+                <label for="id_default_event_duration">Duration (minutes):</label>
+                <input type="number" name="default_event_duration_minutes" id="id_default_event_duration" value="{{ site_settings.default_event_duration_minutes }}" min="1" max="1440">
+                <p class="helptext">The default duration for new events and new groups (in minutes). Existing groups and events are not affected.</p>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Duration</button>
+        </div>
     </form>
 </div>
 {% endblock %}

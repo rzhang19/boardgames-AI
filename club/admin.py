@@ -22,7 +22,7 @@ class BoardGameAdmin(admin.ModelAdmin):
 
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
-    list_display = ('title', 'date', 'location', 'created_by', 'is_active')
+    list_display = ('title', 'date', 'location', 'created_by', 'is_active', 'duration_minutes')
     list_filter = ('is_active', 'show_individual_votes')
     search_fields = ('title',)
 

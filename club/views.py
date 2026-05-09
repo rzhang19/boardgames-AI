@@ -527,7 +527,7 @@ def dashboard(request):
     upcoming_events = Event.objects.filter(
         group__membership__user=request.user,
         group__disbanded_at__isnull=True,
-        date__gte=timezone.now(),
+        end_time__gte=timezone.now(),
     ).select_related('created_by', 'group').order_by('date')[:5]
 
     return render(request, 'club/dashboard.html', {
@@ -942,19 +942,19 @@ def game_list(request):
             user=request.user,
             event__group_id__isnull=True,
             event__is_active=True,
-            event__date__gt=timezone.now(),
+            event__end_time__gt=timezone.now(),
         ).values_list('event_id', flat=True))
         user_event_ids.update(Event.objects.filter(
             created_by=request.user,
             group_id__isnull=True,
             is_active=True,
-            date__gt=timezone.now(),
+            end_time__gt=timezone.now(),
         ).values_list('pk', flat=True))
         user_event_ids.update(Event.objects.filter(
             additional_organizers=request.user,
             group_id__isnull=True,
             is_active=True,
-            date__gt=timezone.now(),
+            end_time__gt=timezone.now(),
         ).values_list('pk', flat=True))
         if user_event_ids:
             event_user_ids = set(
@@ -1479,6 +1479,7 @@ def event_add(request, slug):
                 event.voting_deadline = custom_deadline
             else:
                 event.voting_deadline = event.date - timezone.timedelta(minutes=offset)
+            event.duration_minutes = form.cleaned_data.get('duration_minutes') or 120
             event.save()
             tag_id_list = form.cleaned_data.get('tag_id_list', [])
             if tag_id_list:
@@ -1488,6 +1489,7 @@ def event_add(request, slug):
     else:
         form = EventForm(initial={
             'voting_deadline_offset_minutes': SiteSettings.load().default_voting_offset_minutes,
+            'duration_minutes': group.default_event_duration_minutes,
         })
     return render(request, 'club/event_form.html', {
         'form': form,
@@ -1563,6 +1565,7 @@ def event_add_recurring(request, slug):
                 'voting_deadline_offset_minutes': vd_offset,
                 'voting_deadline_date': vd_date.strftime('%Y-%m-%d') if vd_date else '',
                 'voting_deadline_time': vd_time.strftime('%H:%M') if vd_time else '',
+                'duration_minutes': form.cleaned_data.get('duration_minutes', 120) or 120,
             }
 
             request.session['recurring_event_form_data'] = form_data
@@ -1637,6 +1640,7 @@ def event_add_recurring_preview(request, slug):
                 created_by=request.user,
                 group=group,
                 voting_deadline_offset_minutes=offset,
+                duration_minutes=event_data.get('duration_minutes', 120) or 120,
             )
             custom_vd_date = event_data.get('voting_deadline_date')
             custom_vd_time = event_data.get('voting_deadline_time')
@@ -1681,6 +1685,8 @@ def event_edit(request, slug, pk):
         form = EventForm(request.POST, instance=event)
         if form.is_valid():
             event = form.save(commit=False)
+            if not event.is_ongoing:
+                event.duration_minutes = form.cleaned_data.get('duration_minutes') or 120
             event.date = form.cleaned_data['date']
             offset = form.cleaned_data.get('voting_deadline_offset_minutes') or 0
             event.voting_deadline_offset_minutes = offset
@@ -1991,6 +1997,17 @@ def admin_settings(request):
             total_minutes = 0
         if site_settings.default_voting_offset_minutes != total_minutes:
             site_settings.default_voting_offset_minutes = total_minutes
+            site_settings.save()
+
+        duration_val = request.POST.get('default_event_duration_minutes', '120')
+        try:
+            duration_minutes = int(duration_val)
+            if duration_minutes < 1:
+                duration_minutes = 120
+        except (ValueError, TypeError):
+            duration_minutes = 120
+        if site_settings.default_event_duration_minutes != duration_minutes:
+            site_settings.default_event_duration_minutes = duration_minutes
             site_settings.save()
         return redirect('admin_settings')
 
@@ -2303,7 +2320,7 @@ def group_dashboard(request, slug):
 
     upcoming_events = Event.objects.filter(
         group=group,
-        date__gte=timezone.now(),
+        end_time__gte=timezone.now(),
     ).order_by('date')[:5]
 
     return render(request, 'club/group_dashboard.html', {
@@ -2632,7 +2649,7 @@ def _clean_remove_member(user, group):
     from .models import EventAttendance
     upcoming_events = Event.objects.filter(
         group=group,
-        date__gte=timezone.now(),
+        end_time__gte=timezone.now(),
     )
     EventAttendance.objects.filter(
         user=user,
@@ -3044,6 +3061,13 @@ def event_play_game(request, pk):
     if not is_org and not is_privileged:
         raise PermissionDenied
 
+    if not event.is_currently_active:
+        from django.contrib import messages
+        messages.error(request, 'Cannot record games for an event that has ended.')
+        if event.group_id is not None:
+            return redirect('event_detail', slug=event.group.slug, pk=event.pk)
+        return redirect('private_event_detail', pk=event.pk)
+
     if request.method == 'POST':
         board_game = get_object_or_404(BoardGame, pk=request.POST.get('board_game'))
         selection_method = request.POST.get('selection_method', 'manual')
@@ -3132,6 +3156,78 @@ def game_session_delete(request, event_pk, pk):
 
 
 @login_required
+def event_extend(request, pk):
+    event = get_object_or_404(Event, pk=pk)
+    is_org = _is_event_organizer(request.user, event)
+    is_privileged = request.user.is_superuser or request.user.is_site_admin
+    if not is_org and not is_privileged:
+        raise PermissionDenied
+
+    if not event.is_ongoing:
+        if event.group_id is not None:
+            return redirect('event_detail', slug=event.group.slug, pk=event.pk)
+        return redirect('private_event_detail', pk=event.pk)
+
+    if request.method == 'POST':
+        try:
+            additional = int(request.POST.get('additional_minutes', 0))
+        except (ValueError, TypeError):
+            additional = 0
+        if additional < 1:
+            if event.group_id is not None:
+                return redirect('event_detail', slug=event.group.slug, pk=event.pk)
+            return redirect('private_event_detail', pk=event.pk)
+        event.duration_minutes += additional
+        event.end_time = event.end_time + timezone.timedelta(minutes=additional)
+        event.save(update_fields=['duration_minutes', 'end_time'])
+        if event.group_id is not None:
+            return redirect('event_detail', slug=event.group.slug, pk=event.pk)
+        return redirect('private_event_detail', pk=event.pk)
+
+    if event.group_id is not None:
+        return redirect('event_detail', slug=event.group.slug, pk=event.pk)
+    return redirect('private_event_detail', pk=event.pk)
+
+
+@login_required
+def event_end_early(request, pk):
+    event = get_object_or_404(Event, pk=pk)
+    is_org = _is_event_organizer(request.user, event)
+    is_privileged = request.user.is_superuser or request.user.is_site_admin
+    if not is_org and not is_privileged:
+        raise PermissionDenied
+
+    if not event.is_ongoing:
+        if event.group_id is not None:
+            return redirect('event_detail', slug=event.group.slug, pk=event.pk)
+        return redirect('private_event_detail', pk=event.pk)
+
+    if request.method == 'POST':
+        now = timezone.now()
+        event.ended_early_at = now
+        event.end_time = now
+        event.save(update_fields=['ended_early_at', 'end_time'])
+        if event.group_id is not None:
+            return redirect('event_detail', slug=event.group.slug, pk=event.pk)
+        return redirect('private_event_detail', pk=event.pk)
+
+    if event.group_id is not None:
+        return redirect('event_detail', slug=event.group.slug, pk=event.pk)
+    return redirect('private_event_detail', pk=event.pk)
+
+
+def event_timer_status(request, pk):
+    event = get_object_or_404(Event, pk=pk)
+    from django.http import JsonResponse
+    data = {
+        'end_time': event.end_time.isoformat() if event.end_time else None,
+        'ended_early_at': event.ended_early_at.isoformat() if event.ended_early_at else None,
+        'is_active': event.is_currently_active,
+    }
+    return JsonResponse(data)
+
+
+@login_required
 def cancel_friend_request(request, pk):
     friendship = get_object_or_404(Friendship, pk=pk)
     if friendship.requester != request.user:
@@ -3203,7 +3299,7 @@ def users_page(request):
         upcoming_private_event_ids = Event.objects.filter(
             pk__in=user_event_ids,
             group__isnull=True,
-            date__gt=timezone.now(),
+            end_time__gt=timezone.now(),
         ).values_list('pk', flat=True)
 
         friends_shared_events = {}
@@ -3313,6 +3409,7 @@ def private_event_create(request):
                 event.voting_deadline = custom_deadline
             else:
                 event.voting_deadline = event.date - timezone.timedelta(minutes=offset)
+            event.duration_minutes = form.cleaned_data.get('duration_minutes') or 120
             event.save()
             tag_id_list = form.cleaned_data.get('tag_id_list', [])
             if tag_id_list:
@@ -3322,6 +3419,7 @@ def private_event_create(request):
     else:
         form = PrivateEventForm(initial={
             'voting_deadline_offset_minutes': SiteSettings.load().default_voting_offset_minutes,
+            'duration_minutes': SiteSettings.load().default_event_duration_minutes,
         })
 
     return render(request, 'club/private_event_form.html', {
@@ -3395,6 +3493,8 @@ def private_event_edit(request, pk):
         form = PrivateEventForm(request.POST, instance=event)
         if form.is_valid():
             event = form.save(commit=False)
+            if not event.is_ongoing:
+                event.duration_minutes = form.cleaned_data.get('duration_minutes') or 120
             event.date = form.cleaned_data['date']
             offset = form.cleaned_data.get('voting_deadline_offset_minutes') or 0
             event.voting_deadline_offset_minutes = offset

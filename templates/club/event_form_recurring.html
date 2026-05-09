@@ -61,6 +61,15 @@
                 <div></div>
                 <div class="form-errors">{{ form.time.errors }}</div>
                 {% endif %}
+
+                <label for="id_duration_minutes">Duration (minutes):<span class="required-asterisk">*</span></label>
+                <div class="input-cell">
+                    {{ form.duration_minutes }}
+                </div>
+                {% if form.duration_minutes.errors %}
+                <div></div>
+                <div class="form-errors">{{ form.duration_minutes.errors }}</div>
+                {% endif %}
             </div>
         </div>
 

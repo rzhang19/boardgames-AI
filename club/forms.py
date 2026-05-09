@@ -256,6 +256,12 @@ class EventForm(forms.ModelForm):
         required=False,
         widget=forms.HiddenInput,
     )
+    duration_minutes = forms.IntegerField(
+        min_value=1,
+        initial=120,
+        required=False,
+        widget=forms.NumberInput(attrs={'type': 'number', 'min': '1'}),
+    )
     tag_ids = forms.CharField(
         required=False,
         widget=forms.HiddenInput(),
@@ -277,9 +283,15 @@ class EventForm(forms.ModelForm):
                     self.fields['voting_deadline_time'].initial = self.instance.voting_deadline.time()
             if self.instance.pk and self.instance.tags.exists():
                 self.fields['tag_ids'].initial = ','.join(str(t.pk) for t in self.instance.tags.all())
+            self.fields['duration_minutes'].initial = self.instance.duration_minutes
+            if self.instance.is_ongoing:
+                self.fields['duration_minutes'].disabled = True
 
     def clean(self):
         cleaned_data = super().clean()
+        duration = cleaned_data.get('duration_minutes')
+        if duration is not None and duration < 1:
+            self.add_error('duration_minutes', 'Duration must be at least 1 minute.')
         date_val = cleaned_data.get('date')
         time_val = cleaned_data.get('time') or dt_time(0, 0)
         if date_val:
@@ -369,9 +381,18 @@ class RecurringEventForm(forms.Form):
         required=False,
         widget=forms.HiddenInput,
     )
+    duration_minutes = forms.IntegerField(
+        min_value=1,
+        initial=120,
+        required=False,
+        widget=forms.NumberInput(attrs={'type': 'number', 'min': '1'}),
+    )
 
     def clean(self):
         cleaned_data = super().clean()
+        duration = cleaned_data.get('duration_minutes')
+        if duration is not None and duration < 1:
+            self.add_error('duration_minutes', 'Duration must be at least 1 minute.')
         start_date = cleaned_data.get('start_date')
         time_val = cleaned_data.get('time') or dt_time(0, 0)
         end_type = cleaned_data.get('end_type')
@@ -542,13 +563,14 @@ class GroupCreateForm(forms.ModelForm):
 class GroupSettingsForm(forms.ModelForm):
     class Meta:
         model = Group
-        fields = ['name', 'description', 'image', 'discoverable', 'join_policy', 'max_members']
+        fields = ['name', 'description', 'image', 'discoverable', 'join_policy', 'max_members', 'default_event_duration_minutes']
 
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
         if self.user and not self.user.is_superuser:
             self.fields['max_members'].disabled = True
+        self.fields['default_event_duration_minutes'].required = False
 
     def clean_name(self):
         name = self.cleaned_data.get('name')
@@ -600,6 +622,12 @@ class PrivateEventForm(forms.ModelForm):
         initial='nobody',
     )
     auto_add_games = forms.BooleanField(required=False, initial=False)
+    duration_minutes = forms.IntegerField(
+        min_value=1,
+        initial=120,
+        required=False,
+        widget=forms.NumberInput(attrs={'type': 'number', 'min': '1'}),
+    )
     tag_ids = forms.CharField(
         required=False,
         widget=forms.HiddenInput(),
@@ -621,9 +649,15 @@ class PrivateEventForm(forms.ModelForm):
                     self.fields['voting_deadline_time'].initial = self.instance.voting_deadline.time()
             if self.instance.pk and self.instance.tags.exists():
                 self.fields['tag_ids'].initial = ','.join(str(t.pk) for t in self.instance.tags.all())
+            self.fields['duration_minutes'].initial = self.instance.duration_minutes
+            if self.instance.is_ongoing:
+                self.fields['duration_minutes'].disabled = True
 
     def clean(self):
         cleaned_data = super().clean()
+        duration = cleaned_data.get('duration_minutes')
+        if duration is not None and duration < 1:
+            self.add_error('duration_minutes', 'Duration must be at least 1 minute.')
         date_val = cleaned_data.get('date')
         time_val = cleaned_data.get('time') or dt_time(0, 0)
         if date_val:

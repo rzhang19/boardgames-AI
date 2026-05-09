@@ -182,7 +182,7 @@ class EventCreateViewTest(TestCase):
         self.assertContains(response, 'Location')
         html = response.content.decode()
         asterisk_count = html.count('<span class="required-asterisk">')
-        self.assertEqual(asterisk_count, 2)
+        self.assertEqual(asterisk_count, 3)
         title_section = html[html.find('id="id_title"') - 200:html.find('id="id_title"') + 50]
         self.assertIn('required-asterisk', title_section)
         date_section = html[html.find('id="id_date"') - 200:html.find('id="id_date"') + 50]
@@ -546,7 +546,7 @@ class EventEditViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
         asterisk_count = html.count('<span class="required-asterisk">')
-        self.assertEqual(asterisk_count, 2)
+        self.assertEqual(asterisk_count, 3)
 
     def test_site_admin_without_membership_cannot_edit(self):
         self.client.login(username='siteadmin', password='testpass123')

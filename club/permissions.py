@@ -77,19 +77,19 @@ def can_view_game(user, game):
             user=user,
             event__group_id__isnull=True,
             event__is_active=True,
-            event__date__gt=timezone.now(),
+            event__end_time__gt=timezone.now(),
         ).values_list('event_id', flat=True))
         user_event_ids.update(Event.objects.filter(
             created_by=user,
             group_id__isnull=True,
             is_active=True,
-            date__gt=timezone.now(),
+            end_time__gt=timezone.now(),
         ).values_list('pk', flat=True))
         user_event_ids.update(Event.objects.filter(
             additional_organizers=user,
             group_id__isnull=True,
             is_active=True,
-            date__gt=timezone.now(),
+            end_time__gt=timezone.now(),
         ).values_list('pk', flat=True))
         if user_event_ids:
             if EventAttendance.objects.filter(

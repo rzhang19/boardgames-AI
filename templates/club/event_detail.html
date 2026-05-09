@@ -15,7 +15,7 @@
     </div>
     {% endif %}
 
-    <p><strong>Date:</strong> {{ event.date|date:"N j, Y" }}{% if event.date.time != time_midnight %} at {{ event.date|date:"g:i A" }}{% endif %}</p>
+    <p><strong>Date:</strong> {{ event.date|date:"N j, Y" }}{% if event.date.time != time_midnight %} at {{ event.date|date:"g:i A" }}{% endif %} &mdash; Duration: {{ event.duration_minutes }} min</p>
 
     {% if event.location %}
     <p><strong>Location:</strong> {{ event.location }}</p>
@@ -26,6 +26,14 @@
     {% endif %}
 
     <p><strong>Created by:</strong> <a href="{% url 'public_profile' event.created_by.username %}">{{ event.created_by.username }}</a>{% verified_badge event.created_by %}</p>
+
+    {% if event.is_ongoing %}
+    <p><span class="badge badge-success">Event In Progress</span></p>
+    {% endif %}
+
+    <div id="event-timer" data-remaining="{{ event.time_remaining_seconds }}" data-event-id="{{ event.pk }}" style="display:none; margin-top: 0.5rem;">
+        <span class="badge badge-warning" id="timer-banner"></span>
+    </div>
 
     {% if event.is_voting_open %}
     <p><span class="badge badge-success">Voting Open</span></p>
@@ -53,11 +61,23 @@
 
         {% if is_group_organizer %}
         <a href="{% url 'event_results' event.group.slug event.pk %}" class="btn btn-outline btn-sm">View Results</a>
+        {% if event.is_currently_active %}
         <a href="{% url 'event_game_pool' event.pk %}" class="btn btn-outline btn-sm">Game Selection</a>
         <a href="{% url 'event_play_game' event.pk %}" class="btn btn-outline btn-sm">Record Game</a>
         {% endif %}
 
-        {% if is_group_organizer %}
+        {% if event.is_ongoing %}
+        <form method="post" action="{% url 'event_extend' event.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <input type="number" name="additional_minutes" value="30" min="1" max="480" style="width:4rem;" required>
+            <button type="submit" class="btn btn-success btn-sm">Extend</button>
+        </form>
+        <form method="post" action="{% url 'event_end_early' event.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-sm">End Event</button>
+        </form>
+        {% endif %}
+
         {% if event.is_currently_active %}
         <form method="post" action="{% url 'event_toggle_voting' event.group.slug event.pk %}" style="display:inline;">
             {% csrf_token %}
@@ -103,8 +123,8 @@
         {% for session in game_sessions %}
         <li>
             <a href="{% url 'game_session_detail' event.pk session.pk %}">{{ session.board_game }}</a>
-            — {{ session.get_selection_method_display }}
-            — {{ session.played_at|date:"M j, Y g:i A" }}
+            &mdash; {{ session.get_selection_method_display }}
+            &mdash; {{ session.played_at|date:"M j, Y g:i A" }}
             {% if session.players.all %}
             ({{ session.players.all|join:", " }})
             {% endif %}
@@ -115,4 +135,64 @@
 {% endif %}
 
 <a href="{% url 'group_event_list' event.group.slug %}" class="btn btn-outline btn-sm">Back to Events</a>
+
+{% if event.is_currently_active %}
+<script>
+(function() {
+    var el = document.getElementById('event-timer');
+    var remaining = parseInt(el.dataset.remaining);
+    var banner = document.getElementById('timer-banner');
+    var eventId = el.dataset.eventId;
+    var polling = false;
+
+    function updateBanner() {
+        if (remaining <= 0) {
+            banner.textContent = 'This event has ended.';
+            banner.className = 'badge badge-neutral';
+            el.style.display = '';
+            return;
+        }
+        if (remaining <= 900) {
+            var mins = Math.ceil(remaining / 60);
+            banner.textContent = mins + ' minute' + (mins !== 1 ? 's' : '') + ' remaining!';
+            banner.className = 'badge badge-warning';
+            el.style.display = '';
+        }
+    }
+
+    function tick() {
+        if (remaining <= 0) {
+            updateBanner();
+            return;
+        }
+        remaining -= 15;
+        updateBanner();
+        setTimeout(tick, 15000);
+    }
+
+    function startPolling() {
+        if (polling) return;
+        polling = true;
+        setInterval(function() {
+            fetch('/events/' + eventId + '/timer-status/')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.ended_early_at || !data.is_active) {
+                        remaining = 0;
+                    } else if (data.end_time) {
+                        var end = new Date(data.end_time);
+                        remaining = Math.max(0, Math.floor((end - new Date()) / 1000));
+                    }
+                    updateBanner();
+                });
+        }, 30000);
+    }
+
+    if (remaining <= 900) {
+        startPolling();
+    }
+    tick();
+})();
+</script>
+{% endif %}
 {% endblock %}

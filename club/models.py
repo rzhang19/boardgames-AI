@@ -6,6 +6,7 @@ from django.db.models.signals import pre_save
 from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.text import slugify
+from datetime import datetime
 from uuid import uuid4
 
 MAX_TAGS_PER_ITEM = 5
@@ -33,6 +34,7 @@ class SiteSettings(models.Model):
     allow_site_admins_to_delete_groups = models.BooleanField(default=False)
     site_lockdown_active = models.BooleanField(default=False)
     site_lockdown_allow_site_admins = models.BooleanField(default=False)
+    default_event_duration_minutes = models.PositiveIntegerField(default=120)
 
     def save(self, *args, **kwargs):
         self.pk = 1
@@ -43,7 +45,13 @@ class SiteSettings(models.Model):
 
     @classmethod
     def load(cls):
-        return cls.objects.get_or_create(pk=1, defaults={'default_voting_offset_minutes': 0})[0]
+        return cls.objects.get_or_create(
+            pk=1,
+            defaults={
+                'default_voting_offset_minutes': 0,
+                'default_event_duration_minutes': 120,
+            },
+        )[0]
 
 
 class User(AbstractUser):
@@ -129,6 +137,7 @@ class Group(models.Model):
         default='open',
     )
     max_members = models.PositiveIntegerField(default=50)
+    default_event_duration_minutes = models.PositiveIntegerField(default=120)
     disbanded_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
@@ -190,6 +199,8 @@ class Group(models.Model):
 @receiver(pre_save, sender=Group)
 def group_generate_slug(sender, instance, **kwargs):
     if instance.slug:
+        if instance.pk is None:
+            instance.default_event_duration_minutes = SiteSettings.load().default_event_duration_minutes
         return
     base_slug = slugify(instance.name)
     if not base_slug:
@@ -200,6 +211,8 @@ def group_generate_slug(sender, instance, **kwargs):
         slug = f'{base_slug}-{counter}'
         counter += 1
     instance.slug = slug
+    if instance.pk is None:
+        instance.default_event_duration_minutes = SiteSettings.load().default_event_duration_minutes
 
 
 class GroupMembership(models.Model):
@@ -442,17 +455,65 @@ class Event(models.Model):
     tags = models.ManyToManyField(
         'EventTag', blank=True, related_name='tagged_events',
     )
+    duration_minutes = models.PositiveIntegerField(default=120)
+    end_time = models.DateTimeField(db_index=True)
+    ended_early_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return self.title
 
     @property
     def phase(self):
-        return 'upcoming' if self.date > timezone.now() else 'completed'
+        if self.ended_early_at or timezone.now() >= self.end_time:
+            return 'completed'
+        if timezone.now() >= self.date:
+            return 'ongoing'
+        return 'upcoming'
 
     @property
     def is_currently_active(self):
-        return self.is_active and self.date > timezone.now()
+        return self.is_active and timezone.now() < self.end_time
+
+    @property
+    def is_ongoing(self):
+        return self.is_active and self.date <= timezone.now() < self.end_time
+
+    @property
+    def time_remaining_seconds(self):
+        if not self.is_currently_active:
+            return 0
+        remaining = (self.end_time - timezone.now()).total_seconds()
+        return max(0, int(remaining))
+
+    def _recompute_end_time(self):
+        if self.date:
+            dt = self.date
+            if isinstance(dt, str):
+                from django.utils.dateparse import parse_datetime
+                dt = parse_datetime(dt)
+            if dt:
+                if timezone.is_naive(dt):
+                    dt = timezone.make_aware(dt)
+                self.end_time = dt + timezone.timedelta(
+                    minutes=self.duration_minutes
+                )
+
+    def save(self, *args, **kwargs):
+        if self.pk is None:
+            if not self.end_time:
+                self._recompute_end_time()
+        else:
+            if not self.ended_early_at:
+                try:
+                    old = Event.objects.get(pk=self.pk)
+                    if (
+                        old.date != self.date
+                        or old.duration_minutes != self.duration_minutes
+                    ):
+                        self._recompute_end_time()
+                except Event.DoesNotExist:
+                    pass
+        super().save(*args, **kwargs)
 
     @property
     def is_voting_open(self):
