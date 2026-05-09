@@ -570,6 +570,25 @@ class GameAddWithBggLinkInputTest(TestCase):
         response = self.client.get(reverse('game_add'))
         self.assertContains(response, 'bgg-link-warning')
 
+    def test_add_form_bgg_warning_uses_visibility_not_display(self):
+        """Given the add game page, when rendering, then the bgg warning uses visibility hidden instead of display none"""
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.get(reverse('game_add'))
+        self.assertContains(response, "id=\"bgg-link-warning\"")
+        content = response.content.decode()
+        warning_start = content.index("id=\"bgg-link-warning\"")
+        warning_tag = content[warning_start:warning_start + 300]
+        self.assertIn("visibility: hidden", warning_tag)
+
+    def test_add_form_bgg_input_cell_stacks_vertically(self):
+        """Given the add game page, when rendering, then the BGG link input-cell uses flex-direction column"""
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.get(reverse('game_add'))
+        content = response.content.decode()
+        bgg_label_pos = content.index("for=\"id_bgg_link_input\"")
+        input_cell_pos = content.index("input-cell", bgg_label_pos)
+        self.assertIn("flex-direction: column", content[input_cell_pos:input_cell_pos + 100])
+
 
 @tag("integration")
 class GameEditWithBggLinkInputTest(TestCase):

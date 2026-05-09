@@ -95,9 +95,9 @@
                 {% endif %}
 
                 <label for="id_bgg_link_input">BGG Link:</label>
-                <div class="input-cell">
+                <div class="input-cell" style="flex-direction: column; align-items: stretch;">
                     {{ form.bgg_link_input }}
-                    <div id="bgg-link-warning" class="bgg-link-warning" style="display:none; color: #856404; background-color: #fff3cd; border: 1px solid #ffc107; padding: 6px 10px; border-radius: 4px; margin-top: 4px; font-size: 0.85em;">
+                    <div id="bgg-link-warning" class="bgg-link-warning" style="visibility: hidden; color: #856404; background-color: #fff3cd; border: 1px solid #ffc107; padding: 6px 10px; border-radius: 4px; margin-top: 4px; font-size: 0.85em;">
                         No BoardGameGeek link set. You can search for this game above or paste a link manually.
                     </div>
                 </div>
@@ -409,9 +409,9 @@
         var hasBggId = bggIdField && bggIdField.value;
         var hasBggLink = bggLinkInput && bggLinkInput.value.trim();
         if (!hasBggId && !hasBggLink) {
-            bggLinkWarning.style.display = 'block';
+            bggLinkWarning.style.visibility = 'visible';
         } else {
-            bggLinkWarning.style.display = 'none';
+            bggLinkWarning.style.visibility = 'hidden';
         }
     }
 
