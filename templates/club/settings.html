@@ -92,22 +92,6 @@
             {% endif %}
         </div>
 
-        {% if user.email %}
-        <div id="remove-email-modal" class="filter-modal-overlay">
-            <div class="modal-box filter-modal" style="padding:24px;">
-                <h3 style="margin:0 0 16px;">Remove Email</h3>
-                <p>Removing your email means you will <strong>not</strong> be able to reset your password if you forget it. Are you sure?</p>
-                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
-                    <form method="post" action="{% url 'remove_email' %}" style="display:inline;">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-danger">Remove Email</button>
-                    </form>
-                    <button type="button" id="remove-email-cancel" class="btn btn-neutral">Cancel</button>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
         <div class="card">
             <h2>Timezone</h2>
             <div>
@@ -228,6 +212,22 @@
         </div>
 
     </form>
+
+    {% if user.email %}
+    <div id="remove-email-modal" class="filter-modal-overlay">
+        <div class="modal-box filter-modal" style="padding:24px;">
+            <h3 style="margin:0 0 16px;">Remove Email</h3>
+            <p>Removing your email means you will <strong>not</strong> be able to reset your password if you forget it. Are you sure?</p>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+                <form method="post" action="{% url 'remove_email' %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">Remove Email</button>
+                </form>
+                <button type="button" id="remove-email-cancel" class="btn btn-neutral">Cancel</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
