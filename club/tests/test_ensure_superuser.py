@@ -1,11 +1,12 @@
 from io import StringIO
 
 from django.core.management import call_command
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 
 from club.models import User
 
 
+@tag("unit")
 class EnsureSuperuserTests(TestCase):
 
     def setUp(self):

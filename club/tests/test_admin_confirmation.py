@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -7,6 +7,7 @@ from club.models import Group, GroupMembership
 User = get_user_model()
 
 
+@tag("integration")
 class AdminConfirmationTest(TestCase):
 
     def setUp(self):

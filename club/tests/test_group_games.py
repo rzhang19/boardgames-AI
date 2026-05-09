@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
@@ -8,6 +8,7 @@ from club.models import BoardGame, Group, GroupMembership
 User = get_user_model()
 
 
+@tag("integration")
 class GroupGamesViewTest(TestCase):
 
     def setUp(self):
