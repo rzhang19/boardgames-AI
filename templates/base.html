@@ -112,33 +112,55 @@
     })();
     </script>
     {% endif %}
-    <script>
-    (function() {
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('input[type="password"]').forEach(function(input) {
-                var wrapper = document.createElement('div');
-                wrapper.className = 'pw-toggle-wrapper';
-                input.parentNode.insertBefore(wrapper, input);
-                wrapper.appendChild(input);
+<script>
+(function() {
+    function wrapPasswordInput(input) {
+        if (input.closest('.pw-toggle-wrapper')) return;
 
-                var btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'pw-toggle-btn';
-                btn.setAttribute('aria-label', 'Toggle password visibility');
-                btn.textContent = '\u{1F441}';
-                wrapper.appendChild(btn);
+        var wrapper = document.createElement('div');
+        wrapper.className = 'pw-toggle-wrapper';
+        input.parentNode.insertBefore(wrapper, input);
+        wrapper.appendChild(input);
 
-                btn.addEventListener('click', function() {
-                    if (input.type === 'password') {
-                        input.type = 'text';
-                    } else {
-                        input.type = 'password';
-                    }
-                });
-            });
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'pw-toggle-btn';
+        btn.setAttribute('aria-label', 'Toggle password visibility');
+        btn.textContent = '\u{1F441}';
+        wrapper.appendChild(btn);
+
+        btn.addEventListener('click', function() {
+            if (input.type === 'password') {
+                input.type = 'text';
+            } else {
+                input.type = 'password';
+            }
         });
-    })();
-    </script>
+    }
+
+    function wrapAllPasswordInputs() {
+        document.querySelectorAll('input[type="password"]').forEach(wrapPasswordInput);
+    }
+
+    document.addEventListener('DOMContentLoaded', wrapAllPasswordInputs);
+
+    if (typeof MutationObserver !== 'undefined') {
+        var observer = new MutationObserver(function(mutations) {
+            var needsCheck = false;
+            for (var i = 0; i < mutations.length; i++) {
+                if (mutations[i].addedNodes.length) {
+                    needsCheck = true;
+                    break;
+                }
+            }
+            if (needsCheck) wrapAllPasswordInputs();
+        });
+        document.addEventListener('DOMContentLoaded', function() {
+            observer.observe(document.body, { childList: true, subtree: true });
+        });
+    }
+})();
+</script>
     <script id="nav-hamburger-menu">
     (function() {
         document.addEventListener('DOMContentLoaded', function() {

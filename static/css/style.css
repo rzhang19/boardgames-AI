@@ -307,6 +307,10 @@ form div {
     margin-bottom: 16px;
 }
 
+form div.pw-toggle-wrapper {
+    margin-bottom: 0;
+}
+
 form label {
     display: block;
     font-weight: 600;
@@ -369,6 +373,11 @@ select:focus {
 
 .pw-toggle-btn:hover {
     opacity: 1;
+}
+
+.pw-toggle-wrapper input::-ms-reveal,
+.pw-toggle-wrapper input::-webkit-credentials-auto-fill-button {
+    display: none;
 }
 
 input[type="checkbox"] {

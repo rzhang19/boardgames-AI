@@ -131,6 +131,40 @@ class LoginTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Please enter a correct')
 
+    def test_password_toggle_script_present_on_login_page(self):
+        response = self.client.get(reverse('login'))
+        self.assertContains(response, 'pw-toggle-wrapper')
+        self.assertContains(response, 'pw-toggle-btn')
+        self.assertContains(response, 'Toggle password visibility')
+
+    def test_password_toggle_script_present_after_failed_login(self):
+        response = self.client.post(reverse('login'), {
+            'username': 'loginuser',
+            'password': 'wrongpass',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'pw-toggle-wrapper')
+        self.assertContains(response, 'pw-toggle-btn')
+        self.assertContains(response, 'Toggle password visibility')
+
+    def test_password_toggle_script_has_double_wrap_guard(self):
+        response = self.client.get(reverse('login'))
+        content = response.content.decode()
+        self.assertIn('closest', content)
+
+    def test_password_toggle_script_has_mutation_observer_fallback(self):
+        response = self.client.get(reverse('login'))
+        content = response.content.decode()
+        self.assertIn('MutationObserver', content)
+
+    def test_password_field_present_after_failed_login(self):
+        response = self.client.post(reverse('login'), {
+            'username': 'loginuser',
+            'password': 'wrongpass',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'type="password"')
+
     def test_login_with_nonexistent_user(self):
         response = self.client.post(reverse('login'), {
             'username': 'ghost',
