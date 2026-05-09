@@ -85,7 +85,7 @@
     function renderDropdown(tags, query) {
         dropdown.innerHTML = '';
         if (tags.length === 0) {
-            if (canRequest && query.length >= 2 && query.length <= 25) {
+            if (query.length >= 2 && canRequest && query.length <= 25) {
                 var reqBtn = document.createElement('button');
                 reqBtn.type = 'button';
                 reqBtn.className = 'tag-dropdown-item tag-request-btn';
@@ -94,7 +94,7 @@
                     submitRequest(query);
                 });
                 dropdown.appendChild(reqBtn);
-            } else if (isAdmin && query.length >= 2 && query.length <= 25) {
+            } else if (query.length >= 2 && isAdmin && query.length <= 25) {
                 var addBtn = document.createElement('button');
                 addBtn.type = 'button';
                 addBtn.className = 'tag-dropdown-item tag-add-btn';
@@ -106,14 +106,22 @@
             } else {
                 var empty = document.createElement('div');
                 empty.className = 'tag-dropdown-empty';
-                empty.textContent = 'No tags found';
+                empty.textContent = query.length === 0 ? 'No tags available' : 'No tags found';
                 dropdown.appendChild(empty);
             }
         } else {
             tags.forEach(function(t) {
                 var item = document.createElement('div');
                 item.className = 'tag-dropdown-item';
-                item.textContent = t.name;
+                var nameSpan = document.createElement('span');
+                nameSpan.textContent = t.name;
+                item.appendChild(nameSpan);
+                if (t.count !== undefined) {
+                    var countSpan = document.createElement('span');
+                    countSpan.className = 'tag-dropdown-count';
+                    countSpan.textContent = ' (' + t.count + ')';
+                    item.appendChild(countSpan);
+                }
                 item.addEventListener('click', function() {
                     addPill(t.id, t.name);
                     searchInput.value = '';
@@ -121,7 +129,7 @@
                 });
                 dropdown.appendChild(item);
             });
-            if (canRequest && query.length >= 2 && query.length <= 25) {
+            if (query.length >= 2 && canRequest && query.length <= 25) {
                 var reqBtn2 = document.createElement('button');
                 reqBtn2.type = 'button';
                 reqBtn2.className = 'tag-dropdown-item tag-request-btn';
@@ -130,7 +138,7 @@
                     submitRequest(query);
                 });
                 dropdown.appendChild(reqBtn2);
-            } else if (isAdmin && query.length >= 2 && query.length <= 25) {
+            } else if (query.length >= 2 && isAdmin && query.length <= 25) {
                 var addBtn2 = document.createElement('button');
                 addBtn2.type = 'button';
                 addBtn2.className = 'tag-dropdown-item tag-add-btn';
@@ -146,10 +154,6 @@
 
     function performSearch() {
         var q = searchInput.value.trim().toLowerCase();
-        if (q.length < 2) {
-            dropdown.style.display = 'none';
-            return;
-        }
         fetch(searchUrl + '?q=' + encodeURIComponent(q))
             .then(function(r) { return r.json(); })
             .then(function(tags) {
@@ -205,6 +209,10 @@
     searchInput.addEventListener('input', function() {
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(performSearch, 300);
+    });
+
+    searchInput.addEventListener('focus', function() {
+        performSearch();
     });
 
     searchInput.addEventListener('keydown', function(e) {
@@ -263,6 +271,7 @@
 .tag-dropdown-item:hover { background: var(--bg-hover, #f0f0f0); }
 .tag-dropdown-empty { padding: 0.4rem 0.6rem; color: #999; font-size: 0.9em; }
 .tag-request-btn, .tag-add-btn { color: var(--primary, #007bff); font-style: italic; }
+.tag-dropdown-count { color: #888; font-size: 0.85em; }
 .tag-inline-toast {
     margin-top: 0.35rem; padding: 0.35rem 0.6rem; border-radius: 4px; font-size: 0.85em;
 }

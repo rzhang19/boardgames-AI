@@ -1,9 +1,13 @@
 import json
+from datetime import timedelta
+from django.utils import timezone
 
 from django.test import TestCase, tag, Client
 from django.contrib.auth import get_user_model
 
-from club.models import GameTag, EventTag, TagRequest, Notification
+from club.models import (
+    GameTag, EventTag, TagRequest, Notification, BoardGame, Event,
+)
 
 User = get_user_model()
 
@@ -28,15 +32,79 @@ class GameTagSearchViewTest(TestCase):
         self.assertIn('racing', names)
         self.assertNotIn('role playing', names)
 
-    def test_search_empty_query_returns_empty(self):
+    def test_search_empty_query_returns_all_tags_sorted_by_count(self):
+        tag_a = GameTag.objects.create(name='alpha')
+        tag_b = GameTag.objects.create(name='bravo')
+        g1 = BoardGame.objects.create(name='G1', owner=self.user)
+        g2 = BoardGame.objects.create(name='G2', owner=self.user)
+        g3 = BoardGame.objects.create(name='G3', owner=self.user)
+        g1.tags.add(tag_a)
+        g2.tags.add(tag_a)
+        g3.tags.add(tag_b)
         response = self.client.get('/tags/game/search/', {'q': ''})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [])
+        data = response.json()
+        names = [t['name'] for t in data]
+        self.assertIn('alpha', names)
+        self.assertIn('bravo', names)
+        alpha_entry = next(t for t in data if t['name'] == 'alpha')
+        bravo_entry = next(t for t in data if t['name'] == 'bravo')
+        self.assertEqual(alpha_entry['count'], 2)
+        self.assertEqual(bravo_entry['count'], 1)
+        self.assertLess(names.index('alpha'), names.index('bravo'))
 
-    def test_search_no_query_param_returns_empty(self):
+    def test_search_no_query_param_returns_all_tags_sorted_by_count(self):
+        GameTag.objects.create(name='solo')
         response = self.client.get('/tags/game/search/')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [])
+        data = response.json()
+        names = [t['name'] for t in data]
+        self.assertIn('solo', names)
+        solo_entry = next(t for t in data if t['name'] == 'solo')
+        self.assertIn('count', solo_entry)
+
+    def test_search_caps_at_25_results(self):
+        for i in range(30):
+            GameTag.objects.create(name=f'tag-{i:02d}')
+        response = self.client.get('/tags/game/search/', {'q': ''})
+        data = response.json()
+        self.assertEqual(len(data), 25)
+
+    def test_search_with_query_sorts_by_count(self):
+        tag_x = GameTag.objects.create(name='xray')
+        tag_y = GameTag.objects.create(name='xylophone')
+        g1 = BoardGame.objects.create(name='G1', owner=self.user)
+        g2 = BoardGame.objects.create(name='G2', owner=self.user)
+        g3 = BoardGame.objects.create(name='G3', owner=self.user)
+        g1.tags.add(tag_x)
+        g2.tags.add(tag_x)
+        g3.tags.add(tag_y)
+        response = self.client.get('/tags/game/search/', {'q': 'x'})
+        data = response.json()
+        self.assertEqual(len(data), 2)
+        self.assertEqual(data[0]['name'], 'xray')
+        self.assertEqual(data[0]['count'], 2)
+        self.assertEqual(data[1]['name'], 'xylophone')
+        self.assertEqual(data[1]['count'], 1)
+
+    def test_search_returns_count_field(self):
+        tag = GameTag.objects.create(name='racing')
+        response = self.client.get('/tags/game/search/', {'q': 'rac'})
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        self.assertIn('count', data[0])
+        self.assertEqual(data[0]['count'], 0)
+
+    def test_search_ties_broken_alphabetically(self):
+        tag_z = GameTag.objects.create(name='zzz-alpha')
+        tag_w = GameTag.objects.create(name='zzz-bravo')
+        g1 = BoardGame.objects.create(name='G1', owner=self.user)
+        g2 = BoardGame.objects.create(name='G2', owner=self.user)
+        g1.tags.add(tag_z)
+        g2.tags.add(tag_w)
+        response = self.client.get('/tags/game/search/', {'q': ''})
+        names = [t['name'] for t in response.json()]
+        self.assertLess(names.index('zzz-alpha'), names.index('zzz-bravo'))
 
     def test_search_requires_authentication(self):
         self.client.logout()
@@ -62,6 +130,16 @@ class EventTagSearchViewTest(TestCase):
         )
         self.client.login(username='eventsearcher', password='testpass123')
 
+    def _create_event(self, **kwargs):
+        defaults = {
+            'title': 'Test Event',
+            'date': timezone.now() + timedelta(days=1),
+            'created_by': self.user,
+            'voting_deadline': timezone.now() + timedelta(hours=12),
+        }
+        defaults.update(kwargs)
+        return Event.objects.create(**defaults)
+
     def test_search_returns_matching_event_tags(self):
         EventTag.objects.create(name='tournament')
         EventTag.objects.create(name='casual')
@@ -70,6 +148,59 @@ class EventTagSearchViewTest(TestCase):
         names = [t['name'] for t in data]
         self.assertIn('tournament', names)
         self.assertNotIn('casual', names)
+
+    def test_search_empty_query_returns_all_tags_sorted_by_count(self):
+        tag_a = EventTag.objects.create(name='alpha')
+        tag_b = EventTag.objects.create(name='bravo')
+        e1 = self._create_event(title='E1')
+        e2 = self._create_event(title='E2')
+        e3 = self._create_event(title='E3')
+        e1.tags.add(tag_a)
+        e2.tags.add(tag_a)
+        e3.tags.add(tag_b)
+        response = self.client.get('/tags/event/search/', {'q': ''})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        names = [t['name'] for t in data]
+        self.assertIn('alpha', names)
+        self.assertIn('bravo', names)
+        alpha_entry = next(t for t in data if t['name'] == 'alpha')
+        bravo_entry = next(t for t in data if t['name'] == 'bravo')
+        self.assertEqual(alpha_entry['count'], 2)
+        self.assertEqual(bravo_entry['count'], 1)
+        self.assertLess(names.index('alpha'), names.index('bravo'))
+
+    def test_search_caps_at_25_results(self):
+        for i in range(30):
+            EventTag.objects.create(name=f'tag-{i:02d}')
+        response = self.client.get('/tags/event/search/', {'q': ''})
+        data = response.json()
+        self.assertEqual(len(data), 25)
+
+    def test_search_with_query_sorts_by_count(self):
+        tag_x = EventTag.objects.create(name='xray')
+        tag_y = EventTag.objects.create(name='xylophone')
+        e1 = self._create_event(title='E1')
+        e2 = self._create_event(title='E2')
+        e3 = self._create_event(title='E3')
+        e1.tags.add(tag_x)
+        e2.tags.add(tag_x)
+        e3.tags.add(tag_y)
+        response = self.client.get('/tags/event/search/', {'q': 'x'})
+        data = response.json()
+        self.assertEqual(len(data), 2)
+        self.assertEqual(data[0]['name'], 'xray')
+        self.assertEqual(data[0]['count'], 2)
+        self.assertEqual(data[1]['name'], 'xylophone')
+        self.assertEqual(data[1]['count'], 1)
+
+    def test_search_returns_count_field(self):
+        EventTag.objects.create(name='tournament')
+        response = self.client.get('/tags/event/search/', {'q': 'tour'})
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        self.assertIn('count', data[0])
+        self.assertEqual(data[0]['count'], 0)
 
     def test_search_requires_authentication(self):
         self.client.logout()

@@ -10,7 +10,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import PermissionDenied
 from django.core.mail import send_mail
 from django.core.signing import TimestampSigner
-from django.db.models import F, Q
+from django.db.models import Count, F, Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -3806,19 +3806,31 @@ def event_invite_respond(request, pk, invite_pk, status):
 @login_required
 def game_tag_search(request):
     query = request.GET.get('q', '').strip().lower()
-    if not query:
-        return JsonResponse([], safe=False)
-    tags = GameTag.objects.filter(name__icontains=query).values('pk', 'name')[:10]
-    return JsonResponse([{'id': t['pk'], 'name': t['name']} for t in tags], safe=False)
+    qs = GameTag.objects.annotate(
+        count=Count('tagged_games'),
+    ).order_by('-count', 'name')
+    if query:
+        qs = qs.filter(name__icontains=query)
+    tags = qs.values('pk', 'name', 'count')[:25]
+    return JsonResponse(
+        [{'id': t['pk'], 'name': t['name'], 'count': t['count']} for t in tags],
+        safe=False,
+    )
 
 
 @login_required
 def event_tag_search(request):
     query = request.GET.get('q', '').strip().lower()
-    if not query:
-        return JsonResponse([], safe=False)
-    tags = EventTag.objects.filter(name__icontains=query).values('pk', 'name')[:10]
-    return JsonResponse([{'id': t['pk'], 'name': t['name']} for t in tags], safe=False)
+    qs = EventTag.objects.annotate(
+        count=Count('tagged_events'),
+    ).order_by('-count', 'name')
+    if query:
+        qs = qs.filter(name__icontains=query)
+    tags = qs.values('pk', 'name', 'count')[:25]
+    return JsonResponse(
+        [{'id': t['pk'], 'name': t['name'], 'count': t['count']} for t in tags],
+        safe=False,
+    )
 
 
 @login_required
