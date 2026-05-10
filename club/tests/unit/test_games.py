@@ -10,6 +10,7 @@ from django.utils import timezone
 from club.models import (
     BoardGame,
     Event,
+    EventTag,
     GameTag,
     GameSession,
     GameSessionPlayer,
@@ -952,3 +953,47 @@ class GameSessionModelTest(TestCase):
             selection_method='manual', created_by=self.admin,
         )
         self.assertEqual(GameSession.objects.filter(event=self.event).count(), 2)
+
+
+@tag("unit")
+class BoardGameTagTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='gameowner', password='testpass123'
+        )
+
+    def test_board_game_can_have_tags(self):
+        game = BoardGame.objects.create(name='Catan', owner=self.user)
+        tag1 = GameTag.objects.create(name='racing')
+        tag2 = GameTag.objects.create(name='trading')
+        game.tags.add(tag1, tag2)
+        self.assertEqual(game.tags.count(), 2)
+        self.assertIn(tag1, game.tags.all())
+
+    def test_board_game_can_have_no_tags(self):
+        game = BoardGame.objects.create(name='Chess', owner=self.user)
+        self.assertEqual(game.tags.count(), 0)
+
+    def test_board_game_tags_are_game_tags_not_event_tags(self):
+        game = BoardGame.objects.create(name='Catan', owner=self.user)
+        game_tag = GameTag.objects.create(name='racing')
+        event_tag = EventTag.objects.create(name='tournament')
+        game.tags.add(game_tag)
+        self.assertIn(game_tag, game.tags.all())
+        self.assertNotIn(event_tag, game.tags.all())
+
+    def test_game_tag_reverse_relation(self):
+        game = BoardGame.objects.create(name='Catan', owner=self.user)
+        tag = GameTag.objects.create(name='racing')
+        game.tags.add(tag)
+        self.assertIn(game, tag.tagged_games.all())
+
+    def test_filter_games_by_tag(self):
+        game1 = BoardGame.objects.create(name='Catan', owner=self.user)
+        game2 = BoardGame.objects.create(name='Uno', owner=self.user)
+        tag = GameTag.objects.create(name='racing')
+        game1.tags.add(tag)
+        strategy_games = BoardGame.objects.filter(tags=tag)
+        self.assertIn(game1, strategy_games)
+        self.assertNotIn(game2, strategy_games)

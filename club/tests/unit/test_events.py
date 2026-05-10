@@ -13,7 +13,9 @@ from club.models import (
     EventAttendance,
     EventInvite,
     EventPresence,
+    EventTag,
     GameSession,
+    GameTag,
     Group,
     GroupMembership,
     Notification,
@@ -1301,3 +1303,55 @@ class EventGamePoolTest(TestCase):
         pool = self.event.get_game_pool()
         names = list(pool.values_list('name', flat=True))
         self.assertIn('Pandemic', names)
+
+
+@tag("unit")
+class EventTagRelationTest(TestCase):
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='eventadmin', password='testpass123', is_site_admin=True
+        )
+        self.group = Group.objects.create(name='Tag Test Group')
+
+    def _create_event(self, title='Test Event'):
+        from django.utils import timezone
+        date = timezone.now() + timezone.timedelta(days=7)
+        return Event.objects.create(
+            title=title, date=date, voting_deadline=date,
+            created_by=self.admin, group=self.group,
+        )
+
+    def test_event_can_have_tags(self):
+        event = self._create_event()
+        tag1 = EventTag.objects.create(name='tournament')
+        tag2 = EventTag.objects.create(name='casual')
+        event.tags.add(tag1, tag2)
+        self.assertEqual(event.tags.count(), 2)
+
+    def test_event_can_have_no_tags(self):
+        event = self._create_event()
+        self.assertEqual(event.tags.count(), 0)
+
+    def test_event_tags_are_event_tags_not_game_tags(self):
+        event = self._create_event()
+        event_tag = EventTag.objects.create(name='tournament')
+        game_tag = GameTag.objects.create(name='racing')
+        event.tags.add(event_tag)
+        self.assertIn(event_tag, event.tags.all())
+        self.assertNotIn(game_tag, event.tags.all())
+
+    def test_event_tag_reverse_relation(self):
+        event = self._create_event()
+        tag = EventTag.objects.create(name='tournament')
+        event.tags.add(tag)
+        self.assertIn(event, tag.tagged_events.all())
+
+    def test_filter_events_by_tag(self):
+        event1 = self._create_event('Party Night')
+        event2 = self._create_event('Tournament')
+        tag = EventTag.objects.create(name='tournament')
+        event1.tags.add(tag)
+        tagged_events = Event.objects.filter(tags=tag)
+        self.assertIn(event1, tagged_events)
+        self.assertNotIn(event2, tagged_events)
