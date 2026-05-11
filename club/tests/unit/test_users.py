@@ -179,3 +179,157 @@ class TimezoneMiddlewareTest(TestCase):
         request.user = user
         self.middleware(request)
         self.assertEqual(timezone.get_current_timezone(), zoneinfo.ZoneInfo('UTC'))
+
+
+@tag("unit")
+class CaseInsensitiveBackendTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='TestUser', password='testpass123', email='Test@Example.com'
+        )
+        from club.backends import EmailOrUsernameBackend
+        self.backend = EmailOrUsernameBackend()
+
+    def test_authenticate_with_lowercase_username(self):
+        result = self.backend.authenticate(
+            request=None, username='testuser', password='testpass123'
+        )
+        self.assertEqual(result, self.user)
+
+    def test_authenticate_with_uppercase_username(self):
+        result = self.backend.authenticate(
+            request=None, username='TESTUSER', password='testpass123'
+        )
+        self.assertEqual(result, self.user)
+
+    def test_authenticate_with_lowercase_email(self):
+        result = self.backend.authenticate(
+            request=None, username='test@example.com', password='testpass123'
+        )
+        self.assertEqual(result, self.user)
+
+    def test_authenticate_with_uppercase_email(self):
+        result = self.backend.authenticate(
+            request=None, username='TEST@EXAMPLE.COM', password='testpass123'
+        )
+        self.assertEqual(result, self.user)
+
+
+@tag("unit")
+class EmailOrUsernameBackendTimingTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='backenduser', password='testpass123', email='backend@example.com'
+        )
+        from club.backends import EmailOrUsernameBackend
+        self.backend = EmailOrUsernameBackend()
+
+    def test_nonexistent_user_triggers_password_hash(self):
+        from unittest.mock import patch
+        with patch.object(User, 'set_password') as mock_set_password:
+            result = self.backend.authenticate(
+                request=None, username='ghost', password='anypass'
+            )
+            mock_set_password.assert_called_once_with('anypass')
+            self.assertIsNone(result)
+
+    def test_nonexistent_user_returns_none(self):
+        result = self.backend.authenticate(
+            request=None, username='ghost', password='anypass'
+        )
+        self.assertIsNone(result)
+
+    def test_existing_user_wrong_password_returns_none(self):
+        result = self.backend.authenticate(
+            request=None, username='backenduser', password='wrongpass'
+        )
+        self.assertIsNone(result)
+
+    def test_existing_user_correct_password_by_username(self):
+        result = self.backend.authenticate(
+            request=None, username='backenduser', password='testpass123'
+        )
+        self.assertEqual(result, self.user)
+
+    def test_existing_user_correct_password_by_email(self):
+        result = self.backend.authenticate(
+            request=None, username='backend@example.com', password='testpass123'
+        )
+        self.assertEqual(result, self.user)
+
+    def test_unverified_user_returns_none(self):
+        from django.test import override_settings
+        user = User.objects.create_user(
+            username='unverified', password='testpass123',
+            email='unverified@example.com', email_verified=False
+        )
+        with override_settings(REQUIRE_EMAIL_VERIFICATION=True):
+            result = self.backend.authenticate(
+                request=None, username='unverified', password='testpass123'
+            )
+            self.assertIsNone(result)
+
+
+@tag("unit")
+class UnverifiedFriendRequestRateLimitTest(TestCase):
+
+    def setUp(self):
+        self.unverified = User.objects.create_user(
+            username='unverified', password='testpass123',
+        )
+
+    def _create_users(self, *usernames, password='testpass123'):
+        return [User.objects.create_user(username=u, password=password) for u in usernames]
+
+    def test_unverified_can_send_up_to_3_pending(self):
+        targets = self._create_users('target1', 'target2', 'target3')
+        for t in targets:
+            from club.models import Friendship
+            self.assertTrue(Friendship.can_send_request(self.unverified, t))
+            Friendship.objects.create(requester=self.unverified, receiver=t, status='pending')
+
+    def test_unverified_blocked_on_4th_pending(self):
+        from club.models import Friendship
+        targets = self._create_users('target1', 'target2', 'target3', 'target4')
+        for t in targets[:3]:
+            Friendship.objects.create(requester=self.unverified, receiver=t, status='pending')
+        self.assertFalse(Friendship.can_send_request(self.unverified, targets[3]))
+
+    def test_verified_user_not_limited(self):
+        from club.models import Friendship
+        verified = User.objects.create_user(
+            username='verified', password='testpass123',
+            email_verified=True, email='verified@test.com',
+        )
+        targets = self._create_users('target1', 'target2', 'target3', 'target4')
+        for t in targets[:3]:
+            Friendship.objects.create(requester=verified, receiver=t, status='pending')
+        self.assertTrue(Friendship.can_send_request(verified, targets[3]))
+
+    def test_accepting_frees_up_slot(self):
+        from club.models import Friendship
+        targets = self._create_users('target1', 'target2', 'target3', 'target4')
+        for t in targets[:3]:
+            Friendship.objects.create(requester=self.unverified, receiver=t, status='pending')
+        Friendship.objects.filter(requester=self.unverified, receiver=targets[0]).update(status='accepted')
+        self.assertTrue(Friendship.can_send_request(self.unverified, targets[3]))
+
+    def test_declining_frees_up_slot(self):
+        from club.models import Friendship
+        targets = self._create_users('target1', 'target2', 'target3', 'target4')
+        for t in targets[:3]:
+            Friendship.objects.create(requester=self.unverified, receiver=t, status='pending')
+        Friendship.objects.filter(requester=self.unverified, receiver=targets[0]).update(status='declined')
+        self.assertTrue(Friendship.can_send_request(self.unverified, targets[3]))
+
+    def test_unverified_still_subject_to_decline_cooldown(self):
+        from club.models import Friendship
+        from django.utils import timezone
+        target = self._create_users('target1')[0]
+        Friendship.objects.create(
+            requester=self.unverified, receiver=target,
+            status='declined', decline_count=2, last_declined_at=timezone.now(),
+        )
+        self.assertFalse(Friendship.can_send_request(self.unverified, target))

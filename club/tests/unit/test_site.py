@@ -454,3 +454,78 @@ class VerifiedIconModelTest(TestCase):
     def test_user_verified_icon_nullable(self):
         user = User.objects.create_user(username='testuser', password='testpass123')
         self.assertIsNone(user.verified_icon)
+
+
+@tag("unit")
+class FeedbackConnectionTest(TestCase):
+
+    def test_send_real_emails_false_returns_none(self):
+        from club.views import _get_feedback_connection
+        with self.settings(SEND_REAL_EMAILS=False):
+            self.assertIsNone(_get_feedback_connection())
+
+    def test_send_real_emails_true_returns_smtp_connection(self):
+        from django.core.mail.backends.smtp import EmailBackend
+        from club.views import _get_feedback_connection
+        with self.settings(SEND_REAL_EMAILS=True):
+            connection = _get_feedback_connection()
+            self.assertIsInstance(connection, EmailBackend)
+
+
+@tag("unit")
+class FeedbackFormTest(TestCase):
+
+    def test_feedback_type_choices(self):
+        from club.forms import FeedbackForm
+        form = FeedbackForm()
+        choice_values = [c[0] for c in form.fields['feedback_type'].choices]
+        self.assertEqual(choice_values, ['bug', 'feature', 'admin', 'community', 'other'])
+
+    def test_message_max_length(self):
+        from club.forms import FeedbackForm
+        form = FeedbackForm(data={
+            'feedback_type': 'bug',
+            'email': 'test@example.com',
+            'message': 'x' * 1001,
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn('message', form.errors)
+
+    def test_email_field_required(self):
+        from club.forms import FeedbackForm
+        form = FeedbackForm(data={
+            'feedback_type': 'bug',
+            'email': '',
+            'message': 'Hello',
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn('email', form.errors)
+
+    def test_message_field_required(self):
+        from club.forms import FeedbackForm
+        form = FeedbackForm(data={
+            'feedback_type': 'bug',
+            'email': 'test@example.com',
+            'message': '',
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn('message', form.errors)
+
+    def test_valid_form(self):
+        from club.forms import FeedbackForm
+        form = FeedbackForm(data={
+            'feedback_type': 'feature',
+            'email': 'test@example.com',
+            'message': 'I would love a dark mode!',
+        })
+        self.assertTrue(form.is_valid())
+
+    def test_invalid_email_rejected(self):
+        from club.forms import FeedbackForm
+        form = FeedbackForm(data={
+            'feedback_type': 'bug',
+            'email': 'not-an-email',
+            'message': 'Hello',
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn('email', form.errors)

@@ -1061,3 +1061,146 @@ class ParseBggLinkTest(TestCase):
         from club.utils import parse_bgg_link
         result = parse_bgg_link('https://www.boardgamegeek.com/boardgame/13/catan')
         self.assertEqual(result, {'bgg_id': 13, 'bgg_link': 'https://www.boardgamegeek.com/boardgame/13/catan'})
+
+
+@tag("unit")
+class GameSessionPlayerModelTest(TestCase):
+
+    def setUp(self):
+        self.admin = User.objects.create_user(username='admin', password='pass')
+        self.user = User.objects.create_user(username='user', password='pass')
+        self.group = Group.objects.create(name='Player Group')
+        from club.models import GroupMembership
+        GroupMembership.objects.create(user=self.admin, group=self.group, role='admin')
+        self.event = Event.objects.create(
+            title='Player Event',
+            date=timezone.now() + timezone.timedelta(days=7),
+            voting_deadline=timezone.now() + timezone.timedelta(days=7),
+            created_by=self.admin,
+            group=self.group,
+        )
+        self.game = BoardGame.objects.create(name='Catan', owner=self.admin)
+        self.session = GameSession.objects.create(
+            event=self.event, board_game=self.game,
+            selection_method='manual', created_by=self.admin,
+        )
+
+    def test_add_registered_player(self):
+        player = GameSessionPlayer.objects.create(
+            game_session=self.session, user=self.user,
+        )
+        self.assertEqual(player.user, self.user)
+        self.assertEqual(player.guest_name, '')
+
+    def test_add_guest_player(self):
+        player = GameSessionPlayer.objects.create(
+            game_session=self.session, guest_name='Guest1',
+        )
+        self.assertIsNone(player.user_id)
+        self.assertEqual(player.guest_name, 'Guest1')
+
+    def test_clean_validates_exactly_one_of_user_or_guest(self):
+        from django.core.exceptions import ValidationError
+        player = GameSessionPlayer(
+            game_session=self.session,
+            user=self.user,
+            guest_name='Guest1',
+        )
+        with self.assertRaises(ValidationError):
+            player.clean()
+
+    def test_clean_validates_neither_user_nor_guest(self):
+        from django.core.exceptions import ValidationError
+        player = GameSessionPlayer(
+            game_session=self.session,
+        )
+        with self.assertRaises(ValidationError):
+            player.clean()
+
+    def test_unique_constraint_registered_player(self):
+        GameSessionPlayer.objects.create(
+            game_session=self.session, user=self.user,
+        )
+        from django.db import IntegrityError
+        with self.assertRaises(IntegrityError):
+            GameSessionPlayer.objects.create(
+                game_session=self.session, user=self.user,
+            )
+
+    def test_guest_names_not_unique(self):
+        GameSessionPlayer.objects.create(
+            game_session=self.session, guest_name='Guest',
+        )
+        player2 = GameSessionPlayer.objects.create(
+            game_session=self.session, guest_name='Guest',
+        )
+        self.assertIsNotNone(player2.pk)
+
+
+@tag("unit")
+class BoardGameGroupOwnerTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            username='gameowner', password='testpass123'
+        )
+        cls.group = Group.objects.create(name='Test Group')
+
+    def test_create_board_game_with_group_owner(self):
+        game = BoardGame.objects.create(
+            name='Group Catan', group=self.group,
+            min_players=3, max_players=4, complexity='medium',
+        )
+        self.assertEqual(game.name, 'Group Catan')
+        self.assertEqual(game.group, self.group)
+        self.assertIsNone(game.owner)
+
+    def test_create_board_game_with_user_owner(self):
+        game = BoardGame.objects.create(
+            name='User Chess', owner=self.user,
+            min_players=3, max_players=4,
+        )
+        self.assertEqual(game.owner, self.user)
+        self.assertIsNone(game.group)
+
+    def test_create_board_game_with_both_owner_and_group_is_not_preferred(self):
+        game = BoardGame.objects.create(
+            name='Dual Owner Game', owner=self.user, group=self.group,
+        )
+        self.assertEqual(game.owner, self.user)
+        self.assertEqual(game.group, self.group)
+
+    def test_create_board_game_with_neither_owner_nor_group_possible(self):
+        game = BoardGame.objects.create(name='Orphan Game')
+        self.assertIsNone(game.owner)
+        self.assertIsNone(game.group)
+
+    def test_group_owned_game_cascade_on_group_delete(self):
+        game = BoardGame.objects.create(name='Doomed Game', group=self.group)
+        self.group.delete()
+        self.assertFalse(BoardGame.objects.filter(pk=game.pk).exists())
+
+    def test_user_owned_game_unaffected_by_unrelated_group_delete(self):
+        other_group = Group.objects.create(name='Other Group')
+        game = BoardGame.objects.create(name='Safe Game', owner=self.user)
+        other_group.delete()
+        self.assertTrue(BoardGame.objects.filter(pk=game.pk).exists())
+
+    def test_group_owned_game_bgg_fields(self):
+        game = BoardGame.objects.create(
+            name='BGG Group Game', group=self.group,
+            bgg_id=42, bgg_link='https://boardgamegeek.com/boardgame/42/test',
+        )
+        self.assertEqual(game.bgg_id, 42)
+        self.assertEqual(game.bgg_link, 'https://boardgamegeek.com/boardgame/42/test')
+
+    def test_group_owned_game_complexity(self):
+        game = BoardGame.objects.create(
+            name='Complex Group Game', group=self.group, complexity='heavy',
+        )
+        self.assertEqual(game.complexity, 'heavy')
+
+    def test_group_owned_game_string_representation(self):
+        game = BoardGame.objects.create(name='Group Chess', group=self.group)
+        self.assertEqual(str(game), 'Group Chess')

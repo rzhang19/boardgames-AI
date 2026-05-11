@@ -77,12 +77,22 @@ def _create_parser():
 
 
 def _resolve_file_label(name):
-    if not name.startswith('club.tests.'):
-        if name.startswith('test_'):
-            name = f'club.tests.{name}'
-        elif not name.startswith('club'):
-            name = f'club.tests.test_{name}'
-    return name
+    if name.startswith('club.tests.'):
+        return [name]
+    subdirs = ['unit', 'integration', 'system']
+    if name.startswith('test_'):
+        base = name
+    else:
+        base = f'test_{name}'
+    targets = []
+    for subdir in subdirs:
+        module_path = f'club.tests.{subdir}.{base}'
+        file_path = os.path.join(BASE_DIR, 'club', 'tests', subdir, f'{base}.py')
+        if os.path.isfile(file_path):
+            targets.append(module_path)
+    if not targets:
+        targets.append(f'club.tests.{base}')
+    return targets
 
 
 def build_test_command(args):
@@ -99,7 +109,7 @@ def build_test_command(args):
         cmd.extend(['-v', str(verbosity)])
 
     if args.file:
-        cmd.append(_resolve_file_label(args.file))
+        cmd.extend(_resolve_file_label(args.file))
         return cmd
 
     active_areas = [

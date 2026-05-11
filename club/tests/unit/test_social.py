@@ -5,7 +5,7 @@ from django.db import IntegrityError
 from django.test import TestCase, tag
 from django.utils import timezone
 
-from club.models import Block, Friendship, Notification
+from club.models import BoardGame, Block, Friendship, Notification
 
 User = get_user_model()
 
@@ -269,3 +269,226 @@ class NotificationModelTest(TestCase):
         self.assertEqual(Notification.objects.count(), 1)
         user.delete()
         self.assertEqual(Notification.objects.count(), 0)
+
+
+@tag("unit")
+class CleanupNotificationsTest(TestCase):
+
+    def test_deletes_read_notifications_older_than_30_days(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        old = Notification.objects.create(user=user, message='Old', is_read=True)
+        Notification.objects.filter(pk=old.pk).update(
+            created_at=timezone.now() - timezone.timedelta(days=31)
+        )
+        from club.management.commands.cleanup_notifications import Command
+        Command().handle()
+        self.assertFalse(Notification.objects.filter(pk=old.pk).exists())
+
+    def test_keeps_read_notifications_within_30_days(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        recent = Notification.objects.create(user=user, message='Recent', is_read=True)
+        Notification.objects.filter(pk=recent.pk).update(
+            created_at=timezone.now() - timezone.timedelta(days=15)
+        )
+        from club.management.commands.cleanup_notifications import Command
+        Command().handle()
+        self.assertTrue(Notification.objects.filter(pk=recent.pk).exists())
+
+    def test_keeps_unread_notifications_regardless_of_age(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        old_unread = Notification.objects.create(user=user, message='Old unread', is_read=False)
+        Notification.objects.filter(pk=old_unread.pk).update(
+            created_at=timezone.now() - timezone.timedelta(days=60)
+        )
+        from club.management.commands.cleanup_notifications import Command
+        Command().handle()
+        self.assertTrue(Notification.objects.filter(pk=old_unread.pk).exists())
+
+
+@tag("unit")
+class MissingComplexityNotificationTest(TestCase):
+
+    def test_generates_notification_for_game_without_complexity(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        game = BoardGame.objects.create(name='Catan', owner=user)
+        from club.notifications import generate_missing_complexity_notifications
+        generate_missing_complexity_notifications(user)
+        notifs = Notification.objects.filter(user=user, notification_type='missing_complexity')
+        self.assertEqual(notifs.count(), 1)
+        self.assertIn('Catan', notifs.first().message)
+
+    def test_does_not_generate_for_game_with_unknown_complexity(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        BoardGame.objects.create(name='Catan', owner=user, complexity='unknown')
+        from club.notifications import generate_missing_complexity_notifications
+        generate_missing_complexity_notifications(user)
+        notifs = Notification.objects.filter(user=user, notification_type='missing_complexity')
+        self.assertEqual(notifs.count(), 0)
+
+    def test_does_not_generate_for_game_with_complexity(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        BoardGame.objects.create(name='Catan', owner=user, complexity='medium')
+        from club.notifications import generate_missing_complexity_notifications
+        generate_missing_complexity_notifications(user)
+        notifs = Notification.objects.filter(user=user, notification_type='missing_complexity')
+        self.assertEqual(notifs.count(), 0)
+
+    def test_skips_if_notification_already_exists(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        game = BoardGame.objects.create(name='Catan', owner=user)
+        from club.notifications import generate_missing_complexity_notifications
+        generate_missing_complexity_notifications(user)
+        generate_missing_complexity_notifications(user)
+        notifs = Notification.objects.filter(user=user, notification_type='missing_complexity')
+        self.assertEqual(notifs.count(), 1)
+
+    def test_generates_one_notification_per_game(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        BoardGame.objects.create(name='Catan', owner=user)
+        BoardGame.objects.create(name='Ticket to Ride', owner=user)
+        from club.notifications import generate_missing_complexity_notifications
+        generate_missing_complexity_notifications(user)
+        notifs = Notification.objects.filter(user=user, notification_type='missing_complexity')
+        self.assertEqual(notifs.count(), 2)
+
+    def test_does_not_generate_for_other_users_games(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        other = User.objects.create_user(username='otheruser', password='testpass123')
+        BoardGame.objects.create(name='Catan', owner=other)
+        from club.notifications import generate_missing_complexity_notifications
+        generate_missing_complexity_notifications(user)
+        notifs = Notification.objects.filter(user=user, notification_type='missing_complexity')
+        self.assertEqual(notifs.count(), 0)
+
+    def test_notification_url_points_to_game_edit(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        game = BoardGame.objects.create(name='Catan', owner=user)
+        from club.notifications import generate_missing_complexity_notifications
+        generate_missing_complexity_notifications(user)
+        notif = Notification.objects.filter(user=user, notification_type='missing_complexity').first()
+        self.assertIn(f'/games/{game.pk}/edit/', notif.url)
+        self.assertEqual(notif.url_label, 'Edit Game')
+
+    def test_no_notifications_for_user_with_no_games(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        from club.notifications import generate_missing_complexity_notifications
+        generate_missing_complexity_notifications(user)
+        notifs = Notification.objects.filter(user=user, notification_type='missing_complexity')
+        self.assertEqual(notifs.count(), 0)
+
+    def test_complexity_added_auto_dismisses_notification(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        game = BoardGame.objects.create(name='Catan', owner=user)
+        from club.notifications import generate_missing_complexity_notifications
+        generate_missing_complexity_notifications(user)
+        notif = Notification.objects.filter(user=user, notification_type='missing_complexity', is_read=False).first()
+        self.assertIsNotNone(notif)
+        self.client.login(username='testuser', password='testpass123')
+        from django.urls import reverse
+        self.client.post(reverse('game_edit', kwargs={'pk': game.pk}), {
+            'name': 'Catan', 'description': '', 'min_players': 3,
+            'max_players': 4, 'complexity': 'medium', 'bgg_id': '',
+        })
+        notif.refresh_from_db()
+        self.assertTrue(notif.is_read)
+
+
+@tag("unit")
+class MissingMaxPlayersNotificationTest(TestCase):
+
+    def test_generates_notification_for_game_without_max_players(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        game = BoardGame.objects.create(name='Catan', owner=user)
+        from club.notifications import generate_missing_max_players_notifications
+        generate_missing_max_players_notifications(user)
+        notifs = Notification.objects.filter(user=user, notification_type='missing_max_players')
+        self.assertEqual(notifs.count(), 1)
+        self.assertIn('Catan', notifs.first().message)
+
+    def test_does_not_generate_for_game_with_max_players(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        BoardGame.objects.create(name='Catan', owner=user, max_players=4)
+        from club.notifications import generate_missing_max_players_notifications
+        generate_missing_max_players_notifications(user)
+        notifs = Notification.objects.filter(user=user, notification_type='missing_max_players')
+        self.assertEqual(notifs.count(), 0)
+
+    def test_does_not_generate_for_game_with_unlimited(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        BoardGame.objects.create(name='Catan', owner=user, max_players=0)
+        from club.notifications import generate_missing_max_players_notifications
+        generate_missing_max_players_notifications(user)
+        notifs = Notification.objects.filter(user=user, notification_type='missing_max_players')
+        self.assertEqual(notifs.count(), 0)
+
+    def test_skips_if_notification_already_exists(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        BoardGame.objects.create(name='Catan', owner=user)
+        from club.notifications import generate_missing_max_players_notifications
+        generate_missing_max_players_notifications(user)
+        generate_missing_max_players_notifications(user)
+        notifs = Notification.objects.filter(user=user, notification_type='missing_max_players')
+        self.assertEqual(notifs.count(), 1)
+
+
+@tag("unit")
+class UnverifiedFriendRequestRateLimitTest(TestCase):
+
+    def setUp(self):
+        self.unverified = User.objects.create_user(
+            username='unverified', password='testpass123',
+        )
+
+    def _create_users(self, *usernames, password='testpass123'):
+        return [User.objects.create_user(username=u, password=password) for u in usernames]
+
+    def test_unverified_can_send_up_to_3_pending(self):
+        targets = self._create_users('target1', 'target2', 'target3')
+        for t in targets:
+            from club.models import Friendship
+            self.assertTrue(Friendship.can_send_request(self.unverified, t))
+            Friendship.objects.create(requester=self.unverified, receiver=t, status='pending')
+
+    def test_unverified_blocked_on_4th_pending(self):
+        from club.models import Friendship
+        targets = self._create_users('target1', 'target2', 'target3', 'target4')
+        for t in targets[:3]:
+            Friendship.objects.create(requester=self.unverified, receiver=t, status='pending')
+        self.assertFalse(Friendship.can_send_request(self.unverified, targets[3]))
+
+    def test_verified_user_not_limited(self):
+        from club.models import Friendship
+        verified = User.objects.create_user(
+            username='verified', password='testpass123',
+            email_verified=True, email='verified@test.com',
+        )
+        targets = self._create_users('target1', 'target2', 'target3', 'target4')
+        for t in targets[:3]:
+            Friendship.objects.create(requester=verified, receiver=t, status='pending')
+        self.assertTrue(Friendship.can_send_request(verified, targets[3]))
+
+    def test_accepting_frees_up_slot(self):
+        from club.models import Friendship
+        targets = self._create_users('target1', 'target2', 'target3', 'target4')
+        for t in targets[:3]:
+            Friendship.objects.create(requester=self.unverified, receiver=t, status='pending')
+        Friendship.objects.filter(requester=self.unverified, receiver=targets[0]).update(status='accepted')
+        self.assertTrue(Friendship.can_send_request(self.unverified, targets[3]))
+
+    def test_declining_frees_up_slot(self):
+        from club.models import Friendship
+        targets = self._create_users('target1', 'target2', 'target3', 'target4')
+        for t in targets[:3]:
+            Friendship.objects.create(requester=self.unverified, receiver=t, status='pending')
+        Friendship.objects.filter(requester=self.unverified, receiver=targets[0]).update(status='declined')
+        self.assertTrue(Friendship.can_send_request(self.unverified, targets[3]))
+
+    def test_unverified_still_subject_to_decline_cooldown(self):
+        from club.models import Friendship
+        from django.utils import timezone
+        target = self._create_users('target1')[0]
+        Friendship.objects.create(
+            requester=self.unverified, receiver=target,
+            status='declined', decline_count=2, last_declined_at=timezone.now(),
+        )
+        self.assertFalse(Friendship.can_send_request(self.unverified, target))

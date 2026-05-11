@@ -23,6 +23,7 @@ from club.models import (
     Notification,
     PrivateEventCreationLog,
     SiteSettings,
+    Vote,
 )
 from club.notifications import (
     notify_group_demoted_member,
@@ -2109,3 +2110,233 @@ class GamePoolDeduplicationTest(TestCase):
         gg = [v for v in pool.values() if v['name'] == 'Group Game']
         self.assertEqual(len(gg), 1)
         self.assertIn('Group Library', gg[0]['owners'])
+
+
+@tag("unit")
+class BoardGameGroupOwnerTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            username='gameowner', password='testpass123'
+        )
+        cls.group = Group.objects.create(name='Test Group')
+
+    def test_create_board_game_with_group_owner(self):
+        game = BoardGame.objects.create(
+            name='Group Catan', group=self.group,
+            min_players=3, max_players=4, complexity='medium',
+        )
+        self.assertEqual(game.name, 'Group Catan')
+        self.assertEqual(game.group, self.group)
+        self.assertIsNone(game.owner)
+
+    def test_create_board_game_with_user_owner(self):
+        game = BoardGame.objects.create(
+            name='User Chess', owner=self.user,
+            min_players=3, max_players=4,
+        )
+        self.assertEqual(game.owner, self.user)
+        self.assertIsNone(game.group)
+
+    def test_create_board_game_with_both_owner_and_group_is_not_preferred(self):
+        game = BoardGame.objects.create(
+            name='Dual Owner Game', owner=self.user, group=self.group,
+        )
+        self.assertEqual(game.owner, self.user)
+        self.assertEqual(game.group, self.group)
+
+    def test_create_board_game_with_neither_owner_nor_group_possible(self):
+        game = BoardGame.objects.create(name='Orphan Game')
+        self.assertIsNone(game.owner)
+        self.assertIsNone(game.group)
+
+    def test_group_owned_game_cascade_on_group_delete(self):
+        game = BoardGame.objects.create(name='Doomed Game', group=self.group)
+        self.group.delete()
+        self.assertFalse(BoardGame.objects.filter(pk=game.pk).exists())
+
+    def test_user_owned_game_unaffected_by_unrelated_group_delete(self):
+        other_group = Group.objects.create(name='Other Group')
+        game = BoardGame.objects.create(name='Safe Game', owner=self.user)
+        other_group.delete()
+        self.assertTrue(BoardGame.objects.filter(pk=game.pk).exists())
+
+    def test_group_owned_game_bgg_fields(self):
+        game = BoardGame.objects.create(
+            name='BGG Group Game', group=self.group,
+            bgg_id=42, bgg_link='https://boardgamegeek.com/boardgame/42/test',
+        )
+        self.assertEqual(game.bgg_id, 42)
+        self.assertEqual(game.bgg_link, 'https://boardgamegeek.com/boardgame/42/test')
+
+    def test_group_owned_game_complexity(self):
+        game = BoardGame.objects.create(
+            name='Complex Group Game', group=self.group, complexity='heavy',
+        )
+        self.assertEqual(game.complexity, 'heavy')
+
+    def test_group_owned_game_string_representation(self):
+        game = BoardGame.objects.create(name='Group Chess', group=self.group)
+        self.assertEqual(str(game), 'Group Chess')
+
+
+@tag("unit")
+class GroupGamesWithGroupOwnershipTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username='member1', password='testpass123')
+        cls.other = User.objects.create_user(username='member2', password='testpass123')
+        cls.outsider = User.objects.create_user(username='outsider', password='testpass123')
+        cls.group = Group.objects.create(name='Game Group')
+        GroupMembership.objects.create(user=cls.user, group=cls.group, role='member')
+        GroupMembership.objects.create(user=cls.other, group=cls.group, role='member')
+
+    def test_games_includes_user_owned_games(self):
+        game = BoardGame.objects.create(name='User Game', owner=self.user)
+        self.assertIn(game, self.group.games())
+
+    def test_games_includes_group_owned_games(self):
+        game = BoardGame.objects.create(name='Group Game', group=self.group)
+        self.assertIn(game, self.group.games())
+
+    def test_games_includes_both_user_and_group_owned(self):
+        user_game = BoardGame.objects.create(name='User Game', owner=self.user)
+        group_game = BoardGame.objects.create(name='Group Game', group=self.group)
+        games = self.group.games()
+        self.assertIn(user_game, games)
+        self.assertIn(group_game, games)
+        self.assertEqual(games.count(), 2)
+
+    def test_games_excludes_other_group_owned_games(self):
+        other_group = Group.objects.create(name='Other Group')
+        game = BoardGame.objects.create(name='Other Group Game', group=other_group)
+        self.assertNotIn(game, self.group.games())
+
+    def test_games_excludes_outsider_user_owned_games(self):
+        game = BoardGame.objects.create(name='Outsider Game', owner=self.outsider)
+        self.assertNotIn(game, self.group.games())
+
+    def test_group_game_does_not_appear_in_other_group_games(self):
+        group2 = Group.objects.create(name='Second Group')
+        game = BoardGame.objects.create(name='Group Game', group=self.group)
+        self.assertNotIn(game, group2.games())
+
+    def test_games_count_reflects_both_types(self):
+        BoardGame.objects.create(name='User Game 1', owner=self.user)
+        BoardGame.objects.create(name='User Game 2', owner=self.other)
+        BoardGame.objects.create(name='Group Game 1', group=self.group)
+        self.assertEqual(self.group.games().count(), 3)
+
+    def test_member_leaving_does_not_remove_group_owned_games(self):
+        game = BoardGame.objects.create(name='Group Game', group=self.group)
+        GroupMembership.objects.filter(user=self.user, group=self.group).delete()
+        self.assertIn(game, self.group.games())
+
+    def test_group_owned_game_from_disbanded_group_still_queryable(self):
+        game = BoardGame.objects.create(name='Group Game', group=self.group)
+        self.group.disbanded_at = timezone.now()
+        self.group.save()
+        self.assertTrue(BoardGame.objects.filter(pk=game.pk).exists())
+
+
+@tag("unit")
+class NotifyGroupGameAddedTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(username='organizer', password='testpass123')
+        cls.member = User.objects.create_user(username='member', password='testpass123')
+        cls.outsider = User.objects.create_user(username='outsider', password='testpass123')
+        cls.group = Group.objects.create(name='Game Notif Group')
+        GroupMembership.objects.create(user=cls.organizer, group=cls.group, role='admin')
+        GroupMembership.objects.create(user=cls.member, group=cls.group, role='member')
+
+    def test_notifies_all_members_except_actor(self):
+        game = BoardGame.objects.create(name='Group Catan', group=self.group)
+        from club.notifications import notify_group_game_added
+        notify_group_game_added(self.group, game, self.organizer)
+        self.assertTrue(Notification.objects.filter(user=self.member).exists())
+        self.assertFalse(Notification.objects.filter(user=self.organizer).exists())
+        self.assertFalse(Notification.objects.filter(user=self.outsider).exists())
+
+    def test_notification_content(self):
+        game = BoardGame.objects.create(name='Group Catan', group=self.group)
+        from club.notifications import notify_group_game_added
+        notify_group_game_added(self.group, game, self.organizer)
+        notif = Notification.objects.get(user=self.member)
+        self.assertEqual(notif.notification_type, 'group_game_added')
+        self.assertIn('Group Catan', notif.message)
+        self.assertIn('Game Notif Group', notif.message)
+        self.assertEqual(notif.url, f'/groups/{self.group.slug}/games/')
+        self.assertEqual(notif.url_label, 'View Games')
+
+    def test_disbanded_group_sends_no_notification(self):
+        self.group.disbanded_at = timezone.now()
+        self.group.save()
+        game = BoardGame.objects.create(name='Group Catan', group=self.group)
+        from club.notifications import notify_group_game_added
+        notify_group_game_added(self.group, game, self.organizer)
+        self.assertEqual(Notification.objects.count(), 0)
+
+
+@tag("unit")
+class NotifyGroupGameDeletedTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.organizer = User.objects.create_user(username='organizer', password='testpass123')
+        cls.member = User.objects.create_user(username='member', password='testpass123')
+        cls.outsider = User.objects.create_user(username='outsider', password='testpass123')
+        cls.group = Group.objects.create(name='Del Notif Group')
+        GroupMembership.objects.create(user=cls.organizer, group=cls.group, role='admin')
+        GroupMembership.objects.create(user=cls.member, group=cls.group, role='member')
+
+    def test_notifies_all_members_except_actor(self):
+        from club.notifications import notify_group_game_deleted
+        notify_group_game_deleted(self.group, 'Group Catan', self.organizer)
+        self.assertTrue(Notification.objects.filter(user=self.member).exists())
+        self.assertFalse(Notification.objects.filter(user=self.organizer).exists())
+        self.assertFalse(Notification.objects.filter(user=self.outsider).exists())
+
+    def test_notification_content(self):
+        from club.notifications import notify_group_game_deleted
+        notify_group_game_deleted(self.group, 'Group Catan', self.organizer)
+        notif = Notification.objects.get(user=self.member)
+        self.assertEqual(notif.notification_type, 'group_game_deleted')
+        self.assertIn('Group Catan', notif.message)
+        self.assertIn('Del Notif Group', notif.message)
+        self.assertEqual(notif.url, f'/groups/{self.group.slug}/games/')
+        self.assertEqual(notif.url_label, 'View Games')
+
+    def test_disbanded_group_sends_no_notification(self):
+        self.group.disbanded_at = timezone.now()
+        self.group.save()
+        from club.notifications import notify_group_game_deleted
+        notify_group_game_deleted(self.group, 'Group Catan', self.organizer)
+        self.assertEqual(Notification.objects.count(), 0)
+
+
+@tag("unit")
+class DisbandingCascadeTest(TestCase):
+
+    def test_cleanup_deletes_votes_and_attendance(self):
+        user = User.objects.create_user(username='cascade', password='testpass123')
+        group = Group.objects.create(name='Cascade')
+        GroupMembership.objects.create(user=user, group=group)
+        event = Event.objects.create(
+            title='Cascade Event',
+            date=timezone.now() + timedelta(days=7),
+            voting_deadline=timezone.now() + timedelta(days=7),
+            created_by=user,
+            group=group,
+        )
+        EventAttendance.objects.create(user=user, event=event)
+        game = BoardGame.objects.create(name='Cascade Game', owner=user)
+        Vote.objects.create(user=user, event=event, board_game=game, rank=1)
+        group.disbanded_at = timezone.now()
+        group.save()
+        group.delete()
+        self.assertFalse(EventAttendance.objects.filter(event=event).exists())
+        self.assertFalse(Vote.objects.filter(event=event).exists())

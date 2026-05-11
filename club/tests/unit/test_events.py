@@ -1478,3 +1478,104 @@ class GamePoolAvailabilityTest(TestCase):
         catan = [v for v in pool.values() if v['name'] == 'Catan'][0]
         self.assertFalse(catan['is_available'])
         self.assertTrue(catan['overridden'])
+
+
+@tag("unit")
+class EventModelTest(TestCase):
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='adminuser', password='testpass123', is_site_admin=True
+        )
+        self.group = Group.objects.create(name='Test Group')
+
+    def test_create_event_with_all_fields(self):
+        event_date = timezone.now() + timezone.timedelta(days=7)
+        event = Event.objects.create(
+            title='Friday Game Night', date=event_date,
+            voting_deadline=event_date, location='Community Center',
+            description='Weekly game night', created_by=self.admin,
+            group=self.group,
+        )
+        self.assertEqual(event.title, 'Friday Game Night')
+        self.assertEqual(event.date, event_date)
+        self.assertEqual(event.location, 'Community Center')
+        self.assertEqual(event.description, 'Weekly game night')
+        self.assertEqual(event.created_by, self.admin)
+
+    def test_create_event_with_only_required_fields(self):
+        event_date = timezone.now() + timezone.timedelta(days=7)
+        event = Event.objects.create(
+            title='Quick Event', date=event_date,
+            voting_deadline=event_date, created_by=self.admin,
+            group=self.group,
+        )
+        self.assertEqual(event.location, '')
+        self.assertEqual(event.description, '')
+
+    def test_event_string_representation(self):
+        event = Event.objects.create(
+            title='Board Game Bash', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE, created_by=self.admin,
+            group=self.group,
+        )
+        self.assertEqual(str(event), 'Board Game Bash')
+
+    def test_show_individual_votes_defaults_to_false(self):
+        event = Event.objects.create(
+            title='Test Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE, created_by=self.admin,
+            group=self.group,
+        )
+        self.assertFalse(event.show_individual_votes)
+
+    def test_is_active_defaults_to_true(self):
+        event = Event.objects.create(
+            title='Test Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE, created_by=self.admin,
+            group=self.group,
+        )
+        self.assertTrue(event.is_active)
+
+
+@tag("unit")
+class EventAttendanceModelTest(TestCase):
+
+    def setUp(self):
+        self.user1 = User.objects.create_user(username='user1', password='testpass123')
+        self.user2 = User.objects.create_user(username='user2', password='testpass123')
+        self.admin = User.objects.create_user(
+            username='eventadmin', password='testpass123', is_site_admin=True
+        )
+        self.group = Group.objects.create(name='Attendance Group')
+        self.event = Event.objects.create(
+            title='Test Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE, created_by=self.admin,
+            group=self.group,
+        )
+
+    def test_create_event_attendance(self):
+        attendance = EventAttendance.objects.create(user=self.user1, event=self.event)
+        self.assertEqual(attendance.user, self.user1)
+        self.assertEqual(attendance.event, self.event)
+        self.assertIsNotNone(attendance.joined_at)
+
+    def test_unique_constraint_prevents_duplicate_attendance(self):
+        EventAttendance.objects.create(user=self.user1, event=self.event)
+        with self.assertRaises(IntegrityError):
+            EventAttendance.objects.create(user=self.user1, event=self.event)
+
+    def test_user_can_attend_multiple_events(self):
+        event2 = Event.objects.create(
+            title='Second Event', date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE, created_by=self.admin,
+            group=self.group,
+        )
+        EventAttendance.objects.create(user=self.user1, event=self.event)
+        attendance2 = EventAttendance.objects.create(user=self.user1, event=event2)
+        self.assertEqual(EventAttendance.objects.filter(user=self.user1).count(), 2)
+
+    def test_multiple_users_can_attend_same_event(self):
+        EventAttendance.objects.create(user=self.user1, event=self.event)
+        EventAttendance.objects.create(user=self.user2, event=self.event)
+        self.assertEqual(EventAttendance.objects.filter(event=self.event).count(), 2)

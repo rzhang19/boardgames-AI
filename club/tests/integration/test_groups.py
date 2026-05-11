@@ -1896,3 +1896,72 @@ class GroupOwnedGameFullFlowTest(TestCase):
                 notification_type='group_game_deleted',
             ).exists()
         )
+
+
+@tag("integration")
+class GroupImageCompressionTest(TestCase):
+
+    def setUp(self):
+        self.creator = User.objects.create_user(username='creator', password='testpass123')
+        self.client.login(username='creator', password='testpass123')
+
+    def _create_image(self, width, height):
+        from PIL import Image
+        from io import BytesIO
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        img = Image.new('RGB', (width, height), color='red')
+        buf = BytesIO()
+        img.save(buf, format='JPEG')
+        buf.seek(0)
+        return SimpleUploadedFile('test.jpg', buf.read(), content_type='image/jpeg')
+
+    def _make_admin(self, user, group):
+        GroupMembership.objects.create(user=user, group=group, role='admin')
+
+    def test_create_group_resizes_large_image(self):
+        large_img = self._create_image(2000, 2000)
+        resp = self.client.post(reverse('group_create'), {
+            'name': 'Image Group', 'join_policy': 'open',
+            'discoverable': True, 'image': large_img,
+        })
+        self.assertEqual(resp.status_code, 302)
+        group = Group.objects.get(name='Image Group')
+        self.assertTrue(group.image)
+        from PIL import Image as PILImage
+        img = PILImage.open(group.image)
+        self.assertLessEqual(img.width, 600)
+        self.assertLessEqual(img.height, 600)
+
+    def test_create_group_small_image_unchanged(self):
+        small_img = self._create_image(100, 100)
+        resp = self.client.post(reverse('group_create'), {
+            'name': 'Small Image Group', 'join_policy': 'open',
+            'discoverable': True, 'image': small_img,
+        })
+        self.assertEqual(resp.status_code, 302)
+        group = Group.objects.get(name='Small Image Group')
+        self.assertTrue(group.image)
+
+    def test_create_group_without_image(self):
+        resp = self.client.post(reverse('group_create'), {
+            'name': 'No Image Group', 'join_policy': 'open', 'discoverable': True,
+        })
+        self.assertEqual(resp.status_code, 302)
+        group = Group.objects.get(name='No Image Group')
+        self.assertFalse(bool(group.image))
+
+    def test_settings_update_resizes_image(self):
+        group = Group.objects.create(name='Settings Group')
+        self._make_admin(self.creator, group)
+        large_img = self._create_image(1500, 1500)
+        resp = self.client.post(reverse('group_settings', kwargs={'slug': group.slug}), {
+            'name': 'Settings Group', 'join_policy': 'open',
+            'discoverable': True, 'max_members': 50, 'image': large_img,
+        })
+        self.assertEqual(resp.status_code, 302)
+        group.refresh_from_db()
+        self.assertTrue(group.image)
+        from PIL import Image as PILImage
+        img = PILImage.open(group.image)
+        self.assertLessEqual(img.width, 600)
+        self.assertLessEqual(img.height, 600)

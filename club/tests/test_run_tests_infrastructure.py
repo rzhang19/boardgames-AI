@@ -147,10 +147,11 @@ class TestBuildTestCommandNoFlags(TestCase):
         cmd = self.run_tests.build_test_command(args)
         self.assertIn('-v', cmd)
 
-    def test_file_flag_targets_flat_module(self):
+    def test_file_flag_targets_subdirectory_modules(self):
         args = _make_args(file='test_events')
         cmd = self.run_tests.build_test_command(args)
-        self.assertIn('club.tests.test_events', cmd)
+        self.assertIn('club.tests.unit.test_events', cmd)
+        self.assertIn('club.tests.integration.test_events', cmd)
 
     def test_file_flag_with_prefix(self):
         args = _make_args(file='club.tests.test_events')
@@ -160,7 +161,8 @@ class TestBuildTestCommandNoFlags(TestCase):
     def test_file_flag_without_test_prefix(self):
         args = _make_args(file='events')
         cmd = self.run_tests.build_test_command(args)
-        self.assertIn('club.tests.test_events', cmd)
+        self.assertIn('club.tests.unit.test_events', cmd)
+        self.assertIn('club.tests.integration.test_events', cmd)
 
 
 @tag("unit")
@@ -245,7 +247,6 @@ class TestBuildTestCommandAreaFlags(TestCase):
         args = _make_args(file='test_events', games=True)
         cmd = self.run_tests.build_test_command(args)
         self.assertIsNotNone(cmd)
-        self.assertIn('club.tests.test_events', cmd)
         self.assertNotIn('club.tests.unit.test_games', cmd)
 
     @patch('os.path.isfile', return_value=True)
