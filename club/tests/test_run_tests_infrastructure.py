@@ -298,3 +298,120 @@ class TestHelpShowsAreaFlags(TestCase):
         help_text = parser.format_help()
         for area in areas:
             self.assertIn(f'--{area}', help_text)
+
+
+TESTS_DIR = os.path.join(PROJECT_ROOT, 'club', 'tests')
+
+
+@tag("unit")
+class TestMigratedClassPlacement(TestCase):
+
+    def test_parse_bgg_link_test_in_unit_games(self):
+        with open(os.path.join(TESTS_DIR, 'unit', 'test_games.py'), 'r') as f:
+            content = f.read()
+        self.assertIn('class ParseBggLinkTest', content)
+
+    def test_group_name_validation_test_in_unit_groups(self):
+        with open(os.path.join(TESTS_DIR, 'unit', 'test_groups.py'), 'r') as f:
+            content = f.read()
+        self.assertIn('class GroupNameValidationTest', content)
+
+    def test_game_pool_deduplication_test_in_unit_groups(self):
+        with open(os.path.join(TESTS_DIR, 'unit', 'test_groups.py'), 'r') as f:
+            content = f.read()
+        self.assertIn('class GamePoolDeduplicationTest', content)
+
+    def test_game_pool_availability_test_in_unit_events(self):
+        with open(os.path.join(TESTS_DIR, 'unit', 'test_events.py'), 'r') as f:
+            content = f.read()
+        self.assertIn('class GamePoolAvailabilityTest', content)
+
+    def test_event_game_override_model_test_in_unit_events(self):
+        with open(os.path.join(TESTS_DIR, 'unit', 'test_events.py'), 'r') as f:
+            content = f.read()
+        self.assertIn('class EventGameOverrideModelTest', content)
+
+
+@tag("unit")
+class TestFlatDirectoryCleanup(TestCase):
+
+    FILES_TO_DELETE = [
+        'test_admin_confirmation.py',
+        'test_auth.py',
+        'test_beta_access.py',
+        'test_bgg.py',
+        'test_bgg_views.py',
+        'test_block.py',
+        'test_change_password.py',
+        'test_email_optional.py',
+        'test_ensure_superuser.py',
+        'test_event_duration.py',
+        'test_event_presence.py',
+        'test_events.py',
+        'test_feedback.py',
+        'test_friendship.py',
+        'test_game_ownership.py',
+        'test_game_pool.py',
+        'test_game_session.py',
+        'test_games.py',
+        'test_group_games.py',
+        'test_group_models.py',
+        'test_group_notifications.py',
+        'test_group_owned_games.py',
+        'test_group_views.py',
+        'test_integration.py',
+        'test_mobile_responsive.py',
+        'test_models.py',
+        'test_notifications.py',
+        'test_permissions.py',
+        'test_private_events.py',
+        'test_profile.py',
+        'test_random_select.py',
+        'test_results_gating.py',
+        'test_settings.py',
+        'test_site_admin_settings.py',
+        'test_site_lockdown.py',
+        'test_sticky_header.py',
+        'test_superuser_manage.py',
+        'test_tag_views.py',
+        'test_tags.py',
+        'test_theme.py',
+        'test_timezone.py',
+        'test_unsaved_changes.py',
+        'test_users_page.py',
+        'test_verified_badge.py',
+        'test_verified_icon.py',
+        'test_view_only.py',
+        'test_vote_validation.py',
+        'test_voting.py',
+        'test_voting_toggle.py',
+    ]
+
+    FILES_TO_KEEP = [
+        '__init__.py',
+        'test_run_tests_infrastructure.py',
+    ]
+
+    def test_no_flat_test_files_remain(self):
+        for fname in self.FILES_TO_DELETE:
+            path = os.path.join(TESTS_DIR, fname)
+            self.assertFalse(
+                os.path.exists(path),
+                f'Flat test file should be deleted: {fname}'
+            )
+
+    def test_expected_files_remain(self):
+        for fname in self.FILES_TO_KEEP:
+            path = os.path.join(TESTS_DIR, fname)
+            self.assertTrue(
+                os.path.exists(path),
+                f'Expected file to remain: {fname}'
+            )
+
+    def test_subdirectories_exist(self):
+        for subdir in ['unit', 'integration', 'system']:
+            path = os.path.join(TESTS_DIR, subdir)
+            self.assertTrue(
+                os.path.isdir(path),
+                f'Subdirectory should exist: {subdir}/'
+            )

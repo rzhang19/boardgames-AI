@@ -997,3 +997,67 @@ class BoardGameTagTest(TestCase):
         strategy_games = BoardGame.objects.filter(tags=tag)
         self.assertIn(game1, strategy_games)
         self.assertNotIn(game2, strategy_games)
+
+
+@tag("unit")
+class ParseBggLinkTest(TestCase):
+
+    def test_parse_full_url_extracts_id(self):
+        from club.utils import parse_bgg_link
+        result = parse_bgg_link('https://boardgamegeek.com/boardgame/13/catan')
+        self.assertEqual(result, {'bgg_id': 13, 'bgg_link': 'https://boardgamegeek.com/boardgame/13/catan'})
+
+    def test_parse_url_without_slug(self):
+        from club.utils import parse_bgg_link
+        result = parse_bgg_link('https://boardgamegeek.com/boardgame/13')
+        self.assertEqual(result, {'bgg_id': 13, 'bgg_link': 'https://boardgamegeek.com/boardgame/13'})
+
+    def test_parse_url_with_http(self):
+        from club.utils import parse_bgg_link
+        result = parse_bgg_link('http://boardgamegeek.com/boardgame/13/catan')
+        self.assertEqual(result, {'bgg_id': 13, 'bgg_link': 'http://boardgamegeek.com/boardgame/13/catan'})
+
+    def test_parse_url_without_scheme(self):
+        from club.utils import parse_bgg_link
+        result = parse_bgg_link('boardgamegeek.com/boardgame/13/catan')
+        self.assertEqual(result, {'bgg_id': 13, 'bgg_link': 'https://boardgamegeek.com/boardgame/13/catan'})
+
+    def test_parse_expansion_url(self):
+        from club.utils import parse_bgg_link
+        result = parse_bgg_link('https://boardgamegeek.com/boardgameexpansion/1234/some-expansion')
+        self.assertEqual(result, {'bgg_id': 1234, 'bgg_link': 'https://boardgamegeek.com/boardgameexpansion/1234/some-expansion'})
+
+    def test_parse_raw_id(self):
+        from club.utils import parse_bgg_link
+        result = parse_bgg_link('13')
+        self.assertEqual(result, {'bgg_id': 13, 'bgg_link': 'https://boardgamegeek.com/boardgame/13/'})
+
+    def test_parse_empty_string_returns_none(self):
+        from club.utils import parse_bgg_link
+        result = parse_bgg_link('')
+        self.assertIsNone(result)
+
+    def test_parse_whitespace_returns_none(self):
+        from club.utils import parse_bgg_link
+        result = parse_bgg_link('   ')
+        self.assertIsNone(result)
+
+    def test_parse_non_bgg_url_returns_none(self):
+        from club.utils import parse_bgg_link
+        result = parse_bgg_link('https://example.com/something')
+        self.assertIsNone(result)
+
+    def test_parse_invalid_string_returns_none(self):
+        from club.utils import parse_bgg_link
+        result = parse_bgg_link('not a url or id')
+        self.assertIsNone(result)
+
+    def test_parse_url_with_trailing_slash(self):
+        from club.utils import parse_bgg_link
+        result = parse_bgg_link('https://boardgamegeek.com/boardgame/13/')
+        self.assertEqual(result, {'bgg_id': 13, 'bgg_link': 'https://boardgamegeek.com/boardgame/13/'})
+
+    def test_parse_url_with_www(self):
+        from club.utils import parse_bgg_link
+        result = parse_bgg_link('https://www.boardgamegeek.com/boardgame/13/catan')
+        self.assertEqual(result, {'bgg_id': 13, 'bgg_link': 'https://www.boardgamegeek.com/boardgame/13/catan'})

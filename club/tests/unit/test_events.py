@@ -7,10 +7,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from club.forms import EventSettingsForm, EventInviteForm, PrivateEventForm
+from club.game_pool import compute_game_pool
 from club.models import (
     BoardGame,
     Event,
     EventAttendance,
+    EventGameOverride,
     EventInvite,
     EventPresence,
     EventTag,
@@ -1355,3 +1357,124 @@ class EventTagRelationTest(TestCase):
         tagged_events = Event.objects.filter(tags=tag)
         self.assertIn(event1, tagged_events)
         self.assertNotIn(event2, tagged_events)
+
+
+def _make_event_admin(user, group):
+    return GroupMembership.objects.create(user=user, group=group, role='admin')
+
+
+def _make_event_member(user, group):
+    return GroupMembership.objects.create(user=user, group=group, role='member')
+
+
+@tag("unit")
+class EventGameOverrideModelTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='user', password='pass')
+        self.admin = User.objects.create_user(username='admin', password='pass')
+        self.group = Group.objects.create(name='Override Group')
+        _make_event_admin(self.admin, self.group)
+        self.event = Event.objects.create(
+            title='Override Event',
+            date=timezone.now() + timezone.timedelta(days=7),
+            voting_deadline=timezone.now() + timezone.timedelta(days=7),
+            created_by=self.admin,
+            group=self.group,
+        )
+        self.game = BoardGame.objects.create(name='Catan', owner=self.admin)
+
+    def test_create_override(self):
+        override = EventGameOverride.objects.create(
+            event=self.event,
+            board_game=self.game,
+            is_available=True,
+            modified_by=self.admin,
+        )
+        self.assertTrue(override.is_available)
+        self.assertEqual(override.event, self.event)
+        self.assertEqual(override.board_game, self.game)
+
+    def test_unique_constraint(self):
+        EventGameOverride.objects.create(
+            event=self.event, board_game=self.game,
+            is_available=True, modified_by=self.admin,
+        )
+        with self.assertRaises(IntegrityError):
+            EventGameOverride.objects.create(
+                event=self.event, board_game=self.game,
+                is_available=False, modified_by=self.admin,
+            )
+
+
+@tag("unit")
+class GamePoolAvailabilityTest(TestCase):
+
+    def setUp(self):
+        self.alice = User.objects.create_user(username='alice', password='pass')
+        self.bob = User.objects.create_user(username='bob', password='pass')
+        self.admin = User.objects.create_user(username='admin', password='pass')
+        self.group = Group.objects.create(name='Avail Group')
+        _make_event_admin(self.admin, self.group)
+        _make_event_member(self.alice, self.group)
+        _make_event_member(self.bob, self.group)
+        self.event = Event.objects.create(
+            title='Avail Event',
+            date=timezone.now() + timezone.timedelta(days=7),
+            voting_deadline=timezone.now() + timezone.timedelta(days=7),
+            created_by=self.admin,
+            group=self.group,
+        )
+        EventAttendance.objects.create(user=self.alice, event=self.event)
+        EventAttendance.objects.create(user=self.bob, event=self.event)
+        self.game_alice = BoardGame.objects.create(
+            name='Catan', owner=self.alice, bgg_id=13
+        )
+        self.game_bob = BoardGame.objects.create(
+            name='Wingspan', owner=self.bob, bgg_id=300
+        )
+
+    def test_game_unavailable_when_no_owners_present(self):
+        pool = compute_game_pool(self.event)
+        for entry in pool.values():
+            self.assertFalse(entry['is_available'])
+
+    def test_game_available_when_owner_present(self):
+        EventPresence.objects.create(
+            event=self.event, user=self.alice, marked_by=self.admin
+        )
+        pool = compute_game_pool(self.event)
+        catan = [v for v in pool.values() if v['name'] == 'Catan'][0]
+        self.assertTrue(catan['is_available'])
+
+    def test_deduplicated_game_available_if_any_copy_owner_present(self):
+        BoardGame.objects.create(name='Catan', owner=self.bob, bgg_id=13)
+        EventPresence.objects.create(
+            event=self.event, user=self.bob, marked_by=self.admin
+        )
+        pool = compute_game_pool(self.event)
+        catan = [v for v in pool.values() if v['name'] == 'Catan'][0]
+        self.assertTrue(catan['is_available'])
+
+    def test_override_forces_available(self):
+        EventGameOverride.objects.create(
+            event=self.event, board_game=self.game_alice,
+            is_available=True, modified_by=self.admin,
+        )
+        pool = compute_game_pool(self.event)
+        catan = [v for v in pool.values() if v['name'] == 'Catan'][0]
+        self.assertTrue(catan['is_available'])
+        self.assertTrue(catan['overridden'])
+
+    def test_override_forces_unavailable(self):
+        EventPresence.objects.create(
+            event=self.event, user=self.alice, marked_by=self.admin
+        )
+        EventGameOverride.objects.create(
+            event=self.event, board_game=self.game_alice,
+            is_available=False, modified_by=self.admin,
+        )
+        pool = compute_game_pool(self.event)
+        catan = [v for v in pool.values() if v['name'] == 'Catan'][0]
+        self.assertFalse(catan['is_available'])
+        self.assertTrue(catan['overridden'])

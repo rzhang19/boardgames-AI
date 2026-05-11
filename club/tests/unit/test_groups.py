@@ -6,8 +6,10 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.db import IntegrityError
 from django.test import TestCase, RequestFactory, tag
+from django.urls import reverse
 from django.utils import timezone
 
+from club.game_pool import compute_game_pool
 from club.models import (
     BoardGame,
     Event,
@@ -1933,3 +1935,177 @@ class CanEditPrivateEventSettingsTest(TestCase):
 
     def test_non_organizer_cannot_edit_settings(self):
         self.assertFalse(can_edit_private_event_settings(self.bob, self.event))
+
+
+@tag("unit")
+class GroupNameValidationTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            username='creator', password='testpass123'
+        )
+
+    def setUp(self):
+        self.client.login(username='creator', password='testpass123')
+
+    def test_cannot_create_group_named_self(self):
+        response = self.client.post(reverse('group_create'), {
+            'name': 'Self',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Group.objects.filter(name='Self').exists())
+
+    def test_cannot_create_group_named_others(self):
+        response = self.client.post(reverse('group_create'), {
+            'name': 'Others',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Group.objects.filter(name='Others').exists())
+
+    def test_cannot_create_group_named_self_case_insensitive(self):
+        response = self.client.post(reverse('group_create'), {
+            'name': 'SELF',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Group.objects.filter(name='SELF').exists())
+
+    def test_cannot_create_group_named_others_case_insensitive(self):
+        response = self.client.post(reverse('group_create'), {
+            'name': 'others',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Group.objects.filter(name='others').exists())
+
+    def test_can_create_group_named_selfish(self):
+        response = self.client.post(reverse('group_create'), {
+            'name': 'Selfish',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Group.objects.filter(name='Selfish').exists())
+
+    def test_can_create_group_with_others_in_name(self):
+        response = self.client.post(reverse('group_create'), {
+            'name': 'Helping Others',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Group.objects.filter(name='Helping Others').exists())
+
+    def test_cannot_rename_group_to_self(self):
+        group = Group.objects.create(name='My Group', created_by=self.user)
+        GroupMembership.objects.create(user=self.user, group=group, role='admin')
+        response = self.client.post(reverse('group_settings', kwargs={'slug': group.slug}), {
+            'name': 'Self',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+            'max_members': 50,
+        })
+        self.assertEqual(response.status_code, 200)
+        group.refresh_from_db()
+        self.assertEqual(group.name, 'My Group')
+
+    def test_cannot_rename_group_to_others(self):
+        group = Group.objects.create(name='My Group', created_by=self.user)
+        GroupMembership.objects.create(user=self.user, group=group, role='admin')
+        response = self.client.post(reverse('group_settings', kwargs={'slug': group.slug}), {
+            'name': 'Others',
+            'description': '',
+            'discoverable': True,
+            'join_policy': 'open',
+            'max_members': 50,
+        })
+        self.assertEqual(response.status_code, 200)
+        group.refresh_from_db()
+        self.assertEqual(group.name, 'My Group')
+
+
+@tag("unit")
+class GamePoolDeduplicationTest(TestCase):
+
+    def setUp(self):
+        self.alice = User.objects.create_user(username='alice', password='pass')
+        self.bob = User.objects.create_user(username='bob', password='pass')
+        self.admin = User.objects.create_user(username='admin', password='pass')
+        self.group = Group.objects.create(name='Dedup Group')
+        _make_admin(self.admin, self.group)
+        _make_member(self.alice, self.group)
+        _make_member(self.bob, self.group)
+        self.event = Event.objects.create(
+            title='Dedup Event',
+            date=timezone.now() + timezone.timedelta(days=7),
+            voting_deadline=timezone.now() + timezone.timedelta(days=7),
+            created_by=self.admin,
+            group=self.group,
+        )
+
+    def test_games_with_same_bgg_id_are_deduplicated(self):
+        BoardGame.objects.create(name='Catan', owner=self.alice, bgg_id=13)
+        BoardGame.objects.create(name='Catan', owner=self.bob, bgg_id=13)
+        pool = compute_game_pool(self.event)
+        catan_entries = [k for k, v in pool.items() if v['name'] == 'Catan']
+        self.assertEqual(len(catan_entries), 1)
+        entry = pool[catan_entries[0]]
+        self.assertEqual(len(entry['copies']), 2)
+        self.assertIn('alice', entry['owners'])
+        self.assertIn('bob', entry['owners'])
+
+    def test_games_without_bgg_id_are_not_deduplicated(self):
+        BoardGame.objects.create(name='MyGame', owner=self.alice, bgg_id=None)
+        BoardGame.objects.create(name='MyGame', owner=self.bob, bgg_id=None)
+        pool = compute_game_pool(self.event)
+        mygame_entries = [k for k, v in pool.items() if v['name'] == 'MyGame']
+        self.assertEqual(len(mygame_entries), 2)
+
+    def test_different_bgg_ids_are_not_deduplicated(self):
+        BoardGame.objects.create(name='Space Base', owner=self.alice, bgg_id=100)
+        BoardGame.objects.create(name='Space Base', owner=self.bob, bgg_id=200)
+        pool = compute_game_pool(self.event)
+        sb_entries = [k for k, v in pool.items() if v['name'] == 'Space Base']
+        self.assertEqual(len(sb_entries), 2)
+
+    def test_mixed_bgg_id_and_none_not_deduplicated(self):
+        BoardGame.objects.create(name='Catan', owner=self.alice, bgg_id=13)
+        BoardGame.objects.create(name='Catan', owner=self.bob, bgg_id=None)
+        pool = compute_game_pool(self.event)
+        catan_entries = [k for k, v in pool.items() if v['name'] == 'Catan']
+        self.assertEqual(len(catan_entries), 2)
+
+    def test_single_owner_shows_owner_name(self):
+        BoardGame.objects.create(name='Wingspan', owner=self.alice, bgg_id=300)
+        pool = compute_game_pool(self.event)
+        ws_entries = [v for v in pool.values() if v['name'] == 'Wingspan']
+        self.assertEqual(len(ws_entries), 1)
+        self.assertEqual(ws_entries[0]['owners'], ['alice'])
+
+    def test_complexity_is_simplest_among_duplicates(self):
+        BoardGame.objects.create(name='Catan', owner=self.alice, bgg_id=13, complexity='heavy')
+        BoardGame.objects.create(name='Catan', owner=self.bob, bgg_id=13, complexity='light')
+        pool = compute_game_pool(self.event)
+        catan_entries = [v for v in pool.values() if v['name'] == 'Catan']
+        self.assertEqual(catan_entries[0]['complexity'], 'light')
+
+    def test_group_owned_game_shows_group_library(self):
+        BoardGame.objects.create(name='Group Game', group=self.group, bgg_id=500)
+        pool = compute_game_pool(self.event)
+        gg = [v for v in pool.values() if v['name'] == 'Group Game']
+        self.assertEqual(len(gg), 1)
+        self.assertIn('Group Library', gg[0]['owners'])
