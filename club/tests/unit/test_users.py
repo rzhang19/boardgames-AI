@@ -1,7 +1,9 @@
 import zoneinfo
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
+from django.http import HttpResponse
 from django.test import TestCase, SimpleTestCase, RequestFactory, tag
 from django.utils import timezone
 
@@ -333,3 +335,124 @@ class UnverifiedFriendRequestRateLimitTest(TestCase):
             status='declined', decline_count=2, last_declined_at=timezone.now(),
         )
         self.assertFalse(Friendship.can_send_request(self.unverified, target))
+
+
+@tag("unit")
+class RateLimitMiddlewareTest(TestCase):
+
+    def setUp(self):
+        from club.middleware import RateLimitMiddleware
+        from django.contrib.auth.models import AnonymousUser
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
+        self.factory = RequestFactory()
+        self.middleware = RateLimitMiddleware(lambda request: HttpResponse('OK'))
+
+    def tearDown(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
+
+    def _make_post_request(self, path, ip='127.0.0.1'):
+        request = self.factory.post(path)
+        request.META['REMOTE_ADDR'] = ip
+        request.user = AnonymousUser()
+        return request
+
+    def test_request_passes_through_when_not_rate_limited(self):
+        request = self._make_post_request('/login/')
+        response = self.middleware(request)
+        self.assertEqual(response.status_code, 200)
+
+    def test_get_request_passes_through_regardless_of_limit(self):
+        from django.core.cache import caches
+        rl_cache = caches['rate_limit']
+        for _ in range(10):
+            rl_cache.set('rl:/login/:127.0.0.1', 5, 60)
+        request = self.factory.get('/login/')
+        request.META['REMOTE_ADDR'] = '127.0.0.1'
+        request.user = AnonymousUser()
+        response = self.middleware(request)
+        self.assertEqual(response.status_code, 200)
+
+    def test_login_rate_limited_after_5_posts(self):
+        from django.core.cache import caches
+        rl_cache = caches['rate_limit']
+        for i in range(5):
+            rl_cache.set('rl:/login/:127.0.0.1', i + 1, 60)
+        request = self._make_post_request('/login/')
+        response = self.middleware(request)
+        self.assertEqual(response.status_code, 429)
+
+    def test_register_rate_limited_after_3_posts(self):
+        from django.core.cache import caches
+        rl_cache = caches['rate_limit']
+        for i in range(3):
+            rl_cache.set('rl:/register/:127.0.0.1', i + 1, 3600)
+        request = self._make_post_request('/register/')
+        response = self.middleware(request)
+        self.assertEqual(response.status_code, 429)
+
+    def test_password_reset_rate_limited_after_5_posts(self):
+        from django.core.cache import caches
+        rl_cache = caches['rate_limit']
+        for i in range(5):
+            rl_cache.set('rl:/password_reset/:127.0.0.1', i + 1, 60)
+        request = self._make_post_request('/password_reset/')
+        response = self.middleware(request)
+        self.assertEqual(response.status_code, 429)
+
+    def test_beta_access_rate_limited_after_5_posts(self):
+        from django.core.cache import caches
+        rl_cache = caches['rate_limit']
+        for i in range(5):
+            rl_cache.set('rl:/beta-access/:127.0.0.1', i + 1, 60)
+        request = self._make_post_request('/beta-access/')
+        response = self.middleware(request)
+        self.assertEqual(response.status_code, 429)
+
+    def test_different_ips_tracked_independently(self):
+        from django.core.cache import caches
+        rl_cache = caches['rate_limit']
+        rl_cache.set('rl:/login/:127.0.0.1', 5, 60)
+        request = self._make_post_request('/login/', ip='192.168.1.1')
+        response = self.middleware(request)
+        self.assertEqual(response.status_code, 200)
+
+    def test_different_endpoints_tracked_independently(self):
+        from django.core.cache import caches
+        rl_cache = caches['rate_limit']
+        rl_cache.set('rl:/login/:127.0.0.1', 5, 60)
+        request = self._make_post_request('/register/')
+        response = self.middleware(request)
+        self.assertEqual(response.status_code, 200)
+
+    def test_untracked_path_passes_through(self):
+        request = self._make_post_request('/games/add/')
+        response = self.middleware(request)
+        self.assertEqual(response.status_code, 200)
+
+    def test_rate_limit_response_contains_retry_after(self):
+        from django.core.cache import caches
+        rl_cache = caches['rate_limit']
+        rl_cache.set('rl:/login/:127.0.0.1', 5, 60)
+        request = self._make_post_request('/login/')
+        response = self.middleware(request)
+        self.assertEqual(response.status_code, 429)
+        self.assertIn('Retry-After', response)
+
+    def test_rate_limit_increments_counter(self):
+        from django.core.cache import caches
+        rl_cache = caches['rate_limit']
+        request = self._make_post_request('/login/')
+        self.middleware(request)
+        count = rl_cache.get('rl:/login/:127.0.0.1')
+        self.assertEqual(count, 1)
+
+    def test_rate_limit_counter_increments_on_each_request(self):
+        from django.core.cache import caches
+        rl_cache = caches['rate_limit']
+        for _ in range(3):
+            request = self._make_post_request('/login/')
+            self.middleware(request)
+        count = rl_cache.get('rl:/login/:127.0.0.1')
+        self.assertEqual(count, 3)

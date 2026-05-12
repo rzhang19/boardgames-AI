@@ -1,8 +1,9 @@
 from django.conf import settings
 from django.contrib.auth.hashers import check_password
+from django.core.cache import caches
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
-from django.http import HttpResponseForbidden
-from django.shortcuts import redirect
+from django.http import HttpResponse, HttpResponseForbidden, HttpResponseNotAllowed
+from django.shortcuts import redirect, render
 from django.utils import timezone
 
 import zoneinfo as _zoneinfo
@@ -125,4 +126,51 @@ class ViewOnlyMiddleware:
             return HttpResponseForbidden(
                 'This action is not available in view-only mode.'
             )
+        return self.get_response(request)
+
+
+RATE_LIMIT_CONFIG = {
+    '/login/': {'limit': 5, 'window': 60},
+    '/register/': {'limit': 3, 'window': 3600},
+    '/password_reset/': {'limit': 5, 'window': 60},
+    '/beta-access/': {'limit': 5, 'window': 60},
+}
+
+
+class RateLimitMiddleware:
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.method != 'POST':
+            return self.get_response(request)
+
+        if getattr(settings, 'RATE_LIMIT_ENABLED', True) is False:
+            return self.get_response(request)
+
+        config = None
+        for path, cfg in RATE_LIMIT_CONFIG.items():
+            if request.path == path:
+                config = cfg
+                break
+
+        if config is None:
+            return self.get_response(request)
+
+        ip = request.META.get('REMOTE_ADDR', '0.0.0.0')
+        cache_key = f'rl:{request.path}:{ip}'
+
+        rl_cache = caches['rate_limit']
+        count = rl_cache.get(cache_key, 0)
+        if count >= config['limit']:
+            retry_after = config['window']
+            response = render(request, '429.html', {
+                'retry_after': retry_after,
+            }, status=429)
+            response['Retry-After'] = str(retry_after)
+            return response
+
+        rl_cache.set(cache_key, count + 1, config['window'])
+
         return self.get_response(request)

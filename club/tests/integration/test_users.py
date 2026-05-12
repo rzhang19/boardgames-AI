@@ -91,6 +91,10 @@ GENERIC_MESSAGE = 'If an account with that email or username exists, a reset lin
 @tag("integration")
 class RegistrationTest(TestCase):
 
+    def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
+
     def test_registration_page_loads(self):
         response = self.client.get(reverse('register'))
         self.assertEqual(response.status_code, 200)
@@ -171,6 +175,8 @@ class RegistrationTest(TestCase):
 class LoginTest(TestCase):
 
     def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
         self.user = User.objects.create_user(
             username='loginuser', password='testpass123', email='login@example.com'
         )
@@ -343,6 +349,10 @@ class AccessControlTest(TestCase):
 @override_settings(REQUIRE_EMAIL_VERIFICATION=True)
 class EmailVerificationRegistrationTest(TestCase):
 
+    def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
+
     def test_register_with_verification_shows_sent_page(self):
         response = self.client.post(reverse('register'), {
             'username': 'verifyuser',
@@ -423,6 +433,10 @@ class EmailVerificationViewTest(TestCase):
 @override_settings(REQUIRE_EMAIL_VERIFICATION=True, DEBUG=False)
 class EmailVerificationLoginBlockTest(TestCase):
 
+    def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
+
     def test_unverified_user_cannot_login(self):
         User.objects.create_user(
             username='unverified', password='testpass123',
@@ -462,6 +476,10 @@ class EmailVerificationLoginBlockTest(TestCase):
 
 @tag("integration")
 class UsernameValidationTest(TestCase):
+
+    def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
 
     def test_register_with_letters_numbers_underscore_dash(self):
         response = self.client.post(reverse('register'), {
@@ -597,6 +615,10 @@ class UsernameValidationTest(TestCase):
 @tag("integration")
 class PasswordHistoryTest(TestCase):
 
+    def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
+
     def test_password_history_stored_on_forced_change(self):
         user = User.objects.create_user(
             username='historytester',
@@ -646,6 +668,10 @@ class PasswordHistoryTest(TestCase):
 
 @tag("integration")
 class PasswordResetTest(TestCase):
+
+    def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
 
     def test_password_reset_page_loads(self):
         response = self.client.get(reverse('password_reset'))
@@ -882,6 +908,10 @@ class PasswordResetTest(TestCase):
 @tag("integration")
 class ProtectedUserTest(TestCase):
 
+    def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
+
     @override_settings(PROTECTED_USERNAMES='protecteduser')
     def test_protected_user_cannot_use_forced_password_change(self):
         user = User.objects.create_user(
@@ -913,6 +943,8 @@ class ProtectedUserTest(TestCase):
 class CaseInsensitiveLoginTest(TestCase):
 
     def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
         self.user = User.objects.create_user(
             username='TestUser', password='testpass123', email='Test@Example.com'
         )
@@ -951,6 +983,10 @@ class CaseInsensitiveLoginTest(TestCase):
 
 @tag("integration")
 class CaseInsensitiveRegistrationTest(TestCase):
+
+    def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
 
     def test_register_with_case_variant_of_existing_username_fails(self):
         User.objects.create_user(username='testuser', password='testpass123')
@@ -999,6 +1035,10 @@ class CaseInsensitiveRegistrationTest(TestCase):
 @tag("integration")
 class CaseInsensitivePasswordResetTest(TestCase):
 
+    def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
+
     def test_password_reset_with_different_case_username_sends_email(self):
         User.objects.create_user(
             username='ResetUser',
@@ -1017,6 +1057,8 @@ class CaseInsensitivePasswordResetTest(TestCase):
 class CaseInsensitiveProfileLookupTest(TestCase):
 
     def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
         self.user = User.objects.create_user(
             username='ProfileUser', password='testpass123'
         )
@@ -1039,6 +1081,10 @@ class CaseInsensitiveProfileLookupTest(TestCase):
 
 @tag("integration")
 class RegistrationWithoutEmailTest(TestCase):
+
+    def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
 
     def test_registration_without_email(self):
         response = self.client.post(reverse('register'), {
@@ -3157,3 +3203,189 @@ class AutoDetectJavascriptTest(TestCase):
     def test_detect_script_absent_for_anonymous(self):
         response = self.client.get(reverse('dashboard'))
         self.assertNotContains(response, 'Intl.DateTimeFormat')
+
+
+@tag("integration")
+class LoginRateLimitTest(TestCase):
+
+    def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
+        self.user = User.objects.create_user(
+            username='loginuser', password='testpass123', email='login@example.com'
+        )
+
+    def tearDown(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
+
+    def test_login_allows_up_to_5_attempts(self):
+        for _ in range(5):
+            response = self.client.post(reverse('login'), {
+                'username': 'loginuser',
+                'password': 'wrongpass',
+            })
+            self.assertEqual(response.status_code, 200)
+
+    def test_login_blocked_after_5_attempts(self):
+        for _ in range(5):
+            self.client.post(reverse('login'), {
+                'username': 'loginuser',
+                'password': 'wrongpass',
+            })
+        response = self.client.post(reverse('login'), {
+            'username': 'loginuser',
+            'password': 'wrongpass',
+        })
+        self.assertEqual(response.status_code, 429)
+
+    def test_login_get_not_rate_limited(self):
+        for _ in range(5):
+            self.client.post(reverse('login'), {
+                'username': 'loginuser',
+                'password': 'wrongpass',
+            })
+        response = self.client.get(reverse('login'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_login_rate_limit_response_shows_message(self):
+        for _ in range(5):
+            self.client.post(reverse('login'), {
+                'username': 'loginuser',
+                'password': 'wrongpass',
+            })
+        response = self.client.post(reverse('login'), {
+            'username': 'loginuser',
+            'password': 'wrongpass',
+        })
+        self.assertEqual(response.status_code, 429)
+        self.assertIn('Too Many Attempts', response.content.decode())
+
+    def test_successful_login_counts_toward_limit(self):
+        for _ in range(5):
+            self.client.post(reverse('login'), {
+                'username': 'loginuser',
+                'password': 'testpass123',
+            })
+        self.client.logout()
+        response = self.client.post(reverse('login'), {
+            'username': 'loginuser',
+            'password': 'testpass123',
+        })
+        self.assertEqual(response.status_code, 429)
+
+    def test_login_rate_limit_resets_after_window(self):
+        from django.core.cache import caches
+        for _ in range(5):
+            self.client.post(reverse('login'), {
+                'username': 'loginuser',
+                'password': 'wrongpass',
+            })
+        caches['rate_limit'].delete('rl:/login/:127.0.0.1')
+        response = self.client.post(reverse('login'), {
+            'username': 'loginuser',
+            'password': 'testpass123',
+        })
+        self.assertEqual(response.status_code, 302)
+
+
+@tag("integration")
+class RegistrationRateLimitTest(TestCase):
+
+    def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
+
+    def tearDown(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
+
+    def test_register_allows_up_to_3_attempts(self):
+        for i in range(3):
+            response = self.client.post(reverse('register'), {
+                'username': f'user{i}',
+                'email': f'user{i}@example.com',
+                'password1': 'Str0ngP@ss123',
+                'password2': 'Str0ngP@ss123',
+            })
+            self.assertIn(response.status_code, [200, 302])
+
+    def test_register_blocked_after_3_attempts(self):
+        for i in range(3):
+            self.client.post(reverse('register'), {
+                'username': f'user{i}',
+                'email': f'user{i}@example.com',
+                'password1': 'Str0ngP@ss123',
+                'password2': 'Str0ngP@ss123',
+            })
+        response = self.client.post(reverse('register'), {
+            'username': 'user4',
+            'email': 'user4@example.com',
+            'password1': 'Str0ngP@ss123',
+            'password2': 'Str0ngP@ss123',
+        })
+        self.assertEqual(response.status_code, 429)
+
+    def test_register_get_not_rate_limited(self):
+        for i in range(3):
+            self.client.post(reverse('register'), {
+                'username': f'user{i}',
+                'email': f'user{i}@example.com',
+                'password1': 'Str0ngP@ss123',
+                'password2': 'Str0ngP@ss123',
+            })
+        response = self.client.get(reverse('register'))
+        self.assertEqual(response.status_code, 200)
+
+
+@tag("integration")
+class PasswordResetRateLimitIPTest(TestCase):
+
+    def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
+        self.user = User.objects.create_user(
+            username='resetuser',
+            email='reset@example.com',
+            password='SomePassword123',
+        )
+
+    def tearDown(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
+
+    def test_password_reset_allows_up_to_5_attempts(self):
+        for _ in range(5):
+            response = self.client.post(reverse('password_reset'), {
+                'email_or_username': 'resetuser',
+            })
+            self.assertEqual(response.status_code, 200)
+
+    def test_password_reset_blocked_after_5_attempts(self):
+        for _ in range(5):
+            self.client.post(reverse('password_reset'), {
+                'email_or_username': 'resetuser',
+            })
+        response = self.client.post(reverse('password_reset'), {
+            'email_or_username': 'resetuser',
+        })
+        self.assertEqual(response.status_code, 429)
+
+    def test_password_reset_get_not_rate_limited(self):
+        for _ in range(5):
+            self.client.post(reverse('password_reset'), {
+                'email_or_username': 'resetuser',
+            })
+        response = self.client.get(reverse('password_reset'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_password_reset_rate_limit_independent_of_identifier_limit(self):
+        self.client.post(reverse('password_reset'), {
+            'email_or_username': 'resetuser',
+        })
+        self.assertEqual(len(mail.outbox), 1)
+        response = self.client.post(reverse('password_reset'), {
+            'email_or_username': 'resetuser',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)

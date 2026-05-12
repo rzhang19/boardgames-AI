@@ -54,6 +54,7 @@ MIDDLEWARE = [
     'club.middleware.BetaAccessMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'club.middleware.RateLimitMiddleware',
     'club.middleware.SiteLockdownMiddleware',
     'club.middleware.ViewOnlyMiddleware',
     'club.middleware.MustChangePasswordMiddleware',
@@ -178,6 +179,15 @@ if _csrf_origins:
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'club.User'
 TEST_RUNNER = 'club.test_runner.ParallelDiscoverRunner'
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    },
+    'rate_limit': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    },
+}
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'

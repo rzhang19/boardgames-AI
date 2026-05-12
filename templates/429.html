@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Too Many Requests{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>Too Many Attempts</h1>
+    <p>You have made too many requests. Please wait and try again.</p>
+    <a href="{% url 'dashboard' %}" class="btn btn-primary">Go to Dashboard</a>
+</div>
+{% endblock %}
