@@ -3163,6 +3163,27 @@ class SaveTimezoneEndpointTest(TestCase):
         })
         self.assertRedirects(response, '/games/')
 
+    def test_save_timezone_rejects_external_redirect(self):
+        response = self.client.post(reverse('save_timezone'), {
+            'timezone': 'America/Chicago',
+            'next': 'https://evil.com',
+        })
+        self.assertRedirects(response, '/', fetch_redirect_response=False)
+
+    def test_save_timezone_rejects_protocol_relative_redirect(self):
+        response = self.client.post(reverse('save_timezone'), {
+            'timezone': 'America/Chicago',
+            'next': '//evil.com',
+        })
+        self.assertRedirects(response, '/', fetch_redirect_response=False)
+
+    def test_save_timezone_rejects_http_redirect_to_own_host(self):
+        response = self.client.post(reverse('save_timezone'), {
+            'timezone': 'America/Chicago',
+            'next': 'http://testserver/games/',
+        })
+        self.assertRedirects(response, '/')
+
     def test_save_timezone_redirects_to_dashboard_by_default(self):
         response = self.client.post(reverse('save_timezone'), {
             'timezone': 'America/Chicago',

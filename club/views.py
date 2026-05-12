@@ -15,6 +15,7 @@ from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from .bgg import fetch_bgg_game, fetch_bgg_weight, search_bgg, weight_to_complexity
 from .borda import calculate_borda_scores
@@ -751,7 +752,10 @@ def save_timezone(request):
         request.user.timezone = tz_name
         request.user.timezone_detected = True
         request.user.save(update_fields=['timezone', 'timezone_detected'])
-    return redirect(request.POST.get('next', 'dashboard'))
+    next_url = request.POST.get('next', 'dashboard')
+    if url_has_allowed_host_and_scheme(next_url, allowed_hosts=settings.ALLOWED_HOSTS, require_https=True):
+        return redirect(next_url)
+    return redirect('dashboard')
 
 
 def register(request):
