@@ -1,5 +1,5 @@
 import os
-from io import StringIO
+from io import BytesIO, StringIO
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -8,15 +8,21 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 
 from club.models import BoardGame, Group, GroupMembership, SiteSettings, VerifiedIcon
 
 User = get_user_model()
 
 
-def _create_svg(name='test.svg'):
-    svg = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>'
-    return ContentFile(svg, name=name)
+def _create_image(name='test.png'):
+    img = Image.new('RGB', (1, 1), color='red')
+    buffer = BytesIO()
+    fmt = name.rsplit('.', 1)[-1].upper()
+    if fmt == 'JPG':
+        fmt = 'JPEG'
+    img.save(buffer, format=fmt)
+    return ContentFile(buffer.getvalue(), name=name)
 
 
 @tag("unit")
@@ -434,17 +440,17 @@ class EnsureSuperuserTests(TestCase):
 class VerifiedIconModelTest(TestCase):
 
     def test_create_verified_icon(self):
-        icon = VerifiedIcon.objects.create(name='Dice', image=_create_svg('dice.svg'))
+        icon = VerifiedIcon.objects.create(name='Dice', image=_create_image('dice.png'))
         self.assertEqual(icon.name, 'Dice')
         self.assertTrue(icon.image.name.startswith('verified_icons/'))
-        self.assertTrue(icon.image.name.endswith('.svg'))
+        self.assertTrue(icon.image.name.endswith('.png'))
 
     def test_verified_icon_str(self):
-        icon = VerifiedIcon.objects.create(name='Dice', image=_create_svg('dice.svg'))
+        icon = VerifiedIcon.objects.create(name='Dice', image=_create_image('dice.png'))
         self.assertEqual(str(icon), 'Dice')
 
     def test_user_verified_icon_fk(self):
-        icon = VerifiedIcon.objects.create(name='Dice', image=_create_svg('dice.svg'))
+        icon = VerifiedIcon.objects.create(name='Dice', image=_create_image('dice.png'))
         user = User.objects.create_user(
             username='testuser', password='testpass123',
             email_verified=True, verified_icon=icon,
@@ -454,6 +460,107 @@ class VerifiedIconModelTest(TestCase):
     def test_user_verified_icon_nullable(self):
         user = User.objects.create_user(username='testuser', password='testpass123')
         self.assertIsNone(user.verified_icon)
+
+
+@tag("unit")
+class VerifiedIconFormValidationTest(TestCase):
+
+    def setUp(self):
+        from club.forms import VerifiedIconForm
+        self.form_class = VerifiedIconForm
+
+    def _make_svg(self, name='test.svg'):
+        svg = b'<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>'
+        return ContentFile(svg, name=name)
+
+    def test_svg_upload_rejected(self):
+        form = self.form_class(
+            data={'name': 'Icon'},
+            files={'image': self._make_svg('icon.svg')},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('image', form.errors)
+
+    def test_invalid_extension_rejected(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        img = Image.new('RGB', (1, 1), color='red')
+        buffer = BytesIO()
+        img.save(buffer, format='PNG')
+        file = SimpleUploadedFile('icon.exe', buffer.getvalue(), content_type='application/octet-stream')
+        form = self.form_class(
+            data={'name': 'Icon'},
+            files={'image': file},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('image', form.errors)
+
+    def test_valid_png_accepted(self):
+        img = Image.new('RGB', (1, 1), color='red')
+        buffer = BytesIO()
+        img.save(buffer, format='PNG')
+        file = ContentFile(buffer.getvalue(), name='icon.png')
+        form = self.form_class(
+            data={'name': 'Icon'},
+            files={'image': file},
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_valid_jpeg_accepted(self):
+        img = Image.new('RGB', (1, 1), color='red')
+        buffer = BytesIO()
+        img.save(buffer, format='JPEG')
+        file = ContentFile(buffer.getvalue(), name='icon.jpg')
+        form = self.form_class(
+            data={'name': 'Icon'},
+            files={'image': file},
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_valid_gif_accepted(self):
+        img = Image.new('RGB', (1, 1), color='red')
+        buffer = BytesIO()
+        img.save(buffer, format='GIF')
+        file = ContentFile(buffer.getvalue(), name='icon.gif')
+        form = self.form_class(
+            data={'name': 'Icon'},
+            files={'image': file},
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_valid_webp_accepted(self):
+        img = Image.new('RGB', (1, 1), color='red')
+        buffer = BytesIO()
+        img.save(buffer, format='WEBP')
+        file = ContentFile(buffer.getvalue(), name='icon.webp')
+        form = self.form_class(
+            data={'name': 'Icon'},
+            files={'image': file},
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_mime_mismatch_rejected(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        file = SimpleUploadedFile('icon.png', b'not image data', content_type='application/pdf')
+        form = self.form_class(
+            data={'name': 'Icon'},
+            files={'image': file},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('image', form.errors)
+
+    def test_oversized_file_rejected(self):
+        from unittest.mock import MagicMock
+        img = Image.new('RGB', (1, 1), color='red')
+        buffer = BytesIO()
+        img.save(buffer, format='PNG')
+        file = ContentFile(buffer.getvalue(), name='icon.png')
+        file.size = 3 * 1024 * 1024
+        form = self.form_class(
+            data={'name': 'Icon'},
+            files={'image': file},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('image', form.errors)
 
 
 @tag("unit")

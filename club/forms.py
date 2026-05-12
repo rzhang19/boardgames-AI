@@ -537,6 +537,9 @@ class BetaAccessForm(forms.Form):
 
 
 class VerifiedIconForm(forms.ModelForm):
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+    ALLOWED_MIME_TYPES = {'image/png', 'image/jpeg', 'image/gif', 'image/webp'}
+
     class Meta:
         model = VerifiedIcon
         fields = ['name', 'image']
@@ -546,6 +549,30 @@ class VerifiedIconForm(forms.ModelForm):
         if name and VerifiedIcon.objects.filter(name=name).exists():
             raise forms.ValidationError('An icon with this name already exists.')
         return name
+
+    def clean_image(self):
+        from club.utils import validate_image_size
+        image = self.cleaned_data.get('image')
+        if not image:
+            return image
+
+        if not validate_image_size(image):
+            raise forms.ValidationError('Image file size must be under 2 MB.')
+
+        ext = image.name.rsplit('.', 1)[-1].lower() if '.' in image.name else ''
+        if ext == 'svg':
+            raise forms.ValidationError('SVG files are not allowed. Please upload a PNG, JPEG, GIF, or WebP image.')
+        if ext not in self.ALLOWED_EXTENSIONS:
+            raise forms.ValidationError('Unsupported file type. Allowed types: PNG, JPEG, GIF, WebP.')
+
+        content_type = getattr(image, 'content_type', '')
+        if content_type:
+            if content_type == 'image/svg+xml':
+                raise forms.ValidationError('SVG files are not allowed. Please upload a PNG, JPEG, GIF, or WebP image.')
+            if content_type not in self.ALLOWED_MIME_TYPES:
+                raise forms.ValidationError('File content type does not match an allowed image type.')
+
+        return image
 
 
 class GroupCreateForm(forms.ModelForm):

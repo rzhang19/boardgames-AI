@@ -7,13 +7,13 @@ from django.core.management.base import BaseCommand
 from club.models import VerifiedIcon
 
 DEFAULT_ICONS = [
-    ('Checkmark', 'checkmark.svg'),
-    ('Dice', 'dice.svg'),
-    ('Meeple', 'meeple.svg'),
-    ('Gear', 'gear.svg'),
-    ('Rocket', 'rocket.svg'),
-    ('Crown', 'crown.svg'),
-    ('Star', 'star.svg'),
+    ('Checkmark', 'checkmark.png'),
+    ('Dice', 'dice.png'),
+    ('Meeple', 'meeple.png'),
+    ('Gear', 'gear.png'),
+    ('Rocket', 'rocket.png'),
+    ('Crown', 'crown.png'),
+    ('Star', 'star.png'),
 ]
 
 

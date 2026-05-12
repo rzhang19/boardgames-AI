@@ -22,7 +22,7 @@ class ClubUserManager(UserManager):
 
 class VerifiedIcon(models.Model):
     name = models.CharField(max_length=100)
-    image = models.FileField(upload_to='verified_icons/')
+    image = models.ImageField(upload_to='verified_icons/')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

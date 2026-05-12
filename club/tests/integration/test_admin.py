@@ -1,4 +1,5 @@
 import hashlib
+from io import BytesIO
 
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
@@ -7,15 +8,21 @@ from django.core.signing import TimestampSigner
 from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 
 from club.models import BoardGame, Group, GroupMembership, SiteSettings, VerifiedIcon
 
 User = get_user_model()
 
 
-def _create_svg(name='test.svg'):
-    svg = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>'
-    return ContentFile(svg, name=name)
+def _create_icon_image(name='test.png'):
+    img = Image.new('RGB', (1, 1), color='red')
+    buffer = BytesIO()
+    fmt = name.rsplit('.', 1)[-1].upper()
+    if fmt == 'JPG':
+        fmt = 'JPEG'
+    img.save(buffer, format=fmt)
+    return ContentFile(buffer.getvalue(), name=name)
 
 
 def _password_state_component(user):
@@ -78,7 +85,7 @@ class AdminSettingsContentTest(TestCase):
         )
 
     def test_admin_settings_shows_verified_icon_management(self):
-        VerifiedIcon.objects.create(name='Dice', image=_create_svg('dice.svg'))
+        VerifiedIcon.objects.create(name='Dice', image=_create_icon_image('dice.png'))
         self.client.login(username='siteadmin', password='testpass123')
         response = self.client.get(reverse('admin_settings'))
         self.assertContains(response, 'manage-verified-icons')
@@ -192,7 +199,7 @@ class PersonalSettingsNoAdminContentTest(TestCase):
         self.assertNotContains(response, 'Default Voting Deadline Offset')
 
     def test_personal_settings_still_has_icon_picker(self):
-        VerifiedIcon.objects.create(name='Dice', image=_create_svg('dice.svg'))
+        VerifiedIcon.objects.create(name='Dice', image=_create_icon_image('dice.png'))
         self.client.login(username='siteadmin', password='testpass123')
         response = self.client.get(reverse('user_settings'))
         self.assertContains(response, 'verified-icon-picker')

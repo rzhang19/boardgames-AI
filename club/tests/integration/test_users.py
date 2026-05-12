@@ -13,6 +13,7 @@ from django.contrib.auth.hashers import make_password
 from django.core import mail
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
 from django.core.signing import TimestampSigner
 from django.test import TestCase, override_settings, tag
 from django.urls import reverse
@@ -60,9 +61,14 @@ def _create_verified_user(username, password='testpass123', **kwargs):
     )
 
 
-def _create_svg(name='test.svg'):
-    svg = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>'
-    return ContentFile(svg, name=name)
+def _create_icon_image(name='test.png'):
+    img = Image.new('RGB', (1, 1), color='red')
+    buffer = io.BytesIO()
+    fmt = name.rsplit('.', 1)[-1].upper()
+    if fmt == 'JPG':
+        fmt = 'JPEG'
+    img.save(buffer, format=fmt)
+    return ContentFile(buffer.getvalue(), name=name)
 
 
 def _read_css():
@@ -2543,7 +2549,7 @@ class SettingsIconPickerTest(TestCase):
 
     def setUp(self):
         self.icon = VerifiedIcon.objects.create(
-            name='Dice', image=_create_svg('dice.svg'),
+            name='Dice', image=_create_icon_image('dice.png'),
         )
         self.user = User.objects.create_user(
             username='testuser', password='testpass123',
@@ -2571,7 +2577,7 @@ class SettingsIconPickerTest(TestCase):
 
     def test_change_verified_icon(self):
         icon2 = VerifiedIcon.objects.create(
-            name='Star', image=_create_svg('star.svg'),
+            name='Star', image=_create_icon_image('star.png'),
         )
         self.user.verified_icon = self.icon
         self.user.save()
@@ -2612,7 +2618,7 @@ class SettingsIconPickerUnverifiedTest(TestCase):
             username='testuser', password='testpass123',
             email='test@example.com', email_verified=False,
         )
-        VerifiedIcon.objects.create(name='Dice', image=_create_svg('dice.svg'))
+        VerifiedIcon.objects.create(name='Dice', image=_create_icon_image('dice.png'))
         self.client.login(username='testuser', password='testpass123')
 
     def test_unverified_user_sees_icon_picker_disabled(self):
@@ -2636,7 +2642,7 @@ class VerifiedBadgeCustomIconRenderingTest(TestCase):
 
     def setUp(self):
         self.icon = VerifiedIcon.objects.create(
-            name='Dice', image=_create_svg('dice.svg'),
+            name='Dice', image=_create_icon_image('dice.png'),
         )
         self.group = Group.objects.create(name='Test Group')
 
@@ -2810,7 +2816,7 @@ class IconManagementAccessTest(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_admin_sees_existing_icons_in_management(self):
-        VerifiedIcon.objects.create(name='Dice', image=_create_svg('dice.svg'))
+        VerifiedIcon.objects.create(name='Dice', image=_create_icon_image('dice.png'))
         response = self.client.get(reverse('admin_settings'))
         self.assertContains(response, 'Dice')
         self.assertContains(response, 'delete-icon')
@@ -2829,7 +2835,7 @@ class IconManagementAddTest(TestCase):
     def test_add_icon_success(self):
         response = self.client.post(reverse('add_verified_icon'), {
             'name': 'Trophy',
-            'image': _create_svg('trophy.svg'),
+            'image': _create_icon_image('trophy.png'),
         })
         self.assertEqual(response.status_code, 302)
         self.assertTrue(VerifiedIcon.objects.filter(name='Trophy').exists())
@@ -2837,7 +2843,7 @@ class IconManagementAddTest(TestCase):
     def test_add_icon_without_name_fails(self):
         response = self.client.post(reverse('add_verified_icon'), {
             'name': '',
-            'image': _create_svg('trophy.svg'),
+            'image': _create_icon_image('trophy.png'),
         })
         self.assertEqual(response.status_code, 200)
         self.assertFalse(VerifiedIcon.objects.exists())
@@ -2850,10 +2856,10 @@ class IconManagementAddTest(TestCase):
         self.assertFalse(VerifiedIcon.objects.exists())
 
     def test_add_icon_duplicate_name_fails(self):
-        VerifiedIcon.objects.create(name='Dice', image=_create_svg('dice.svg'))
+        VerifiedIcon.objects.create(name='Dice', image=_create_icon_image('dice.png'))
         response = self.client.post(reverse('add_verified_icon'), {
             'name': 'Dice',
-            'image': _create_svg('dice2.svg'),
+            'image': _create_icon_image('dice2.png'),
         })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(VerifiedIcon.objects.count(), 1)
@@ -2866,7 +2872,7 @@ class IconManagementAddTest(TestCase):
         self.client.login(username='regular', password='testpass123')
         response = self.client.post(reverse('add_verified_icon'), {
             'name': 'Trophy',
-            'image': _create_svg('trophy.svg'),
+            'image': _create_icon_image('trophy.png'),
         })
         self.assertEqual(response.status_code, 403)
         self.assertFalse(VerifiedIcon.objects.exists())
@@ -2881,7 +2887,7 @@ class IconManagementDeleteTest(TestCase):
             is_site_admin=True, email_verified=True,
         )
         self.icon = VerifiedIcon.objects.create(
-            name='Dice', image=_create_svg('dice.svg'),
+            name='Dice', image=_create_icon_image('dice.png'),
         )
         self.client.login(username='admin', password='testpass123')
 
