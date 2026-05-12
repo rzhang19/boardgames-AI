@@ -3220,8 +3220,15 @@ def event_end_early(request, pk):
     return redirect('private_event_detail', pk=event.pk)
 
 
+@login_required
 def event_timer_status(request, pk):
     event = get_object_or_404(Event, pk=pk)
+    if event.group_id is not None:
+        if not can_view_group(request.user, event.group):
+            raise PermissionDenied
+    else:
+        if not can_view_private_event(request.user, event):
+            raise PermissionDenied
     from django.http import JsonResponse
     data = {
         'end_time': event.end_time.isoformat() if event.end_time else None,

@@ -490,6 +490,75 @@ class EventTimerStatusViewTest(TestCase):
         data = response.json()
         self.assertIsNotNone(data['ended_early_at'])
 
+    def test_unauthenticated_user_redirected_to_login(self):
+        url = reverse('event_timer_status', kwargs={'pk': self.event.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_non_member_denied_for_non_discoverable_group(self):
+        self.group.discoverable = False
+        self.group.save()
+        outsider = User.objects.create_user(username='outsider', password='testpass123')
+        self.client.login(username='outsider', password='testpass123')
+        url = reverse('event_timer_status', kwargs={'pk': self.event.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_group_member_can_access(self):
+        member = User.objects.create_user(username='member', password='testpass123')
+        _make_member(member, self.group)
+        self.client.login(username='member', password='testpass123')
+        url = reverse('event_timer_status', kwargs={'pk': self.event.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+
+@tag("unit")
+class EventTimerStatusPrivateEventTest(TestCase):
+
+    def setUp(self):
+        self.creator = User.objects.create_user(
+            username='creator', password='testpass123'
+        )
+        event_date = timezone.now() - timedelta(minutes=30)
+        self.event = Event.objects.create(
+            title='Private Timer Event',
+            date=event_date,
+            created_by=self.creator,
+            group=None,
+            privacy='private',
+            voting_deadline=event_date,
+            duration_minutes=120,
+        )
+
+    def test_unauthenticated_user_redirected_to_login(self):
+        url = reverse('event_timer_status', kwargs={'pk': self.event.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_unauthorized_user_denied_for_private_event(self):
+        outsider = User.objects.create_user(username='outsider', password='testpass123')
+        self.client.login(username='outsider', password='testpass123')
+        url = reverse('event_timer_status', kwargs={'pk': self.event.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_creator_can_access_private_event(self):
+        self.client.login(username='creator', password='testpass123')
+        url = reverse('event_timer_status', kwargs={'pk': self.event.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+    def test_attendee_can_access_private_event(self):
+        attendee = User.objects.create_user(username='attendee', password='testpass123')
+        EventAttendance.objects.create(user=attendee, event=self.event)
+        self.client.login(username='attendee', password='testpass123')
+        url = reverse('event_timer_status', kwargs={'pk': self.event.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
 
 @tag("unit")
 class GameSessionGatingTest(TestCase):
