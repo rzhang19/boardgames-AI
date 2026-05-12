@@ -2,6 +2,7 @@ import os
 from io import BytesIO, StringIO
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.core.management import call_command
@@ -636,3 +637,88 @@ class FeedbackFormTest(TestCase):
         })
         self.assertFalse(form.is_valid())
         self.assertIn('email', form.errors)
+
+
+@tag("unit")
+class ProductionSecuritySettingsTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            username='testuser', password='testpass123',
+        )
+
+    @override_settings(SECURE_SSL_REDIRECT=True)
+    def test_ssl_redirect_when_enabled(self):
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.status_code, 301)
+        self.assertTrue(response.url.startswith('https://'))
+
+    def test_no_ssl_redirect_when_disabled(self):
+        response = self.client.get(reverse('dashboard'))
+        self.assertNotEqual(response.status_code, 301)
+
+    @override_settings(SECURE_HSTS_SECONDS=31536000)
+    def test_hsts_header_present(self):
+        response = self.client.get(reverse('login'), secure=True)
+        self.assertIn('max-age=31536000', response['Strict-Transport-Security'])
+
+    @override_settings(SECURE_HSTS_SECONDS=0)
+    def test_hsts_header_absent_when_zero(self):
+        response = self.client.get(reverse('login'), secure=True)
+        self.assertFalse(response.has_header('Strict-Transport-Security'))
+
+    @override_settings(
+        SECURE_HSTS_SECONDS=31536000,
+        SECURE_HSTS_INCLUDE_SUBDOMAINS=True,
+        SECURE_HSTS_PRELOAD=True,
+    )
+    def test_hsts_includes_subdomains_and_preload(self):
+        response = self.client.get(reverse('login'), secure=True)
+        hsts = response['Strict-Transport-Security']
+        self.assertIn('includeSubDomains', hsts)
+        self.assertIn('preload', hsts)
+
+    @override_settings(SECURE_CONTENT_TYPE_NOSNIFF=True)
+    def test_content_type_nosniff_header_present(self):
+        response = self.client.get(reverse('login'))
+        self.assertEqual(response['X-Content-Type-Options'], 'nosniff')
+
+    @override_settings(SESSION_COOKIE_SECURE=True)
+    def test_session_cookie_has_secure_flag(self):
+        self.client.login(username='testuser', password='testpass123')
+        session_cookie = self.client.cookies.get(settings.SESSION_COOKIE_NAME)
+        self.assertIsNotNone(session_cookie)
+        self.assertTrue(session_cookie['secure'])
+
+    @override_settings(CSRF_COOKIE_SECURE=True)
+    def test_csrf_cookie_has_secure_flag(self):
+        self.client.get(reverse('login'))
+        csrf_cookie = self.client.cookies.get(settings.CSRF_COOKIE_NAME)
+        self.assertIsNotNone(csrf_cookie)
+        self.assertTrue(csrf_cookie['secure'])
+
+    @override_settings(CSRF_COOKIE_HTTPONLY=True)
+    def test_csrf_cookie_has_httponly_flag(self):
+        self.client.get(reverse('login'))
+        csrf_cookie = self.client.cookies.get(settings.CSRF_COOKIE_NAME)
+        self.assertIsNotNone(csrf_cookie)
+        self.assertTrue(csrf_cookie['httponly'])
+
+    @override_settings(
+        SECURE_HSTS_SECONDS=31536000,
+        SECURE_HSTS_INCLUDE_SUBDOMAINS=True,
+        SECURE_HSTS_PRELOAD=True,
+        SECURE_CONTENT_TYPE_NOSNIFF=True,
+        SESSION_COOKIE_SECURE=True,
+        CSRF_COOKIE_SECURE=True,
+        CSRF_COOKIE_HTTPONLY=True,
+    )
+    def test_all_production_settings_active_together(self):
+        self.client.login(username='testuser', password='testpass123')
+        response = self.client.get(reverse('dashboard'), secure=True)
+        self.assertEqual(response['Strict-Transport-Security'], 'max-age=31536000; includeSubDomains; preload')
+        self.assertEqual(response['X-Content-Type-Options'], 'nosniff')
+        self.assertTrue(self.client.cookies[settings.SESSION_COOKIE_NAME]['secure'])
+        self.assertTrue(self.client.cookies[settings.CSRF_COOKIE_NAME]['secure'])
+        self.assertTrue(self.client.cookies[settings.CSRF_COOKIE_NAME]['httponly'])
