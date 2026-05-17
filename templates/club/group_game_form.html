@@ -175,7 +175,10 @@
         }
         currentController = new AbortController();
 
-        resultsDiv.innerHTML = '<p>Searching...</p>';
+        resultsDiv.innerHTML = '';
+        var p = document.createElement('p');
+        p.textContent = 'Searching...';
+        resultsDiv.appendChild(p);
         resultsDiv.style.display = 'block';
 
         fetch('{% url "bgg_search" %}?q=' + encodeURIComponent(query), {signal: currentController.signal})
@@ -183,7 +186,9 @@
             .then(function(data) {
                 resultsDiv.innerHTML = '';
                 if (data.length === 0) {
-                    resultsDiv.innerHTML = '<p>No results found.</p>';
+                    var p = document.createElement('p');
+                    p.textContent = 'No results found.';
+                    resultsDiv.appendChild(p);
                     return;
                 }
                 data.forEach(function(item) {
@@ -199,7 +204,10 @@
             })
             .catch(function(err) {
                 if (err.name === 'AbortError') return;
-                resultsDiv.innerHTML = '<p>Search failed. Please try again.</p>';
+                resultsDiv.innerHTML = '';
+                var p = document.createElement('p');
+                p.textContent = 'Search failed. Please try again.';
+                resultsDiv.appendChild(p);
             });
     }
 
@@ -222,13 +230,19 @@
     });
 
     function selectGame(bggId, gameName) {
-        resultsDiv.innerHTML = '<p>Loading game data...</p>';
+        resultsDiv.innerHTML = '';
+        var p = document.createElement('p');
+        p.textContent = 'Loading game data...';
+        resultsDiv.appendChild(p);
 
         fetch('{% url "bgg_import" bgg_id=0 %}'.replace('/0/', '/' + bggId + '/'))
             .then(function(response) { return response.json(); })
             .then(function(data) {
                 if (data.error) {
-                    resultsDiv.innerHTML = '<p>' + data.error + '</p>';
+                    resultsDiv.innerHTML = '';
+                    var p = document.createElement('p');
+                    p.textContent = data.error;
+                    resultsDiv.appendChild(p);
                     return;
                 }
                 if (nameField) {
@@ -250,7 +264,11 @@
                     bggLinkInput.value = data.bgg_link;
                 }
                 if (data.image_url) {
-                    imagePreview.innerHTML = '<img src="' + data.image_url + '" alt="' + (data.name || '') + '">';
+                    imagePreview.innerHTML = '';
+                    var img = document.createElement('img');
+                    img.src = data.image_url;
+                    img.alt = data.name || '';
+                    imagePreview.appendChild(img);
                     imagePreview.style.display = 'block';
                 }
                 if (complexityField && data.suggested_complexity) {
@@ -266,7 +284,10 @@
                 updateBggLinkWarning();
             })
             .catch(function() {
-                resultsDiv.innerHTML = '<p>Failed to load game data.</p>';
+                resultsDiv.innerHTML = '';
+                var p = document.createElement('p');
+                p.textContent = 'Failed to load game data.';
+                resultsDiv.appendChild(p);
             });
     }
 

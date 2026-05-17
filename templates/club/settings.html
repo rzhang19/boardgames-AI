@@ -284,7 +284,12 @@
 
                         var preview = document.getElementById('profile-picture-preview');
                         var url = URL.createObjectURL(blob);
-                        preview.innerHTML = '<img src="' + url + '" alt="Preview" class="profile-picture-thumb">';
+                        preview.innerHTML = '';
+                        var img = document.createElement('img');
+                        img.src = url;
+                        img.alt = 'Preview';
+                        img.className = 'profile-picture-thumb';
+                        preview.appendChild(img);
                         closeCropModal();
                     }, 'image/jpeg', 0.85);
                 });
