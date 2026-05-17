@@ -2191,7 +2191,9 @@ def notification_mark_read(request, pk):
     notif.save()
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({'status': 'read'})
-    if notif.url:
+    if notif.url and url_has_allowed_host_and_scheme(
+        notif.url, allowed_hosts=settings.ALLOWED_HOSTS, require_https=True
+    ):
         return redirect(notif.url)
     return redirect('notification_list')
 

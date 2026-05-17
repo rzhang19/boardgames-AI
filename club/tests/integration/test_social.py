@@ -735,6 +735,28 @@ class NotificationMarkReadTest(TestCase):
         notif.refresh_from_db()
         self.assertTrue(notif.is_read)
 
+    def test_mark_read_rejects_external_url(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        notif = Notification.objects.create(
+            user=user, message='Test',
+            url='https://evil.com/phishing',
+        )
+        self.client.login(username='testuser', password='testpass123')
+        response = self.client.post(reverse('notification_mark_read', kwargs={'pk': notif.pk}))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('notification_list'))
+
+    def test_mark_read_rejects_http_scheme(self):
+        user = User.objects.create_user(username='testuser', password='testpass123')
+        notif = Notification.objects.create(
+            user=user, message='Test',
+            url='http://example.com/path',
+        )
+        self.client.login(username='testuser', password='testpass123')
+        response = self.client.post(reverse('notification_mark_read', kwargs={'pk': notif.pk}))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('notification_list'))
+
 
 # ---------------------------------------------------------------------------
 # Notification mark-all-read tests
