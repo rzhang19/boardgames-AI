@@ -2018,7 +2018,6 @@ class GroupNameValidationTest(TestCase):
             'description': '',
             'discoverable': True,
             'join_policy': 'open',
-            'max_members': 50,
         })
         self.assertEqual(response.status_code, 200)
         group.refresh_from_db()
@@ -2032,7 +2031,6 @@ class GroupNameValidationTest(TestCase):
             'description': '',
             'discoverable': True,
             'join_policy': 'open',
-            'max_members': 50,
         })
         self.assertEqual(response.status_code, 200)
         group.refresh_from_db()

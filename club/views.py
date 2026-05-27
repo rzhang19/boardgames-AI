@@ -2350,7 +2350,11 @@ def group_settings(request, slug):
     if request.method == 'POST':
         form = GroupSettingsForm(request.POST, request.FILES, instance=group, user=request.user)
         if form.is_valid():
+            if not request.user.is_superuser:
+                original_max = Group.objects.get(pk=group.pk).max_members
             group = form.save(commit=False)
+            if not request.user.is_superuser:
+                group.max_members = original_max
             if 'image' in request.FILES:
                 buffer = resize_group_image(request.FILES['image'])
                 group.image.save(

@@ -222,7 +222,6 @@ class GroupSettingsViewTest(TestCase):
             'description': 'Updated',
             'join_policy': 'request',
             'discoverable': True,
-            'max_members': 50,
         })
         self.assertEqual(response.status_code, 302)
         self.group.refresh_from_db()
@@ -244,6 +243,34 @@ class GroupSettingsViewTest(TestCase):
         self.client.login(username='su', password='p')
         response = self.client.get(f'/groups/{self.group.slug}/settings/')
         self.assertFalse(response.context['form'].fields['max_members'].disabled)
+
+    def test_non_superuser_cannot_change_max_members_via_post(self):
+        self.client.login(username='admin', password='p')
+        response = self.client.post(f'/groups/{self.group.slug}/settings/', {
+            'name': 'Updated Name',
+            'description': '',
+            'join_policy': 'open',
+            'discoverable': True,
+            'max_members': 999,
+        })
+        self.assertEqual(response.status_code, 302)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.max_members, 50)
+
+    def test_superuser_can_change_max_members_via_post(self):
+        su = User.objects.create_superuser(username='su2', password='p')
+        GroupMembership.objects.create(user=su, group=self.group, role='admin')
+        self.client.login(username='su2', password='p')
+        response = self.client.post(f'/groups/{self.group.slug}/settings/', {
+            'name': 'Updated Name',
+            'description': '',
+            'join_policy': 'open',
+            'discoverable': True,
+            'max_members': 999,
+        })
+        self.assertEqual(response.status_code, 302)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.max_members, 999)
 
 
 @tag("integration")
@@ -1956,7 +1983,7 @@ class GroupImageCompressionTest(TestCase):
         large_img = self._create_image(1500, 1500)
         resp = self.client.post(reverse('group_settings', kwargs={'slug': group.slug}), {
             'name': 'Settings Group', 'join_policy': 'open',
-            'discoverable': True, 'max_members': 50, 'image': large_img,
+            'discoverable': True, 'image': large_img,
         })
         self.assertEqual(resp.status_code, 302)
         group.refresh_from_db()
