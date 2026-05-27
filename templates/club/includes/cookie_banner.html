@@ -1,0 +1,44 @@
+{% load static %}
+<div id="cookie-banner" class="cookie-banner" style="display:none;">
+    <div class="cookie-banner-content">
+        <p>
+            We use essential cookies for authentication, security, and site functionality.
+            By continuing, you accept our use of cookies.
+            <a href="{% url 'privacy_policy' %}">Learn more</a>
+        </p>
+        <div class="cookie-banner-actions">
+            <button type="button" id="cookie-essential-only" class="btn btn-primary">Allow Essential Cookies Only</button>
+            <button type="button" id="cookie-options-btn" class="btn btn-neutral">Select Cookie Options</button>
+        </div>
+    </div>
+</div>
+
+<div id="cookie-options-overlay" class="filter-modal-overlay" style="display:none;">
+    <div class="filter-modal">
+        <div class="filter-modal-header">
+            <h2>Cookie Settings</h2>
+            <button type="button" class="filter-modal-close" id="cookie-options-close">&times;</button>
+        </div>
+        <div class="filter-modal-body">
+            <div class="cookie-category">
+                <div class="cookie-category-header">
+                    <label>Essential Cookies</label>
+                    <label class="cookie-toggle">
+                        <input type="checkbox" checked disabled>
+                        <span class="cookie-toggle-slider"></span>
+                    </label>
+                </div>
+                <p class="cookie-category-desc">
+                    Required for authentication, security, and site functionality.
+                    These cannot be disabled. Includes: <code>sessionid</code>, <code>csrftoken</code>, <code>beta_access</code>.
+                </p>
+            </div>
+        </div>
+        <div class="filter-modal-footer">
+            <button type="button" id="cookie-save-prefs" class="btn btn-neutral">Save Preferences</button>
+            <button type="button" id="cookie-accept-all" class="btn btn-primary">Accept All</button>
+        </div>
+    </div>
+</div>
+
+<script src="{% static 'js/cookie-consent.js' %}"></script>

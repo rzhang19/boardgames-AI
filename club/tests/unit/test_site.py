@@ -722,3 +722,18 @@ class ProductionSecuritySettingsTest(TestCase):
         self.assertTrue(self.client.cookies[settings.SESSION_COOKIE_NAME]['secure'])
         self.assertTrue(self.client.cookies[settings.CSRF_COOKIE_NAME]['secure'])
         self.assertTrue(self.client.cookies[settings.CSRF_COOKIE_NAME]['httponly'])
+
+
+@tag("unit")
+class PrivacyPolicyViewTest(TestCase):
+
+    def test_privacy_policy_accessible_unauthenticated(self):
+        response = self.client.get(reverse('privacy_policy'))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'club/privacy_policy.html')
+
+    def test_privacy_policy_accessible_authenticated(self):
+        User.objects.create_user(username='testuser', password='testpass123')
+        self.client.login(username='testuser', password='testpass123')
+        response = self.client.get(reverse('privacy_policy'))
+        self.assertEqual(response.status_code, 200)

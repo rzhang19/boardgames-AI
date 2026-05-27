@@ -4073,3 +4073,7 @@ def feedback(request):
         'form': form,
         'unavailable': False,
     })
+
+
+def privacy_policy(request):
+    return render(request, 'club/privacy_policy.html')

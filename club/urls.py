@@ -112,4 +112,5 @@ urlpatterns = [
     path('admin-settings/tags/<str:tag_type>/<int:pk>/delete/', views.admin_tag_delete, name='admin_tag_delete'),
     path('admin-settings/tags/request/<int:pk>/approve/', views.admin_tag_request_approve, name='admin_tag_request_approve'),
     path('admin-settings/tags/request/<int:pk>/reject/', views.admin_tag_request_reject, name='admin_tag_request_reject'),
+    path('privacy-policy/', views.privacy_policy, name='privacy_policy'),
 ]

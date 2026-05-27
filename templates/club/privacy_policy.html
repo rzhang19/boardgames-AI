@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Privacy &amp; Cookie Policy{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1>Privacy &amp; Cookie Policy</h1>
+    <p class="text-muted">Last updated: May 2026</p>
+
+    <h2>Introduction</h2>
+    <p>This policy explains how our Board Game Club website uses cookies and what data they store. By continuing to use this site, you accept our use of cookies as described below.</p>
+
+    <h2>What Are Cookies?</h2>
+    <p>Cookies are small text files stored on your device when you visit our website. They help the site function properly and improve your experience.</p>
+
+    <h2>Cookies We Use</h2>
+    <p>We only use <strong>essential cookies</strong> that are necessary for the website to function. We do <strong>not</strong> use any third-party tracking, analytics, or advertising cookies.</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Cookie</th>
+                <th>Purpose</th>
+                <th>Duration</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>sessionid</code></td>
+                <td>Maintains your logged-in session so you stay signed in as you navigate the site.</td>
+                <td>2 weeks</td>
+            </tr>
+            <tr>
+                <td><code>csrftoken</code></td>
+                <td>Protects against Cross-Site Request Forgery (CSRF) attacks when submitting forms.</td>
+                <td>1 year</td>
+            </tr>
+            <tr>
+                <td><code>beta_access</code></td>
+                <td>Remembers that you have been granted access to the beta version of the site.</td>
+                <td>90 days</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>Essential Cookies</h2>
+    <p>All cookies listed above are <strong>essential</strong> and cannot be disabled. Without them, the site cannot provide core functionality such as:</p>
+    <ul>
+        <li>Logging into your account</li>
+        <li>Submitting forms securely</li>
+        <li>Maintaining your session across pages</li>
+        <li>Accessing the beta version of the site</li>
+    </ul>
+
+    <h2>Third-Party Cookies</h2>
+    <p>We do <strong>not</strong> use any third-party cookies. No external services set cookies through our website.</p>
+
+    <h2>Managing Cookies</h2>
+    <p>You can control and manage cookies through your browser settings. Most browsers allow you to:</p>
+    <ul>
+        <li>View what cookies are stored on your device</li>
+        <li>Delete some or all cookies</li>
+        <li>Block cookies from specific sites or all sites</li>
+        <li>Block third-party cookies while allowing first-party cookies</li>
+    </ul>
+    <p>Please note that blocking essential cookies may prevent you from logging in or using core features of the site.</p>
+
+    <h2>Changes to This Policy</h2>
+    <p>We may update this policy from time to time. Any changes will be reflected in the "Last updated" date above.</p>
+
+    <div class="btn-group" style="margin-top: 1.5rem;">
+        <a href="{% url 'dashboard' %}" class="btn btn-neutral">Back to Dashboard</a>
+    </div>
+</div>
+{% endblock %}

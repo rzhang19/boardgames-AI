@@ -750,3 +750,68 @@ class FeedbackNavButtonTest(TestCase):
     def test_feedback_button_hidden_for_anonymous(self):
         response = self.client.get(reverse('dashboard'))
         self.assertNotContains(response, reverse('feedback'))
+
+
+def _read_cookie_js():
+    js_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        '..', 'static', 'js', 'cookie-consent.js'
+    )
+    js_path = os.path.normpath(js_path)
+    with open(js_path, 'r') as f:
+        return f.read()
+
+
+@tag("integration")
+class CookieBannerFunctionalTest(TestCase):
+
+    def test_cookie_banner_present_in_base_template(self):
+        response = self.client.get(reverse('dashboard'))
+        self.assertContains(response, 'cookie-banner')
+
+    def test_cookie_consent_js_included_in_base_template(self):
+        response = self.client.get(reverse('dashboard'))
+        self.assertContains(response, 'cookie-consent.js')
+
+    def test_cookie_banner_css_exists(self):
+        css = _read_css()
+        self.assertIn('.cookie-banner', css)
+
+
+@tag("integration")
+class CookieBannerSecurityTest(TestCase):
+
+    def test_banner_has_no_dismiss_only_button(self):
+        response = self.client.get(reverse('dashboard'))
+        content = response.content.decode()
+        banner_start = content.find('id="cookie-banner"')
+        if banner_start == -1:
+            self.fail('cookie-banner element not found in rendered page')
+        banner_end = content.find('</div>', content.find('</div>', banner_start) + 1)
+        banner_html = content[banner_start:banner_end]
+        self.assertNotIn('cookie-dismiss', banner_html)
+
+    def test_banner_css_has_fixed_position(self):
+        css = _read_css()
+        rule = _extract_css_rule(css, '.cookie-banner')
+        self.assertIn('position: fixed', rule)
+
+    def test_cookie_js_sets_secure_flag_conditionally(self):
+        js = _read_cookie_js()
+        self.assertIn("window.location.protocol === 'https:'", js)
+        self.assertIn('Secure', js)
+
+    def test_cookie_js_sets_samesite_lax(self):
+        js = _read_cookie_js()
+        self.assertIn('SameSite=Lax', js)
+
+    def test_cookie_js_validates_consent_values(self):
+        js = _read_cookie_js()
+        self.assertIn('essential', js)
+        self.assertIn('all', js)
+
+    def test_cookie_js_no_unsafe_dom_operations(self):
+        js = _read_cookie_js()
+        self.assertNotIn('innerHTML', js)
+        self.assertNotIn('eval(', js)
+        self.assertNotIn('document.write', js)
