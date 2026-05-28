@@ -1746,3 +1746,314 @@ class GameSessionDeleteTest(TestCase):
         self.client.login(username='organizer', password='testpass123')
         response = self.client.get(reverse('game_session_delete', kwargs={'event_pk': self.event.pk, 'pk': self.session.pk}))
         self.assertEqual(response.status_code, 200)
+
+
+@tag("integration")
+class DiscoverEventsViewTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.creator = User.objects.create_user(username='creator', password='testpass123')
+        cls.public_event = Event.objects.create(
+            title='Public Game Night',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            location='Community Center',
+            description='Everyone welcome!',
+            created_by=cls.creator,
+            privacy='public',
+        )
+        cls.invite_public_event = Event.objects.create(
+            title='Invite Only Public Event',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            location='Private Venue',
+            description='See details if invited',
+            created_by=cls.creator,
+            privacy='invite_only_public',
+        )
+        cls.private_event = Event.objects.create(
+            title='Secret Meeting',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            created_by=cls.creator,
+            privacy='private',
+        )
+        cls.group = Group.objects.create(name='Some Group')
+        cls.group_event = Event.objects.create(
+            title='Group Event',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            created_by=cls.creator,
+            group=cls.group,
+            privacy='public',
+        )
+        past_date = timezone.now() - timedelta(days=1)
+        cls.past_event = Event.objects.create(
+            title='Past Public Event',
+            date=past_date,
+            voting_deadline=past_date,
+            duration_minutes=60,
+            created_by=cls.creator,
+            privacy='public',
+        )
+
+    def test_discover_page_shows_public_non_group_events(self):
+        response = self.client.get(reverse('discover_events'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Public Game Night')
+
+    def test_discover_page_shows_invite_only_public_events(self):
+        response = self.client.get(reverse('discover_events'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Invite Only Public Event')
+
+    def test_discover_page_hides_private_events(self):
+        response = self.client.get(reverse('discover_events'))
+        self.assertNotContains(response, 'Secret Meeting')
+
+    def test_discover_page_hides_group_events(self):
+        response = self.client.get(reverse('discover_events'))
+        self.assertNotContains(response, 'Group Event')
+
+    def test_discover_page_hides_past_events(self):
+        response = self.client.get(reverse('discover_events'))
+        self.assertNotContains(response, 'Past Public Event')
+
+    def test_discover_page_accessible_unauthenticated(self):
+        response = self.client.get(reverse('discover_events'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_discover_page_accessible_authenticated(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.get(reverse('discover_events'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_discover_page_empty_when_no_events(self):
+        Event.objects.filter(group__isnull=True).delete()
+        response = self.client.get(reverse('discover_events'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No upcoming public events')
+
+    def test_discover_page_shows_location_when_public(self):
+        response = self.client.get(reverse('discover_events'))
+        self.assertContains(response, 'Community Center')
+
+    def test_discover_page_hides_location_when_flag_false(self):
+        event = Event.objects.create(
+            title='Hidden Location Event',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            location='Secret Spot',
+            created_by=self.creator,
+            privacy='invite_only_public',
+            show_location_publicly=False,
+        )
+        response = self.client.get(reverse('discover_events'))
+        self.assertContains(response, 'Hidden Location Event')
+        self.assertNotContains(response, 'Secret Spot')
+
+    def test_discover_page_hides_description_when_flag_false(self):
+        Event.objects.create(
+            title='Hidden Desc Event',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            description='Super secret description',
+            created_by=self.creator,
+            privacy='invite_only_public',
+            show_description_publicly=False,
+        )
+        response = self.client.get(reverse('discover_events'))
+        self.assertContains(response, 'Hidden Desc Event')
+        self.assertNotContains(response, 'Super secret description')
+
+
+@tag("integration")
+class DiscoverEventsFilterTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.creator = User.objects.create_user(username='creator', password='testpass123')
+        cls.tag_board = EventTag.objects.create(name='boardgames')
+        cls.tag_card = EventTag.objects.create(name='cardgames')
+        cls.event_tagged = Event.objects.create(
+            title='Tagged Event',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            created_by=cls.creator,
+            privacy='public',
+        )
+        cls.event_tagged.tags.add(cls.tag_board)
+        cls.event_untagged = Event.objects.create(
+            title='Untagged Event',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            created_by=cls.creator,
+            privacy='public',
+        )
+        cls.event_card = Event.objects.create(
+            title='Card Event',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            created_by=cls.creator,
+            privacy='public',
+        )
+        cls.event_card.tags.add(cls.tag_card)
+
+    def test_filter_by_tag(self):
+        response = self.client.get(reverse('discover_events'), {'tag': ['boardgames']})
+        self.assertContains(response, 'Tagged Event')
+        self.assertNotContains(response, 'Untagged Event')
+        self.assertNotContains(response, 'Card Event')
+
+    def test_filter_no_tags(self):
+        response = self.client.get(reverse('discover_events'), {'tag': ['__none__']})
+        self.assertContains(response, 'Untagged Event')
+        self.assertNotContains(response, 'Tagged Event')
+        self.assertNotContains(response, 'Card Event')
+
+    def test_filter_multiple_tags(self):
+        response = self.client.get(reverse('discover_events'), {'tag': ['boardgames', 'cardgames']})
+        self.assertContains(response, 'Tagged Event')
+        self.assertContains(response, 'Card Event')
+        self.assertNotContains(response, 'Untagged Event')
+
+    def test_date_from_filter(self):
+        future_plus = timezone.now() + timedelta(days=60)
+        Event.objects.create(
+            title='Far Future Event',
+            date=future_plus,
+            voting_deadline=future_plus,
+            created_by=self.creator,
+            privacy='public',
+        )
+        response = self.client.get(reverse('discover_events'), {
+            'date_from': (timezone.now() + timedelta(days=45)).strftime('%Y-%m-%d'),
+        })
+        self.assertContains(response, 'Far Future Event')
+        self.assertNotContains(response, 'Tagged Event')
+
+    def test_date_to_filter(self):
+        near_future = timezone.now() + timedelta(days=2)
+        Event.objects.create(
+            title='Near Event',
+            date=near_future,
+            voting_deadline=near_future,
+            created_by=self.creator,
+            privacy='public',
+        )
+        response = self.client.get(reverse('discover_events'), {
+            'date_to': (timezone.now() + timedelta(days=1)).strftime('%Y-%m-%d'),
+        })
+        self.assertNotContains(response, 'Near Event')
+        self.assertNotContains(response, 'Tagged Event')
+
+    def test_date_range_filter(self):
+        near_future = timezone.now() + timedelta(days=2)
+        Event.objects.create(
+            title='Range Event',
+            date=near_future,
+            voting_deadline=near_future,
+            created_by=self.creator,
+            privacy='public',
+        )
+        response = self.client.get(reverse('discover_events'), {
+            'date_from': (timezone.now() + timedelta(days=1)).strftime('%Y-%m-%d'),
+            'date_to': (timezone.now() + timedelta(days=3)).strftime('%Y-%m-%d'),
+        })
+        self.assertContains(response, 'Range Event')
+        self.assertNotContains(response, 'Tagged Event')
+
+    def test_sort_ascending_default(self):
+        early = timezone.now() + timedelta(days=5)
+        late = timezone.now() + timedelta(days=15)
+        Event.objects.create(title='Late Event', date=late, voting_deadline=late, created_by=self.creator, privacy='public')
+        Event.objects.create(title='Early Event', date=early, voting_deadline=early, created_by=self.creator, privacy='public')
+        response = self.client.get(reverse('discover_events'))
+        content = response.content.decode()
+        self.assertLess(content.index('Early Event'), content.index('Late Event'))
+
+    def test_sort_descending(self):
+        early = timezone.now() + timedelta(days=5)
+        late = timezone.now() + timedelta(days=15)
+        Event.objects.create(title='Late Event', date=late, voting_deadline=late, created_by=self.creator, privacy='public')
+        Event.objects.create(title='Early Event', date=early, voting_deadline=early, created_by=self.creator, privacy='public')
+        response = self.client.get(reverse('discover_events'), {'sort': 'desc'})
+        content = response.content.decode()
+        self.assertLess(content.index('Late Event'), content.index('Early Event'))
+
+    def test_clear_filters_shows_all(self):
+        response = self.client.get(reverse('discover_events'))
+        self.assertContains(response, 'Tagged Event')
+        self.assertContains(response, 'Untagged Event')
+        self.assertContains(response, 'Card Event')
+
+
+@tag("integration")
+class EventListRedesignTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username='member', password='testpass123')
+        cls.group = Group.objects.create(name='My Group')
+        _make_member(cls.user, cls.group)
+        cls.group_event = Event.objects.create(
+            title='Group Game Night',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            location='Clubhouse',
+            created_by=cls.user,
+            group=cls.group,
+        )
+        cls.creator = User.objects.create_user(username='privcreator', password='testpass123')
+        cls.rsvp_event = Event.objects.create(
+            title='My Private Event',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            created_by=cls.creator,
+            privacy='public',
+        )
+        EventAttendance.objects.create(user=cls.user, event=cls.rsvp_event)
+        cls.non_rsvp_event = Event.objects.create(
+            title='Other Private Event',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            created_by=cls.creator,
+            privacy='public',
+        )
+
+    def test_authenticated_sees_group_events_card(self):
+        self.client.login(username='member', password='testpass123')
+        response = self.client.get(reverse('event_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Group Game Night')
+
+    def test_authenticated_sees_rsvp_non_group_events(self):
+        self.client.login(username='member', password='testpass123')
+        response = self.client.get(reverse('event_list'))
+        self.assertContains(response, 'My Private Event')
+
+    def test_authenticated_does_not_see_non_rsvp_non_group_events(self):
+        self.client.login(username='member', password='testpass123')
+        response = self.client.get(reverse('event_list'))
+        self.assertNotContains(response, 'Other Private Event')
+
+    def test_has_discover_events_link(self):
+        self.client.login(username='member', password='testpass123')
+        response = self.client.get(reverse('event_list'))
+        self.assertContains(response, reverse('discover_events'))
+
+    def test_unauthenticated_sees_discoverable_group_events(self):
+        response = self.client.get(reverse('event_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Group Game Night')
+
+    def test_unauthenticated_sees_discover_link(self):
+        response = self.client.get(reverse('event_list'))
+        self.assertContains(response, reverse('discover_events'))
+
+    def test_no_rsvp_events_shows_empty_or_hides_card(self):
+        user2 = User.objects.create_user(username='loner', password='testpass123')
+        self.client.login(username='loner', password='testpass123')
+        response = self.client.get(reverse('event_list'))
+        self.assertEqual(response.status_code, 200)
