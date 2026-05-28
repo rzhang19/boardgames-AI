@@ -624,6 +624,17 @@ class GroupJoinViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('full', response.context.get('error', '').lower())
 
+    def test_full_group_rejects_join_request(self):
+        group = Group.objects.create(name='FullReq', join_policy='request', max_members=1)
+        other = User.objects.create_user(username='other', password='p')
+        GroupMembership.objects.create(user=other, group=group)
+        response = self.client.post(f'/groups/{group.slug}/join/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('full', response.context.get('error', '').lower())
+        self.assertFalse(GroupJoinRequest.objects.filter(
+            user=self.user, group=group,
+        ).exists())
+
     def test_disbanded_group_rejects(self):
         group = Group.objects.create(name='Disbanded', join_policy='open')
         group.disbanded_at = timezone.now()

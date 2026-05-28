@@ -1,6 +1,6 @@
 from django.contrib.auth.models import AbstractUser, UserManager
 from django.core.validators import RegexValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
@@ -276,17 +276,19 @@ class GroupInvite(models.Model):
             raise ValueError('Invite has already been used.')
         if timezone.now() >= self.expires_at:
             raise ValueError('Invite has expired.')
-        if self.group.membership.count() >= self.group.max_members:
-            raise ValueError('Group has reached its maximum number of members.')
-        if GroupMembership.objects.filter(user=user, group=self.group).exists():
-            raise ValueError('User is already a member of this group.')
-        self.used = True
-        self.save(update_fields=['used'])
-        return GroupMembership.objects.create(
-            user=user,
-            group=self.group,
-            role='member',
-        )
+        with transaction.atomic():
+            group = Group.objects.select_for_update().get(pk=self.group.pk)
+            if group.membership.count() >= group.max_members:
+                raise ValueError('Group has reached its maximum number of members.')
+            if GroupMembership.objects.filter(user=user, group=group).exists():
+                raise ValueError('User is already a member of this group.')
+            self.used = True
+            self.save(update_fields=['used'])
+            return GroupMembership.objects.create(
+                user=user,
+                group=group,
+                role='member',
+            )
 
     def __str__(self):
         return f'Invite to {self.group} (expires {self.expires_at})'
@@ -326,17 +328,19 @@ class GroupJoinRequest(models.Model):
             raise ValueError('Request is not pending.')
         if timezone.now() >= self.expires_at:
             raise ValueError('Request has expired.')
-        if self.group.membership.count() >= self.group.max_members:
-            raise ValueError('Group has reached its maximum number of members.')
-        if GroupMembership.objects.filter(user=self.user, group=self.group).exists():
-            raise ValueError('User is already a member of this group.')
-        self.status = 'approved'
-        self.save(update_fields=['status'])
-        return GroupMembership.objects.create(
-            user=self.user,
-            group=self.group,
-            role='member',
-        )
+        with transaction.atomic():
+            group = Group.objects.select_for_update().get(pk=self.group.pk)
+            if group.membership.count() >= group.max_members:
+                raise ValueError('Group has reached its maximum number of members.')
+            if GroupMembership.objects.filter(user=self.user, group=group).exists():
+                raise ValueError('User is already a member of this group.')
+            self.status = 'approved'
+            self.save(update_fields=['status'])
+            return GroupMembership.objects.create(
+                user=self.user,
+                group=group,
+                role='member',
+            )
 
     def reject(self):
         self.status = 'rejected'

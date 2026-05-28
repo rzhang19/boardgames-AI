@@ -12,6 +12,7 @@ from django.core.mail import send_mail
 from django.core.signing import TimestampSigner
 from django.db.models import Count, F, Q
 from django.http import Http404, JsonResponse
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -2598,23 +2599,37 @@ def group_join(request, slug):
 
     if request.method == 'POST':
         if group.join_policy == 'open':
-            GroupMembership.objects.create(
-                user=request.user,
-                group=group,
-                role='member',
-            )
+            with transaction.atomic():
+                locked_group = Group.objects.select_for_update().get(pk=group.pk)
+                if locked_group.membership.count() >= locked_group.max_members:
+                    return render(request, 'club/group_join.html', {
+                        'group': group,
+                        'error': 'This group is full.',
+                    })
+                GroupMembership.objects.create(
+                    user=request.user,
+                    group=group,
+                    role='member',
+                )
             notify_group_member_joined(group, request.user, method='open join')
             return redirect('group_dashboard', slug=group.slug)
         elif group.join_policy == 'request':
-            if not GroupJoinRequest.objects.filter(
-                user=request.user, group=group, status='pending',
-            ).exists():
-                GroupJoinRequest.objects.create(
-                    user=request.user,
-                    group=group,
-                    expires_at=timezone.now() + __import__('datetime').timedelta(days=7),
-                )
-                notify_group_join_request(group, request.user)
+            with transaction.atomic():
+                locked_group = Group.objects.select_for_update().get(pk=group.pk)
+                if locked_group.membership.count() >= locked_group.max_members:
+                    return render(request, 'club/group_join.html', {
+                        'group': group,
+                        'error': 'This group is full.',
+                    })
+                if not GroupJoinRequest.objects.filter(
+                    user=request.user, group=group, status='pending',
+                ).exists():
+                    GroupJoinRequest.objects.create(
+                        user=request.user,
+                        group=group,
+                        expires_at=timezone.now() + __import__('datetime').timedelta(days=7),
+                    )
+                    notify_group_join_request(group, request.user)
             return render(request, 'club/group_join.html', {
                 'group': group,
                 'message': 'Your join request has been submitted.',
