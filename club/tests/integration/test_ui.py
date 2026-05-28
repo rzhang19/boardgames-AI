@@ -171,6 +171,7 @@ class EventListDataLabelsTest(TestCase):
         self.client.login(username='org', password='testpass123')
         import datetime as dt
         group = Group.objects.create(name='Test Group')
+        GroupMembership.objects.create(user=user, group=group, role='member')
         Event.objects.create(
             title='Test Event',
             date=timezone.now() + dt.timedelta(days=7),

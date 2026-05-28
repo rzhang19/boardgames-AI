@@ -1348,49 +1348,109 @@ def game_delete(request, pk):
 
 
 def event_list(request):
-    if not request.user.is_authenticated:
-        groups = Group.objects.filter(discoverable=True, disbanded_at__isnull=True)
-    else:
-        groups = list(Group.objects.filter(
-            Q(discoverable=True) | Q(membership__user=request.user),
-            disbanded_at__isnull=True,
-        ).distinct())
-
-        if request.user.is_authenticated:
-            fav_ids = set(
-                GroupMembership.objects.filter(
-                    user=request.user, is_favorite=True,
-                ).values_list('group_id', flat=True)
-            )
-            groups.sort(key=lambda g: (0 if g.id in fav_ids else 1, g.name))
-
     tag_param = request.GET.getlist('tag')
 
-    event_groups = []
-    for group in groups:
+    if not request.user.is_authenticated:
+        groups = Group.objects.filter(discoverable=True, disbanded_at__isnull=True)
         group_events = Event.objects.filter(
-            group=group,
-        ).select_related('created_by').order_by('date')
+            group__in=groups,
+            end_time__gte=timezone.now(),
+        ).select_related('created_by', 'group').order_by('date')
         if tag_param:
             if '__none__' in tag_param:
                 group_events = group_events.filter(tags__isnull=True)
             else:
                 group_events = group_events.filter(tags__name__in=tag_param).distinct()
-        is_organizer = (
-            request.user.is_authenticated
-            and is_group_organizer(request.user, group)
-        )
-        event_groups.append({
-            'group': group,
-            'events': group_events,
-            'is_organizer': is_organizer,
+
+        return render(request, 'club/event_list.html', {
+            'group_events': group_events,
+            'private_events': Event.objects.none(),
+            'time_midnight': dt_time(0, 0),
+            'all_event_tags': EventTag.objects.all(),
+            'tag_filter': tag_param,
         })
 
+    memberships = GroupMembership.objects.filter(
+        user=request.user,
+        group__disbanded_at__isnull=True,
+    ).values_list('group_id', flat=True)
+
+    group_events = Event.objects.filter(
+        group_id__in=memberships,
+        end_time__gte=timezone.now(),
+    ).select_related('created_by', 'group').order_by('date')
+    if tag_param:
+        if '__none__' in tag_param:
+            group_events = group_events.filter(tags__isnull=True)
+        else:
+            group_events = group_events.filter(tags__name__in=tag_param).distinct()
+
+    private_events = Event.objects.filter(
+        group__isnull=True,
+        eventattendance__user=request.user,
+        end_time__gte=timezone.now(),
+    ).select_related('created_by').order_by('date')
+
     return render(request, 'club/event_list.html', {
-        'event_groups': event_groups,
+        'group_events': group_events,
+        'private_events': private_events,
         'time_midnight': dt_time(0, 0),
         'all_event_tags': EventTag.objects.all(),
         'tag_filter': tag_param,
+    })
+
+
+def discover_events(request):
+    now = timezone.now()
+    events = Event.objects.filter(
+        group__isnull=True,
+        privacy__in=['public', 'invite_only_public'],
+        end_time__gte=now,
+        is_active=True,
+        ended_early_at__isnull=True,
+    ).select_related('created_by')
+
+    tag_param = request.GET.getlist('tag')
+    if tag_param:
+        if '__none__' in tag_param:
+            events = events.filter(tags__isnull=True)
+        else:
+            events = events.filter(tags__name__in=tag_param).distinct()
+
+    date_from = request.GET.get('date_from')
+    if date_from:
+        try:
+            parsed_from = timezone.make_aware(
+                datetime.strptime(date_from, '%Y-%m-%d')
+            )
+            events = events.filter(date__gte=parsed_from)
+        except ValueError:
+            pass
+
+    date_to = request.GET.get('date_to')
+    if date_to:
+        try:
+            parsed_to = timezone.make_aware(
+                datetime.strptime(date_to, '%Y-%m-%d') + timezone.timedelta(days=1)
+            )
+            events = events.filter(date__lt=parsed_to)
+        except ValueError:
+            pass
+
+    sort = request.GET.get('sort', 'asc')
+    if sort == 'desc':
+        events = events.order_by('-date')
+    else:
+        events = events.order_by('date')
+
+    return render(request, 'club/discover_events.html', {
+        'events': events,
+        'time_midnight': dt_time(0, 0),
+        'all_event_tags': EventTag.objects.all(),
+        'tag_filter': tag_param,
+        'date_from': date_from or '',
+        'date_to': date_to or '',
+        'sort': sort,
     })
 
 
@@ -1403,16 +1463,18 @@ def group_event_list(request, slug):
         and is_group_organizer(request.user, group)
     )
     tag_param = request.GET.getlist('tag')
-    events = Event.objects.filter(group=group).select_related('created_by')
+    events = Event.objects.filter(group=group).select_related('created_by', 'group').order_by('date')
     if tag_param:
         if '__none__' in tag_param:
             events = events.filter(tags__isnull=True)
         else:
             events = events.filter(tags__name__in=tag_param).distinct()
     return render(request, 'club/event_list.html', {
-        'event_groups': [{'group': group, 'events': events, 'is_organizer': is_organizer}],
+        'group_events': events,
+        'private_events': Event.objects.none(),
         'time_midnight': dt_time(0, 0),
         'group': group,
+        'is_group_organizer': is_organizer,
         'all_event_tags': EventTag.objects.all(),
         'tag_filter': tag_param,
     })

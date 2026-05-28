@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% load club_tags %}
+
+{% block title %}Discover Events{% endblock %}
+
+{% block content %}
+<h1>Discover Events</h1>
+
+<a href="{% url 'event_list' %}" class="btn btn-secondary btn-sm" style="margin-bottom:1rem;">Back to Events</a>
+
+{% if all_event_tags or 1 %}
+<form method="get" class="filter-bar">
+    <div class="filter-group">
+        <label>Tags</label>
+        <label class="inline-checkbox">
+            <input type="checkbox" name="tag" value="__none__" {% if "__none__" in tag_filter %}checked{% endif %} onchange="this.form.submit();">
+            No tags
+        </label>
+        {% for tag in all_event_tags %}
+        <label class="inline-checkbox" style="display: block; margin-left: 1rem;">
+            <input type="checkbox" name="tag" value="{{ tag.name }}" {% if tag.name in tag_filter %}checked{% endif %} onchange="this.form.submit();">
+            {{ tag.name }}
+        </label>
+        {% endfor %}
+    </div>
+    <div class="filter-group">
+        <label>Date Range</label>
+        <input type="date" name="date_from" value="{{ date_from }}" onchange="this.form.submit();">
+        <span>to</span>
+        <input type="date" name="date_to" value="{{ date_to }}" onchange="this.form.submit();">
+    </div>
+    <div class="filter-group">
+        <label>Sort</label>
+        <select name="sort" onchange="this.form.submit();">
+            <option value="asc" {% if sort == "asc" %}selected{% endif %}>Date (earliest first)</option>
+            <option value="desc" {% if sort == "desc" %}selected{% endif %}>Date (latest first)</option>
+        </select>
+    </div>
+    <div class="filter-actions">
+        <a href="{% url 'discover_events' %}" class="btn btn-neutral btn-sm">Clear Filters</a>
+    </div>
+</form>
+{% endif %}
+
+{% if events %}
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Date</th>
+                <th>Location</th>
+                <th>Description</th>
+                <th>Created By</th>
+                <th>Privacy</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in events %}
+            <tr>
+                <td data-label="Title"><a href="{% url 'private_event_detail' event.pk %}">{{ event.title }}</a></td>
+                <td data-label="Date">
+                    {% if event.show_datetime_publicly %}
+                        {{ event.date|date:"N j, Y" }}{% if event.date.time != time_midnight %} {{ event.date|date:"g:i A" }}{% endif %}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td data-label="Location">
+                    {% if event.show_location_publicly %}
+                        {{ event.location|default:"-" }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td data-label="Description">
+                    {% if event.show_description_publicly %}
+                        {{ event.description|default:"-" }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td data-label="Created By"><a href="{% url 'public_profile' event.created_by.username %}">{{ event.created_by.username }}</a>{% verified_badge event.created_by %}</td>
+                <td data-label="Privacy">{{ event.get_privacy_display }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>No upcoming public events found.</p>
+</div>
+{% endif %}
+{% endblock %}

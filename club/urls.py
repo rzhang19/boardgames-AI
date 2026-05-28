@@ -49,6 +49,7 @@ urlpatterns = [
     path('games/<int:pk>/edit/', views.game_edit, name='game_edit'),
     path('games/<int:pk>/delete/', views.game_delete, name='game_delete'),
     path('events/', views.event_list, name='event_list'),
+    path('events/discover/', views.discover_events, name='discover_events'),
     path('groups/<slug:slug>/events/', views.group_event_list, name='group_event_list'),
     path('groups/<slug:slug>/events/add/', views.event_add, name='event_add'),
     path('groups/<slug:slug>/events/add/recurring/', views.event_add_recurring, name='event_add_recurring'),

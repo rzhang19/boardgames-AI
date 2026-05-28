@@ -11,6 +11,7 @@ from club.models import (
     EventAttendance,
     EventInvite,
     EventPresence,
+    EventTag,
     GameSession,
     GameSessionPlayer,
     Group,
