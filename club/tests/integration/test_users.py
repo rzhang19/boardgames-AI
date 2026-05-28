@@ -2415,6 +2415,7 @@ class VerifiedBadgeEventPagesTest(TestCase):
             voting_deadline='2026-06-01T18:00:00Z',
             created_by=creator, group=group
         )
+        GroupMembership.objects.create(user=creator, group=group, role='member')
         self.client.login(username='verifiedcreator', password='testpass123')
         response = self.client.get(reverse('event_list'))
         self.assertContains(response, 'verified-badge')
@@ -2723,6 +2724,7 @@ class VerifiedBadgeCustomIconRenderingTest(TestCase):
             voting_deadline='2026-06-01T18:00:00Z',
             created_by=creator, group=self.group,
         )
+        GroupMembership.objects.create(user=creator, group=self.group, role='member')
         self.client.login(username='iconcreator', password='testpass123')
         response = self.client.get(reverse('event_list'))
         self.assertContains(response, 'verified-badge')
