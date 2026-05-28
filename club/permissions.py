@@ -230,6 +230,8 @@ def can_view_private_event(user, event):
         return True
     if event.created_by == user:
         return True
+    if event.co_creators.filter(pk=user.pk).exists():
+        return True
     if event.additional_organizers.filter(pk=user.pk).exists():
         return True
     from club.models import EventAttendance
@@ -251,6 +253,8 @@ def can_rsvp_private_event(user, event):
     if not user.is_authenticated:
         return False
     if event.created_by == user:
+        return True
+    if event.co_creators.filter(pk=user.pk).exists():
         return True
     if event.additional_organizers.filter(pk=user.pk).exists():
         return True
@@ -288,4 +292,6 @@ def can_edit_private_event_settings(user, event):
         return False
     if event.group_id is not None:
         return False
-    return event.created_by == user
+    if event.created_by == user:
+        return True
+    return event.co_creators.filter(pk=user.pk).exists()

@@ -9,6 +9,28 @@
         {% csrf_token %}
         {{ form.as_p }}
         {% include "club/includes/tag_widget.html" with tag_type="event" %}
+        {% if action == 'Create' and friends %}
+        <input type="hidden" name="co_creator_ids" id="co-creator-ids" value="">
+        <div class="form-group">
+            <label>Co-Creators (max {{ max_co_creators }})</label>
+            <p class="help-text">Select friends to co-create this event. Co-creators have the same control as you.</p>
+            <div id="co-creator-list">
+                {% for friend in friends %}
+                <label class="co-creator-option">
+                    <input type="checkbox" class="co-creator-checkbox" value="{{ friend.pk }}" onchange="updateCoCreatorIds()">
+                    {{ friend.username }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        <script>
+        function updateCoCreatorIds() {
+            var checked = document.querySelectorAll('.co-creator-checkbox:checked');
+            var ids = Array.from(checked).map(function(cb) { return cb.value; });
+            document.getElementById('co-creator-ids').value = ids.join(',');
+        }
+        </script>
+        {% endif %}
         <input type="hidden" name="voting_deadline_offset_minutes" value="{{ voting_offset }}">
         <button type="submit" class="btn btn-primary">{{ action }} Event</button>
         {% if action == 'Create' %}

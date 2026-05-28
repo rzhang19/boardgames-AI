@@ -341,8 +341,8 @@ class EventForm(forms.ModelForm):
         if invalid_ids:
             self.add_error('tag_ids', 'Invalid tag selection.')
         cleaned_data['tag_id_list'] = tag_id_list
-        return cleaned_data
 
+        return cleaned_data
 
 class RecurringEventForm(forms.Form):
     title = forms.CharField(max_length=200)
@@ -659,26 +659,33 @@ class PrivateEventForm(forms.ModelForm):
         required=False,
         widget=forms.HiddenInput(),
     )
+    co_creator_ids = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
+    )
 
     class Meta:
         model = Event
         fields = ['title', 'location', 'description', 'privacy', 'allow_invite_others', 'auto_add_games']
 
     def __init__(self, *args, **kwargs):
+        self.creator = kwargs.pop('creator', None)
         super().__init__(*args, **kwargs)
-        if self.instance and self.instance.pk and self.instance.date:
-            self.fields['date'].initial = self.instance.date.date()
-            if self.instance.date.time() != dt_time(0, 0):
-                self.fields['time'].initial = self.instance.date.time()
-            if self.instance.voting_deadline:
-                self.fields['voting_deadline_date'].initial = self.instance.voting_deadline.date()
-                if self.instance.voting_deadline.time() != dt_time(0, 0):
-                    self.fields['voting_deadline_time'].initial = self.instance.voting_deadline.time()
-            if self.instance.pk and self.instance.tags.exists():
-                self.fields['tag_ids'].initial = ','.join(str(t.pk) for t in self.instance.tags.all())
-            self.fields['duration_minutes'].initial = self.instance.duration_minutes
-            if self.instance.is_ongoing:
-                self.fields['duration_minutes'].disabled = True
+        if self.instance and self.instance.pk:
+            self.fields.pop('co_creator_ids', None)
+            if self.instance.date:
+                self.fields['date'].initial = self.instance.date.date()
+                if self.instance.date.time() != dt_time(0, 0):
+                    self.fields['time'].initial = self.instance.date.time()
+                if self.instance.voting_deadline:
+                    self.fields['voting_deadline_date'].initial = self.instance.voting_deadline.date()
+                    if self.instance.voting_deadline.time() != dt_time(0, 0):
+                        self.fields['voting_deadline_time'].initial = self.instance.voting_deadline.time()
+                if self.instance.tags.exists():
+                    self.fields['tag_ids'].initial = ','.join(str(t.pk) for t in self.instance.tags.all())
+                self.fields['duration_minutes'].initial = self.instance.duration_minutes
+                if self.instance.is_ongoing:
+                    self.fields['duration_minutes'].disabled = True
 
     def clean(self):
         cleaned_data = super().clean()
@@ -734,6 +741,31 @@ class PrivateEventForm(forms.ModelForm):
         if invalid_ids:
             self.add_error('tag_ids', 'Invalid tag selection.')
         cleaned_data['tag_id_list'] = tag_id_list
+
+        co_creator_ids_raw = cleaned_data.get('co_creator_ids', '')
+        co_creator_id_list = []
+        if co_creator_ids_raw and co_creator_ids_raw.strip():
+            try:
+                co_creator_id_list = [int(x) for x in co_creator_ids_raw.split(',') if x.strip()]
+            except (ValueError, TypeError):
+                self.add_error('co_creator_ids', 'Invalid co-creator IDs.')
+                co_creator_id_list = []
+        if co_creator_id_list and self.creator:
+            from .models import SiteSettings, Friendship
+            max_co = SiteSettings.load().max_co_creators
+            if len(co_creator_id_list) > max_co:
+                self.add_error('co_creator_ids', f'Maximum {max_co} co-creators allowed.')
+            if self.creator.pk in co_creator_id_list:
+                self.add_error('co_creator_ids', 'You cannot add yourself as a co-creator.')
+            for uid in co_creator_id_list:
+                target = User.objects.filter(pk=uid).first()
+                if not target:
+                    self.add_error('co_creator_ids', 'Invalid user selections.')
+                    break
+                if not Friendship.are_friends(self.creator, target):
+                    self.add_error('co_creator_ids', 'All co-creators must be your friends.')
+                    break
+        cleaned_data['co_creator_id_list'] = co_creator_id_list
 
         return cleaned_data
 

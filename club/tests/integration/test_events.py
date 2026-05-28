@@ -12,6 +12,7 @@ from club.models import (
     EventInvite,
     EventPresence,
     EventTag,
+    Friendship,
     GameSession,
     GameSessionPlayer,
     Group,
@@ -2057,3 +2058,324 @@ class EventListRedesignTest(TestCase):
         self.client.login(username='loner', password='testpass123')
         response = self.client.get(reverse('event_list'))
         self.assertEqual(response.status_code, 200)
+
+
+@tag("integration")
+class PrivateEventCoCreatorCreateTest(TestCase):
+
+    def setUp(self):
+        self.alice = User.objects.create_user(
+            username='alice', password='testpass123', email_verified=True,
+        )
+        self.bob = User.objects.create_user(
+            username='bob', password='testpass123', email_verified=True,
+        )
+        self.carol = User.objects.create_user(
+            username='carol', password='testpass123', email_verified=True,
+        )
+        self.dave = User.objects.create_user(
+            username='dave', password='testpass123', email_verified=True,
+        )
+        Friendship.objects.create(
+            requester=self.alice, receiver=self.bob, status='accepted',
+        )
+        Friendship.objects.create(
+            requester=self.alice, receiver=self.carol, status='accepted',
+        )
+        Friendship.objects.create(
+            requester=self.alice, receiver=self.dave, status='accepted',
+        )
+
+    def _post_data(self, **overrides):
+        future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        data = {
+            'title': 'Co-Created Event',
+            'date': future,
+            'privacy': 'public',
+            'allow_invite_others': 'nobody',
+            'auto_add_games': False,
+            'co_creator_ids': '',
+            'duration_minutes': 120,
+        }
+        data.update(overrides)
+        return data
+
+    def test_create_with_co_creators_success(self):
+        self.client.login(username='alice', password='testpass123')
+        resp = self.client.post(
+            reverse('private_event_create'),
+            self._post_data(co_creator_ids=f'{self.bob.pk},{self.carol.pk}'),
+        )
+        self.assertEqual(resp.status_code, 302)
+        event = Event.objects.get(title='Co-Created Event')
+        self.assertTrue(event.co_creators.filter(pk=self.bob.pk).exists())
+        self.assertTrue(event.co_creators.filter(pk=self.carol.pk).exists())
+
+    def test_co_creators_auto_rsvpd(self):
+        self.client.login(username='alice', password='testpass123')
+        self.client.post(
+            reverse('private_event_create'),
+            self._post_data(co_creator_ids=f'{self.bob.pk},{self.carol.pk}'),
+        )
+        event = Event.objects.get(title='Co-Created Event')
+        self.assertTrue(
+            EventAttendance.objects.filter(user=self.bob, event=event).exists()
+        )
+        self.assertTrue(
+            EventAttendance.objects.filter(user=self.carol, event=event).exists()
+        )
+
+    def test_co_creators_receive_notification(self):
+        self.client.login(username='alice', password='testpass123')
+        self.client.post(
+            reverse('private_event_create'),
+            self._post_data(co_creator_ids=str(self.bob.pk)),
+        )
+        event = Event.objects.get(title='Co-Created Event')
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.bob,
+                notification_type='event_co_creator',
+                url=f'/events/{event.pk}/',
+            ).exists()
+        )
+
+    def test_create_with_non_friend_co_creator_rejected(self):
+        self.client.login(username='alice', password='testpass123')
+        stranger = User.objects.create_user(
+            username='stranger', password='testpass123', email_verified=True,
+        )
+        resp = self.client.post(
+            reverse('private_event_create'),
+            self._post_data(co_creator_ids=str(stranger.pk)),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Event.objects.filter(title='Co-Created Event').exists())
+
+    def test_create_exceeding_max_co_creators_rejected(self):
+        extra = User.objects.create_user(
+            username='extra', password='testpass123', email_verified=True,
+        )
+        Friendship.objects.create(
+            requester=self.alice, receiver=extra, status='accepted',
+        )
+        self.client.login(username='alice', password='testpass123')
+        ids = f'{self.bob.pk},{self.carol.pk},{self.dave.pk},{extra.pk}'
+        resp = self.client.post(
+            reverse('private_event_create'),
+            self._post_data(co_creator_ids=ids),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Event.objects.filter(title='Co-Created Event').exists())
+
+    def test_create_without_co_creators_still_works(self):
+        self.client.login(username='alice', password='testpass123')
+        resp = self.client.post(
+            reverse('private_event_create'),
+            self._post_data(co_creator_ids=''),
+        )
+        self.assertEqual(resp.status_code, 302)
+        event = Event.objects.get(title='Co-Created Event')
+        self.assertEqual(event.co_creators.count(), 0)
+
+    def test_creation_log_created_for_creator(self):
+        self.client.login(username='alice', password='testpass123')
+        self.client.post(
+            reverse('private_event_create'),
+            self._post_data(co_creator_ids=str(self.bob.pk)),
+        )
+        event = Event.objects.get(title='Co-Created Event')
+        self.assertTrue(
+            PrivateEventCreationLog.objects.filter(
+                user=self.alice, event=event,
+            ).exists()
+        )
+
+
+@tag("integration")
+class CoCreatorPermissionTest(TestCase):
+
+    def setUp(self):
+        self.alice = User.objects.create_user(
+            username='alice', password='testpass123', email_verified=True,
+        )
+        self.bob = User.objects.create_user(
+            username='bob', password='testpass123', email_verified=True,
+        )
+        Friendship.objects.create(
+            requester=self.alice, receiver=self.bob, status='accepted',
+        )
+        future = timezone.now() + timedelta(days=7)
+        self.event = Event.objects.create(
+            title='Co-Created Event',
+            date=future,
+            voting_deadline=future,
+            created_by=self.alice,
+            privacy='public',
+        )
+        self.event.co_creators.add(self.bob)
+        EventAttendance.objects.create(user=self.bob, event=self.event)
+
+    def test_co_creator_can_edit_event(self):
+        self.client.login(username='bob', password='testpass123')
+        future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        resp = self.client.post(
+            reverse('private_event_edit', kwargs={'pk': self.event.pk}),
+            {
+                'title': 'Updated by Co-Creator',
+                'date': future,
+                'privacy': 'public',
+                'allow_invite_others': 'nobody',
+                'auto_add_games': False,
+                'duration_minutes': 120,
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.title, 'Updated by Co-Creator')
+
+    def test_co_creator_can_access_settings(self):
+        self.client.login(username='bob', password='testpass123')
+        resp = self.client.get(
+            reverse('event_settings', kwargs={'pk': self.event.pk}),
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_co_creator_can_toggle_voting(self):
+        self.client.login(username='bob', password='testpass123')
+        resp = self.client.post(
+            reverse('private_event_toggle_voting', kwargs={'pk': self.event.pk}),
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertFalse(self.event.voting_open)
+
+    def test_co_creator_can_toggle_visibility(self):
+        self.client.login(username='bob', password='testpass123')
+        resp = self.client.post(
+            reverse('private_event_toggle_visibility', kwargs={'pk': self.event.pk}),
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.show_individual_votes)
+
+    def test_co_creator_can_view_results(self):
+        self.client.login(username='bob', password='testpass123')
+        resp = self.client.get(
+            reverse('private_event_results', kwargs={'pk': self.event.pk}),
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_co_creator_can_invite(self):
+        carol = User.objects.create_user(
+            username='carol', password='testpass123', email_verified=True,
+        )
+        Friendship.objects.create(
+            requester=self.bob, receiver=carol, status='accepted',
+        )
+        self.event.allow_invite_others = 'friends_only'
+        self.event.save()
+        self.client.login(username='bob', password='testpass123')
+        resp = self.client.post(
+            reverse('event_invite', kwargs={'pk': self.event.pk}),
+            {'user_ids': str(carol.pk)},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(
+            EventInvite.objects.filter(event=self.event, user=carol).exists()
+        )
+
+    def test_co_creator_can_rsvp_private_event(self):
+        event = Event.objects.create(
+            title='Private Co Event',
+            date=timezone.now() + timedelta(days=7),
+            voting_deadline=timezone.now() + timedelta(days=6),
+            created_by=self.alice,
+            privacy='private',
+        )
+        event.co_creators.add(self.bob)
+        self.client.login(username='bob', password='testpass123')
+        resp = self.client.post(
+            reverse('private_event_rsvp', kwargs={'pk': event.pk}),
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(
+            EventAttendance.objects.filter(user=self.bob, event=event).exists()
+        )
+
+    def test_co_creator_can_view_private_event(self):
+        event = Event.objects.create(
+            title='Private Co Event',
+            date=timezone.now() + timedelta(days=7),
+            voting_deadline=timezone.now() + timedelta(days=6),
+            created_by=self.alice,
+            privacy='private',
+        )
+        event.co_creators.add(self.bob)
+        self.client.login(username='bob', password='testpass123')
+        resp = self.client.get(
+            reverse('private_event_detail', kwargs={'pk': event.pk}),
+        )
+        self.assertEqual(resp.status_code, 200)
+
+
+@tag("integration")
+class CoCreatorNotModifiableAfterCreationTest(TestCase):
+
+    def setUp(self):
+        self.alice = User.objects.create_user(
+            username='alice', password='testpass123', email_verified=True,
+        )
+        self.bob = User.objects.create_user(
+            username='bob', password='testpass123', email_verified=True,
+        )
+        self.carol = User.objects.create_user(
+            username='carol', password='testpass123', email_verified=True,
+        )
+        Friendship.objects.create(
+            requester=self.alice, receiver=self.bob, status='accepted',
+        )
+        Friendship.objects.create(
+            requester=self.alice, receiver=self.carol, status='accepted',
+        )
+        future = timezone.now() + timedelta(days=7)
+        self.event = Event.objects.create(
+            title='Co-Created',
+            date=future,
+            voting_deadline=future,
+            created_by=self.alice,
+            privacy='public',
+        )
+        self.event.co_creators.add(self.bob)
+        EventAttendance.objects.create(user=self.bob, event=self.event)
+
+    def test_edit_form_does_not_include_co_creator_field(self):
+        self.client.login(username='alice', password='testpass123')
+        resp = self.client.get(
+            reverse('private_event_edit', kwargs={'pk': self.event.pk}),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn('co_creator_ids', resp.context['form'].fields)
+
+    def test_settings_form_does_not_modify_co_creators(self):
+        self.client.login(username='alice', password='testpass123')
+        resp = self.client.post(
+            reverse('event_settings', kwargs={'pk': self.event.pk}),
+            {
+                'privacy': 'public',
+                'show_description_publicly': True,
+                'show_location_publicly': True,
+                'show_datetime_publicly': True,
+                'show_attendees_publicly': True,
+                'allow_invite_others': 'nobody',
+                'auto_add_games': False,
+                'organizers_can_edit_title': True,
+                'organizers_can_edit_description': True,
+                'organizers_can_edit_datetime': True,
+                'additional_organizer_ids': '',
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.co_creators.count(), 1)
+        self.assertTrue(self.event.co_creators.filter(pk=self.bob.pk).exists())

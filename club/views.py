@@ -37,6 +37,7 @@ from .notifications import (
     notify_event_invite_declined,
     notify_event_invite_sent,
     notify_event_organizer_designated,
+    notify_event_co_creator,
     notify_group_demoted_member,
     notify_group_demoted_organizer,
     notify_group_game_added,
@@ -2076,6 +2077,17 @@ def admin_settings(request):
         if site_settings.default_event_duration_minutes != duration_minutes:
             site_settings.default_event_duration_minutes = duration_minutes
             site_settings.save()
+
+        co_creators_val = request.POST.get('max_co_creators', '3')
+        try:
+            max_co = int(co_creators_val)
+            if max_co < 0:
+                max_co = 3
+        except (ValueError, TypeError):
+            max_co = 3
+        if site_settings.max_co_creators != max_co:
+            site_settings.max_co_creators = max_co
+            site_settings.save()
         return redirect('admin_settings')
 
     site_admins = User.objects.filter(
@@ -3491,7 +3503,7 @@ def private_event_create(request):
         raise PermissionDenied
 
     if request.method == 'POST':
-        form = PrivateEventForm(request.POST)
+        form = PrivateEventForm(request.POST, creator=request.user)
         if form.is_valid():
             event = form.save(commit=False)
             event.created_by = request.user
@@ -3508,19 +3520,31 @@ def private_event_create(request):
             tag_id_list = form.cleaned_data.get('tag_id_list', [])
             if tag_id_list:
                 event.tags.set(tag_id_list)
+            co_creator_ids = form.cleaned_data.get('co_creator_id_list', [])
+            if co_creator_ids:
+                co_creators = User.objects.filter(pk__in=co_creator_ids)
+                for cc in co_creators:
+                    event.co_creators.add(cc)
+                    EventAttendance.objects.get_or_create(user=cc, event=event)
+                    notify_event_co_creator(cc, event, request.user)
             PrivateEventCreationLog.objects.create(user=request.user, event=event)
             return redirect('private_event_detail', pk=event.pk)
     else:
         form = PrivateEventForm(initial={
             'voting_deadline_offset_minutes': SiteSettings.load().default_voting_offset_minutes,
             'duration_minutes': SiteSettings.load().default_event_duration_minutes,
-        })
+        }, creator=request.user)
+
+    blocked_ids = Block.get_blocked_user_ids(request.user)
+    friends = Friendship.get_friends_of(request.user).exclude(pk__in=blocked_ids)
 
     return render(request, 'club/private_event_form.html', {
         'form': form,
         'action': 'Create',
         'voting_offset': SiteSettings.load().default_voting_offset_minutes,
         'initial_tags': [],
+        'friends': friends,
+        'max_co_creators': SiteSettings.load().max_co_creators,
     })
 
 

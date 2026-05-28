@@ -35,6 +35,7 @@ class SiteSettings(models.Model):
     site_lockdown_active = models.BooleanField(default=False)
     site_lockdown_allow_site_admins = models.BooleanField(default=False)
     default_event_duration_minutes = models.PositiveIntegerField(default=120)
+    max_co_creators = models.PositiveIntegerField(default=3)
 
     def save(self, *args, **kwargs):
         self.pk = 1
@@ -50,6 +51,7 @@ class SiteSettings(models.Model):
             defaults={
                 'default_voting_offset_minutes': 0,
                 'default_event_duration_minutes': 120,
+                'max_co_creators': 3,
             },
         )[0]
 
@@ -453,6 +455,11 @@ class Event(models.Model):
         blank=True,
         related_name='co_organized_events',
     )
+    co_creators = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name='co_created_events',
+    )
     organizers_can_edit_title = models.BooleanField(default=True)
     organizers_can_edit_description = models.BooleanField(default=True)
     organizers_can_edit_datetime = models.BooleanField(default=True)
@@ -534,6 +541,8 @@ class Event(models.Model):
             return False
         if self.created_by == user:
             return True
+        if self.co_creators.filter(pk=user.pk).exists():
+            return True
         return self.additional_organizers.filter(pk=user.pk).exists()
 
     def sync_voting_status(self):
@@ -546,6 +555,10 @@ class Event(models.Model):
             return self.group.games()
 
         organizer_ids = [self.created_by_id]
+        if self.co_creators.exists():
+            organizer_ids.extend(
+                self.co_creators.values_list('pk', flat=True)
+            )
         if self.additional_organizers.exists():
             organizer_ids.extend(
                 self.additional_organizers.values_list('pk', flat=True)

@@ -16,6 +16,7 @@ from club.models import (
     EventInvite,
     EventPresence,
     EventTag,
+    Friendship,
     GameSession,
     GameTag,
     Group,
@@ -1648,3 +1649,201 @@ class EventAttendanceModelTest(TestCase):
         EventAttendance.objects.create(user=self.user1, event=self.event)
         EventAttendance.objects.create(user=self.user2, event=self.event)
         self.assertEqual(EventAttendance.objects.filter(event=self.event).count(), 2)
+
+
+@tag("unit")
+class SiteSettingsMaxCoCreatorsTest(TestCase):
+
+    def test_default_max_co_creators(self):
+        settings = SiteSettings.load()
+        self.assertEqual(settings.max_co_creators, 3)
+
+    def test_can_update_max_co_creators(self):
+        settings = SiteSettings.load()
+        settings.max_co_creators = 5
+        settings.save()
+        settings.refresh_from_db()
+        self.assertEqual(settings.max_co_creators, 5)
+
+
+@tag("unit")
+class EventCoCreatorOrganizerTest(TestCase):
+
+    def setUp(self):
+        self.alice, self.bob, self.carol = _create_users('alice', 'bob', 'carol')
+
+    def test_co_creator_is_organizer(self):
+        event = Event.objects.create(
+            title='Co-Created',
+            date=timezone.now() + timedelta(days=7),
+            created_by=self.alice,
+            voting_deadline=timezone.now() + timedelta(days=6),
+        )
+        event.co_creators.add(self.bob)
+        self.assertTrue(event.is_organizer(self.bob))
+
+    def test_creator_is_still_organizer_with_co_creators(self):
+        event = Event.objects.create(
+            title='Co-Created',
+            date=timezone.now() + timedelta(days=7),
+            created_by=self.alice,
+            voting_deadline=timezone.now() + timedelta(days=6),
+        )
+        event.co_creators.add(self.bob)
+        self.assertTrue(event.is_organizer(self.alice))
+
+    def test_non_co_creator_non_creator_is_not_organizer(self):
+        event = Event.objects.create(
+            title='Co-Created',
+            date=timezone.now() + timedelta(days=7),
+            created_by=self.alice,
+            voting_deadline=timezone.now() + timedelta(days=6),
+        )
+        event.co_creators.add(self.bob)
+        self.assertFalse(event.is_organizer(self.carol))
+
+    def test_additional_organizer_still_works_alongside_co_creator(self):
+        event = Event.objects.create(
+            title='Mixed Orgs',
+            date=timezone.now() + timedelta(days=7),
+            created_by=self.alice,
+            voting_deadline=timezone.now() + timedelta(days=6),
+        )
+        event.co_creators.add(self.bob)
+        event.additional_organizers.add(self.carol)
+        self.assertTrue(event.is_organizer(self.bob))
+        self.assertTrue(event.is_organizer(self.carol))
+        self.assertTrue(event.is_organizer(self.alice))
+
+    def test_co_creator_games_in_game_pool(self):
+        event = Event.objects.create(
+            title='Pool Event',
+            date=timezone.now() + timedelta(days=7),
+            created_by=self.alice,
+            voting_deadline=timezone.now() + timedelta(days=6),
+        )
+        event.co_creators.add(self.bob)
+        game = BoardGame.objects.create(name='Catan', owner=self.bob)
+        pool = event.get_game_pool()
+        self.assertIn(game, pool)
+
+    def test_co_creator_games_not_in_pool_if_not_co_creator(self):
+        event = Event.objects.create(
+            title='Pool Event',
+            date=timezone.now() + timedelta(days=7),
+            created_by=self.alice,
+            voting_deadline=timezone.now() + timedelta(days=6),
+        )
+        game = BoardGame.objects.create(name='Catan', owner=self.bob)
+        pool = event.get_game_pool()
+        self.assertNotIn(game, pool)
+
+
+@tag("unit")
+class PrivateEventFormCoCreatorTest(TestCase):
+
+    def setUp(self):
+        self.alice = User.objects.create_user(
+            username='alice', password='testpass123', email_verified=True,
+        )
+        self.bob = User.objects.create_user(
+            username='bob', password='testpass123', email_verified=True,
+        )
+        self.carol = User.objects.create_user(
+            username='carol', password='testpass123', email_verified=True,
+        )
+        Friendship.objects.create(
+            requester=self.alice, receiver=self.bob, status='accepted',
+        )
+        Friendship.objects.create(
+            requester=self.alice, receiver=self.carol, status='accepted',
+        )
+
+    def _valid_form_data(self, **overrides):
+        future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        data = {
+            'title': 'Test Event',
+            'date': future,
+            'privacy': 'public',
+            'allow_invite_others': 'nobody',
+            'auto_add_games': False,
+            'co_creator_ids': '',
+            'duration_minutes': 120,
+        }
+        data.update(overrides)
+        return data
+
+    def test_valid_form_with_co_creator_friends(self):
+        form = PrivateEventForm(
+            data=self._valid_form_data(co_creator_ids=str(self.bob.pk)),
+            creator=self.alice,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_valid_form_with_multiple_co_creator_friends(self):
+        ids = f'{self.bob.pk},{self.carol.pk}'
+        form = PrivateEventForm(
+            data=self._valid_form_data(co_creator_ids=ids),
+            creator=self.alice,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_reject_non_friend_as_co_creator(self):
+        dave = User.objects.create_user(username='dave', password='testpass123')
+        form = PrivateEventForm(
+            data=self._valid_form_data(co_creator_ids=str(dave.pk)),
+            creator=self.alice,
+        )
+        self.assertFalse(form.is_valid())
+
+    def test_reject_exceeding_max_co_creators(self):
+        dave = User.objects.create_user(
+            username='dave', password='testpass123', email_verified=True,
+        )
+        eve = User.objects.create_user(
+            username='eve', password='testpass123', email_verified=True,
+        )
+        Friendship.objects.create(
+            requester=self.alice, receiver=dave, status='accepted',
+        )
+        Friendship.objects.create(
+            requester=self.alice, receiver=eve, status='accepted',
+        )
+        ids = f'{self.bob.pk},{self.carol.pk},{dave.pk},{eve.pk}'
+        form = PrivateEventForm(
+            data=self._valid_form_data(co_creator_ids=ids),
+            creator=self.alice,
+        )
+        self.assertFalse(form.is_valid())
+
+    def test_reject_self_as_co_creator(self):
+        form = PrivateEventForm(
+            data=self._valid_form_data(co_creator_ids=str(self.alice.pk)),
+            creator=self.alice,
+        )
+        self.assertFalse(form.is_valid())
+
+    def test_empty_co_creator_ids_is_valid(self):
+        form = PrivateEventForm(
+            data=self._valid_form_data(co_creator_ids=''),
+            creator=self.alice,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_co_creator_ids_cleaned_properly(self):
+        form = PrivateEventForm(
+            data=self._valid_form_data(co_creator_ids=f'{self.bob.pk}, {self.carol.pk}'),
+            creator=self.alice,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(
+            form.cleaned_data['co_creator_id_list'],
+            [self.bob.pk, self.carol.pk],
+        )
+
+    def test_invalid_co_creator_id_format_rejected(self):
+        form = PrivateEventForm(
+            data=self._valid_form_data(co_creator_ids='abc'),
+            creator=self.alice,
+        )
+        self.assertFalse(form.is_valid())

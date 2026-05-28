@@ -401,3 +401,14 @@ def notify_event_organizer_designated(user, event):
         'View Event',
         'event_organizer_designated',
     )
+
+
+def notify_event_co_creator(user, event, creator):
+    _notify_user_if_not_blocked(
+        creator,
+        user,
+        f'{creator.username} added you as a co-creator for "{event.title}"',
+        f'/events/{event.pk}/',
+        'View Event',
+        'event_co_creator',
+    )

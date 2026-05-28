@@ -20,6 +20,13 @@
     <p><strong>Description:</strong> {{ event.description }}</p>
     {% endif %}
     <p><strong>Created by:</strong> <a href="{% url 'public_profile' event.created_by.username %}">{{ event.created_by.username }}</a></p>
+    {% if event.co_creators.exists %}
+    <p><strong>Co-Creators:</strong>
+        {% for cc in event.co_creators.all %}
+        <a href="{% url 'public_profile' cc.username %}">{{ cc.username }}</a>{% if not forloop.last %}, {% endif %}
+        {% endfor %}
+    </p>
+    {% endif %}
     <p><strong>Privacy:</strong> {{ event.get_privacy_display }}</p>
 
     {% if event.is_ongoing %}
@@ -33,9 +40,7 @@
     {% if is_organizer %}
     <div style="margin-top:1rem;">
         <a href="{% url 'private_event_edit' event.pk %}" class="btn btn-primary btn-sm">Edit Event</a>
-        {% if is_creator %}
         <a href="{% url 'event_settings' event.pk %}" class="btn btn-secondary btn-sm">Event Settings</a>
-        {% endif %}
         {% if event.is_currently_active %}
         <form method="post" action="{% url 'private_event_toggle_voting' event.pk %}" style="display:inline;">
             {% csrf_token %}
