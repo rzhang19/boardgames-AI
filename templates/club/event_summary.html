@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Event Summary: {{ event.title }}{% endblock %}
+
+{% block content %}
+<h1>Event Summary</h1>
+<h2>{{ event.title }}</h2>
+
+{% if event.group %}
+<a href="{% url 'event_detail' event.group.slug event.pk %}" class="btn btn-outline btn-sm">Back to Event</a>
+{% else %}
+<a href="{% url 'private_event_detail' event.pk %}" class="btn btn-outline btn-sm">Back to Event</a>
+{% endif %}
+
+<h3>Games Played</h3>
+
+{% if games_data %}
+<table>
+    <thead>
+        <tr>
+            <th>Game</th>
+            <th>Players</th>
+            <th>Status</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in games_data %}
+        <tr>
+            <td>{{ item.game.name }}</td>
+            <td>
+                {% for player in item.session.players.all %}
+                    {{ player }}{% if not forloop.last %}, {% endif %}
+                {% endfor %}
+            </td>
+            <td>
+                {% if not item.is_temporary %}
+                    {% if item.game.owner %}
+                        In {{ item.game.owner.username }}'s library
+                    {% elif item.game.group %}
+                        In {{ item.game.group.name }}'s library
+                    {% endif %}
+                {% elif item.pending_proposal %}
+                    Pending: proposed to
+                    {% if item.pending_proposal.proposed_group %}
+                        {{ item.pending_proposal.proposed_group.name }}
+                    {% else %}
+                        {{ item.pending_proposal.proposed_owner.username }}
+                    {% endif %}
+                {% elif item.was_declined %}
+                    Unassigned (previously declined)
+                {% else %}
+                    Unassigned
+                {% endif %}
+            </td>
+            <td>
+                {% if item.is_temporary and not item.pending_proposal %}
+                    <a href="{% url 'game_add_to_library' item.game.pk %}?event={{ event.pk }}" class="btn btn-primary btn-sm">Add to Library</a>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No games were recorded for this event.</p>
+{% endif %}
+
+{% endblock %}

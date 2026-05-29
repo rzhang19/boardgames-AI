@@ -91,6 +91,9 @@
         <a href="{% url 'event_invite' event.pk %}" class="btn btn-secondary btn-sm">Invite</a>
         {% endif %}
         {% endif %}
+        {% if is_organizer and not event.is_currently_active %}
+        <a href="{% url 'event_summary' event.pk %}" class="btn btn-outline btn-sm">Event Summary</a>
+        {% endif %}
     </div>
 </div>
 

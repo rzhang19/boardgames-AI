@@ -100,6 +100,9 @@
         </form>
         <a href="{% url 'event_edit' event.group.slug event.pk %}" class="btn btn-primary btn-sm">Edit Event</a>
         {% endif %}
+        {% if not event.is_currently_active %}
+        <a href="{% url 'event_summary' event.pk %}" class="btn btn-outline btn-sm">Event Summary</a>
+        {% endif %}
     </div>
 </div>
 

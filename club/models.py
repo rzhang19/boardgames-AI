@@ -403,6 +403,7 @@ class BoardGame(models.Model):
     tags = models.ManyToManyField(
         'GameTag', blank=True, related_name='tagged_games',
     )
+    is_temporary = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
@@ -450,7 +451,6 @@ class Event(models.Model):
         choices=INVITE_OTHERS_CHOICES,
         default='nobody',
     )
-    auto_add_games = models.BooleanField(default=False)
     additional_organizers = models.ManyToManyField(
         User,
         blank=True,
@@ -936,6 +936,64 @@ class GameSessionPlayer(models.Model):
             raise ValidationError('A player cannot be both a registered user and a guest.')
         if not self.user and not self.guest_name:
             raise ValidationError('A player must be either a registered user or a guest.')
+
+
+class GameOwnershipProposal(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('declined', 'Declined'),
+        ('expired', 'Expired'),
+    ]
+
+    board_game = models.ForeignKey(BoardGame, on_delete=models.CASCADE, related_name='ownership_proposals')
+    proposed_owner = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='received_game_proposals',
+    )
+    proposed_group = models.ForeignKey(
+        Group, on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='received_game_proposals',
+    )
+    proposed_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_game_proposals')
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='game_proposals')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['board_game'],
+                condition=models.Q(status='pending'),
+                name='unique_pending_proposal_per_game',
+            ),
+        ]
+
+    def __str__(self):
+        target = self.proposed_group.name if self.proposed_group else str(self.proposed_owner)
+        return f'Proposal: {self.board_game.name} -> {target} ({self.status})'
+
+    def accept(self):
+        if self.status != 'pending':
+            raise ValueError('Proposal is not pending.')
+        if timezone.now() >= self.expires_at:
+            raise ValueError('Proposal has expired.')
+        with transaction.atomic():
+            self.board_game.owner = self.proposed_owner
+            self.board_game.group = self.proposed_group
+            self.board_game.is_temporary = False
+            self.board_game.save(update_fields=['owner', 'group', 'is_temporary'])
+            self.status = 'accepted'
+            self.save(update_fields=['status'])
+
+    def decline(self):
+        if self.status != 'pending':
+            raise ValueError('Proposal is not pending.')
+        self.status = 'declined'
+        self.save(update_fields=['status'])
 
 
 class GameTag(models.Model):

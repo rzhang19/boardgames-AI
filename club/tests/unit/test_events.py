@@ -906,7 +906,6 @@ class EventNullableGroupTest(TestCase):
         self.assertTrue(event.show_datetime_publicly)
         self.assertTrue(event.show_attendees_publicly)
         self.assertEqual(event.allow_invite_others, 'nobody')
-        self.assertFalse(event.auto_add_games)
         self.assertTrue(event.organizers_can_edit_title)
         self.assertTrue(event.organizers_can_edit_description)
         self.assertTrue(event.organizers_can_edit_datetime)
@@ -1154,7 +1153,6 @@ class PrivateEventFormTest(TestCase):
             'date': future.strftime('%Y-%m-%d'),
             'privacy': 'public',
             'allow_invite_others': 'nobody',
-            'auto_add_games': False,
         })
         self.assertTrue(form.is_valid(), form.errors)
 
@@ -1188,7 +1186,6 @@ class PrivateEventFormTest(TestCase):
             'date': future.strftime('%Y-%m-%d'),
             'privacy': 'private',
             'allow_invite_others': 'friends_only',
-            'auto_add_games': True,
         })
         self.assertTrue(form.is_valid(), form.errors)
         event = form.save(commit=False)
@@ -1218,7 +1215,6 @@ class EventSettingsFormTest(TestCase):
             'show_datetime_publicly': True,
             'show_attendees_publicly': False,
             'allow_invite_others': 'friends_only',
-            'auto_add_games': True,
             'organizers_can_edit_title': True,
             'organizers_can_edit_description': False,
             'organizers_can_edit_datetime': True,
@@ -1227,7 +1223,6 @@ class EventSettingsFormTest(TestCase):
         updated = form.save()
         self.assertEqual(updated.privacy, 'private')
         self.assertFalse(updated.show_description_publicly)
-        self.assertTrue(updated.auto_add_games)
 
 
 @tag("unit")
@@ -1355,7 +1350,6 @@ class EventGamePoolTest(TestCase):
         self.assertEqual(pool.count(), 1)
 
     def test_auto_add_false_still_returns_pool(self):
-        self.event.auto_add_games = False
         self.event.save()
         BoardGame.objects.create(name='Catan', owner=self.alice)
         pool = self.event.get_game_pool()
@@ -1766,7 +1760,6 @@ class PrivateEventFormCoCreatorTest(TestCase):
             'date': future,
             'privacy': 'public',
             'allow_invite_others': 'nobody',
-            'auto_add_games': False,
             'co_creator_ids': '',
             'duration_minutes': 120,
         }

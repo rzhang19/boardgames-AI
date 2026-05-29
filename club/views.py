@@ -28,7 +28,7 @@ from .forms import (
     SettingsForm, SuccessorPickForm,
     UserAddForm, UserManageForm, RegistrationForm, VerifiedIconForm,
 )
-from .models import BoardGame, Block, Event, EventAttendance, EventGameOverride, EventInvite, EventPresence, EventTag, GameSession, GameSessionPlayer, GameTag, Group, GroupCreationLog, GroupInvite, GroupJoinRequest, GroupMembership, Friendship, Notification, PasswordHistory, PrivateEventCreationLog, SiteSettings, TagRequest, VerifiedIcon, Vote
+from .models import BoardGame, Block, Event, EventAttendance, EventGameOverride, EventInvite, EventPresence, EventTag, GameOwnershipProposal, GameSession, GameSessionPlayer, GameTag, Group, GroupCreationLog, GroupInvite, GroupJoinRequest, GroupMembership, Friendship, Notification, PasswordHistory, PrivateEventCreationLog, SiteSettings, TagRequest, VerifiedIcon, Vote
 from .models import TAG_MAX_LENGTH
 from .notifications import (
     generate_missing_complexity_notifications,
@@ -3172,7 +3172,20 @@ def event_play_game(request, pk):
         return redirect('private_event_detail', pk=event.pk)
 
     if request.method == 'POST':
-        board_game = get_object_or_404(BoardGame, pk=request.POST.get('board_game'))
+        board_game_id = request.POST.get('board_game', '').strip()
+        ad_hoc_name = request.POST.get('ad_hoc_game_name', '').strip()
+        if board_game_id:
+            board_game = get_object_or_404(BoardGame, pk=board_game_id)
+        elif ad_hoc_name:
+            board_game = BoardGame.objects.create(
+                name=ad_hoc_name, is_temporary=True,
+            )
+        else:
+            from django.contrib import messages
+            messages.error(request, 'Select a game or enter a new game name.')
+            if event.group_id is not None:
+                return redirect('event_play_game', pk=event.pk)
+            return redirect('event_play_game', pk=event.pk)
         selection_method = request.POST.get('selection_method', 'manual')
         session = GameSession.objects.create(
             event=event,
@@ -3201,6 +3214,8 @@ def event_play_game(request, pk):
                     GameSessionPlayer.objects.create(
                         game_session=session, guest_name=name,
                     )
+        if event.group_id is not None:
+            return redirect('event_detail', slug=event.group.slug, pk=event.pk)
         return redirect('private_event_detail', pk=event.pk)
 
     from .game_pool import compute_game_pool
@@ -4180,6 +4195,233 @@ def feedback(request):
         'form': form,
         'unavailable': False,
     })
+
+
+@login_required
+def event_summary(request, pk):
+    event = get_object_or_404(Event, pk=pk)
+    is_org = _is_event_organizer(request.user, event)
+    is_group_admin = (
+        event.group_id is not None
+        and event.group.is_admin(request.user)
+    )
+    if not is_org and not is_group_admin and not request.user.is_superuser and not request.user.is_site_admin:
+        raise PermissionDenied
+
+    if event.phase != 'completed':
+        from django.contrib import messages
+        messages.error(request, 'Event summary is only available after the event ends.')
+        if event.group_id is not None:
+            return redirect('event_detail', slug=event.group.slug, pk=event.pk)
+        return redirect('private_event_detail', pk=event.pk)
+
+    sessions = GameSession.objects.filter(event=event).select_related('board_game').prefetch_related('players')
+
+    attendee_ids = set(
+        EventAttendance.objects.filter(event=event).values_list('user_id', flat=True)
+    )
+    attendees = User.objects.filter(pk__in=attendee_ids)
+
+    games_data = []
+    for session in sessions:
+        game = session.board_game
+        pending_proposal = GameOwnershipProposal.objects.filter(
+            board_game=game, status='pending',
+        ).select_related('proposed_owner', 'proposed_group').first()
+        declined_proposals = GameOwnershipProposal.objects.filter(
+            board_game=game, status='declined',
+        ).exists()
+
+        games_data.append({
+            'session': session,
+            'game': game,
+            'is_temporary': game.is_temporary,
+            'has_owner': game.owner is not None or game.group is not None,
+            'pending_proposal': pending_proposal,
+            'was_declined': declined_proposals,
+        })
+
+    context = {
+        'event': event,
+        'games_data': games_data,
+        'attendees': attendees,
+    }
+    return render(request, 'club/event_summary.html', context)
+
+
+@login_required
+def game_add_to_library(request, pk):
+    game = get_object_or_404(BoardGame, pk=pk)
+    if not game.is_temporary:
+        from django.contrib import messages
+        messages.error(request, 'This game is already in a library.')
+        return redirect('game_list')
+
+    event_id = request.GET.get('event')
+    event = get_object_or_404(Event, pk=event_id) if event_id else None
+
+    if event:
+        is_org = _is_event_organizer(request.user, event)
+        is_group_admin = (
+            event.group_id is not None
+            and event.group.is_admin(request.user)
+        )
+        if not is_org and not is_group_admin and not request.user.is_superuser and not request.user.is_site_admin:
+            raise PermissionDenied
+
+    if request.method == 'POST':
+        owner_type = request.POST.get('owner_type')
+        owner_id = request.POST.get('owner_id', '').strip()
+
+        if owner_type == 'self':
+            game.owner = request.user
+            game.is_temporary = False
+            game.save(update_fields=['owner', 'is_temporary'])
+            from django.contrib import messages
+            messages.success(request, f'"{game.name}" added to your library.')
+            if event:
+                if event.group_id is not None:
+                    return redirect('event_summary', pk=event.pk)
+                return redirect('event_summary', pk=event.pk)
+            return redirect('game_list')
+
+        elif owner_type == 'group' and event and event.group:
+            game.group = event.group
+            game.is_temporary = False
+            game.save(update_fields=['group', 'is_temporary'])
+            from django.contrib import messages
+            messages.success(request, f'"{game.name}" added to the group library.')
+            if event.group_id is not None:
+                return redirect('event_summary', pk=event.pk)
+            return redirect('event_summary', pk=event.pk)
+
+        elif owner_type == 'attendee' and owner_id:
+            target_user = get_object_or_404(User, pk=owner_id)
+            proposal = GameOwnershipProposal.objects.create(
+                board_game=game,
+                proposed_owner=target_user,
+                proposed_by=request.user,
+                event=event,
+                expires_at=timezone.now() + timezone.timedelta(days=7),
+            )
+            from .notifications import notify_game_ownership_proposed
+            notify_game_ownership_proposed(target_user, game, event, request.user)
+            from django.contrib import messages
+            messages.success(request, f'Proposal sent to {target_user.username}.')
+            if event:
+                if event.group_id is not None:
+                    return redirect('event_summary', pk=event.pk)
+                return redirect('event_summary', pk=event.pk)
+            return redirect('game_list')
+
+    attendee_ids = set()
+    if event:
+        attendee_ids = set(
+            EventAttendance.objects.filter(event=event).values_list('user_id', flat=True)
+        )
+    attendees = User.objects.filter(pk__in=attendee_ids).exclude(pk=request.user.pk)
+
+    context = {
+        'game': game,
+        'event': event,
+        'attendees': attendees,
+    }
+    return render(request, 'club/game_owner_selection.html', context)
+
+
+@login_required
+def game_add_to_library_save(request, pk):
+    game = get_object_or_404(BoardGame, pk=pk)
+    if not game.is_temporary:
+        from django.contrib import messages
+        messages.error(request, 'This game is already in a library.')
+        return redirect('game_list')
+
+    event_id = request.GET.get('event')
+    event = get_object_or_404(Event, pk=event_id) if event_id else None
+
+    if request.method == 'POST':
+        form = BoardGameForm(request.POST, instance=game, ownership_user=request.user)
+        if form.is_valid():
+            game = form.save(commit=False)
+            ownership_target = form.cleaned_data.get('ownership_target', 'self')
+
+            if ownership_target == 'self':
+                game.owner = request.user
+            elif ownership_target.startswith('group:'):
+                slug = ownership_target[len('group:'):]
+                group = Group.objects.get(slug=slug)
+                game.owner = None
+                game.group = group
+
+            game.is_temporary = False
+            game.save()
+
+            tag_ids = form.cleaned_data.get('tag_id_list', [])
+            if tag_ids:
+                game.tags.set(tag_ids)
+
+            from django.contrib import messages
+            messages.success(request, f'"{game.name}" added to library.')
+            if event:
+                return redirect('event_summary', pk=event.pk)
+            return redirect('game_list')
+    else:
+        form = BoardGameForm(instance=game, ownership_user=request.user)
+
+    context = {
+        'form': form,
+        'game': game,
+        'event': event,
+    }
+    return render(request, 'club/game_add_to_library_form.html', context)
+
+
+@login_required
+def game_proposal_accept(request, pk):
+    proposal = get_object_or_404(GameOwnershipProposal, pk=pk)
+    if proposal.proposed_owner != request.user:
+        raise PermissionDenied
+
+    if proposal.status != 'pending':
+        from django.contrib import messages
+        messages.error(request, 'This proposal is no longer pending.')
+        return redirect('notification_list')
+
+    try:
+        proposal.accept()
+    except ValueError:
+        from django.contrib import messages
+        messages.error(request, 'This proposal has expired.')
+        return redirect('notification_list')
+
+    from .notifications import notify_game_ownership_accepted
+    notify_game_ownership_accepted(proposal.proposed_by, proposal.board_game, request.user)
+
+    from django.contrib import messages
+    messages.success(request, f'"{proposal.board_game.name}" added to your library.')
+    return redirect('notification_list')
+
+
+@login_required
+def game_proposal_decline(request, pk):
+    proposal = get_object_or_404(GameOwnershipProposal, pk=pk)
+    if proposal.proposed_owner != request.user:
+        raise PermissionDenied
+
+    if proposal.status != 'pending':
+        from django.contrib import messages
+        messages.error(request, 'This proposal is no longer pending.')
+        return redirect('notification_list')
+
+    proposal.decline()
+
+    from .notifications import notify_game_ownership_declined
+    notify_game_ownership_declined(proposal.proposed_by, proposal.board_game, request.user)
+
+    from django.contrib import messages
+    messages.info(request, f'Proposal for "{proposal.board_game.name}" declined.')
+    return redirect('notification_list')
 
 
 def privacy_policy(request):

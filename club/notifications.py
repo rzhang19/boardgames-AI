@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 
-from club.models import Block, BoardGame, GroupMembership, Notification
+from club.models import Block, BoardGame, GameOwnershipProposal, GroupMembership, Notification
 
 User = get_user_model()
 
@@ -411,4 +411,37 @@ def notify_event_co_creator(user, event, creator):
         f'/events/{event.pk}/',
         'View Event',
         'event_co_creator',
+    )
+
+
+def notify_game_ownership_proposed(user, board_game, event, proposed_by):
+    _notify_user_if_not_blocked(
+        proposed_by,
+        user,
+        f'{proposed_by.username} proposed adding "{board_game.name}" to your library from "{event.title}"',
+        f'/game-proposal/{GameOwnershipProposal.objects.filter(board_game=board_game, proposed_owner=user, status="pending").first().pk}/accept/' if GameOwnershipProposal.objects.filter(board_game=board_game, proposed_owner=user, status='pending').exists() else '',
+        'Review Proposal',
+        'game_ownership_proposed',
+    )
+
+
+def notify_game_ownership_accepted(proposer, board_game, accepter):
+    _notify_user_if_not_blocked(
+        accepter,
+        proposer,
+        f'{accepter.username} accepted your proposal for "{board_game.name}"',
+        f'/games/{board_game.pk}/',
+        'View Game',
+        'game_ownership_accepted',
+    )
+
+
+def notify_game_ownership_declined(proposer, board_game, decliner):
+    _notify_user_if_not_blocked(
+        decliner,
+        proposer,
+        f'{decliner.username} declined your proposal for "{board_game.name}"',
+        '',
+        '',
+        'game_ownership_declined',
     )

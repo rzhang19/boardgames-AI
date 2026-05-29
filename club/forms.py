@@ -649,7 +649,6 @@ class PrivateEventForm(forms.ModelForm):
         choices=Event.INVITE_OTHERS_CHOICES,
         initial='nobody',
     )
-    auto_add_games = forms.BooleanField(required=False, initial=False)
     duration_minutes = forms.IntegerField(
         min_value=1,
         initial=120,
@@ -667,7 +666,7 @@ class PrivateEventForm(forms.ModelForm):
 
     class Meta:
         model = Event
-        fields = ['title', 'location', 'description', 'privacy', 'allow_invite_others', 'auto_add_games']
+        fields = ['title', 'location', 'description', 'privacy', 'allow_invite_others']
 
     def __init__(self, *args, **kwargs):
         self.creator = kwargs.pop('creator', None)
@@ -786,7 +785,6 @@ class EventSettingsForm(forms.ModelForm):
             'show_datetime_publicly',
             'show_attendees_publicly',
             'allow_invite_others',
-            'auto_add_games',
             'organizers_can_edit_title',
             'organizers_can_edit_description',
             'organizers_can_edit_datetime',

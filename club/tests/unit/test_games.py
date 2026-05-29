@@ -1,7 +1,9 @@
 import json
 from decimal import Decimal
+from io import StringIO
 from unittest.mock import patch, MagicMock
 
+from django.core.management import call_command
 from django.test import TestCase, tag
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
@@ -11,6 +13,7 @@ from club.models import (
     BoardGame,
     Event,
     EventTag,
+    GameOwnershipProposal,
     GameTag,
     GameSession,
     GameSessionPlayer,
@@ -1204,3 +1207,212 @@ class BoardGameGroupOwnerTest(TestCase):
     def test_group_owned_game_string_representation(self):
         game = BoardGame.objects.create(name='Group Chess', group=self.group)
         self.assertEqual(str(game), 'Group Chess')
+
+
+@tag("unit")
+class TemporaryBoardGameTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='owner', password='testpass123')
+
+    def test_default_is_temporary_false(self):
+        game = BoardGame.objects.create(name='Normal Game', owner=self.user)
+        self.assertFalse(game.is_temporary)
+
+    def test_can_create_temporary_game(self):
+        game = BoardGame.objects.create(name='Temp Game', is_temporary=True)
+        self.assertTrue(game.is_temporary)
+        self.assertIsNone(game.owner)
+        self.assertIsNone(game.group)
+
+    def test_temporary_game_no_owner(self):
+        game = BoardGame.objects.create(name='Temp Game', is_temporary=True)
+        self.assertIsNone(game.owner)
+        self.assertIsNone(game.group)
+
+    def test_temporary_game_with_name_only(self):
+        game = BoardGame.objects.create(name='Quick Catan', is_temporary=True)
+        self.assertEqual(game.name, 'Quick Catan')
+        self.assertIsNone(game.min_players)
+        self.assertIsNone(game.max_players)
+        self.assertEqual(game.description, '')
+
+
+@tag("unit")
+class GameOwnershipProposalModelTest(TestCase):
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(username='organizer', password='testpass123')
+        self.attendee = User.objects.create_user(username='attendee', password='testpass123')
+        self.group = Group.objects.create(name='Test Group', created_by=self.organizer)
+        GroupMembership.objects.create(user=self.organizer, group=self.group, role='admin')
+        self.event = Event.objects.create(
+            title='Test Event',
+            date=timezone.now() + timezone.timedelta(days=7),
+            created_by=self.organizer,
+            group=self.group,
+            voting_deadline=timezone.now() + timezone.timedelta(days=6),
+        )
+        self.temp_game = BoardGame.objects.create(name='Temp Game', is_temporary=True)
+
+    def _create_proposal(self, **kwargs):
+        defaults = {
+            'board_game': self.temp_game,
+            'proposed_owner': self.attendee,
+            'proposed_by': self.organizer,
+            'event': self.event,
+            'expires_at': timezone.now() + timezone.timedelta(days=7),
+        }
+        defaults.update(kwargs)
+        return GameOwnershipProposal.objects.create(**defaults)
+
+    def test_create_proposal(self):
+        proposal = self._create_proposal()
+        self.assertEqual(proposal.status, 'pending')
+        self.assertEqual(proposal.board_game, self.temp_game)
+        self.assertEqual(proposal.proposed_owner, self.attendee)
+        self.assertEqual(proposal.proposed_by, self.organizer)
+
+    def test_proposal_string_representation_for_user(self):
+        proposal = self._create_proposal()
+        self.assertIn('Temp Game', str(proposal))
+        self.assertIn('attendee', str(proposal))
+        self.assertIn('pending', str(proposal))
+
+    def test_proposal_string_representation_for_group(self):
+        proposal = self._create_proposal(
+            proposed_owner=None, proposed_group=self.group,
+        )
+        self.assertIn('Test Group', str(proposal))
+
+    def test_accept_proposal_assigns_owner(self):
+        proposal = self._create_proposal()
+        proposal.accept()
+        self.temp_game.refresh_from_db()
+        proposal.refresh_from_db()
+        self.assertEqual(proposal.status, 'accepted')
+        self.assertEqual(self.temp_game.owner, self.attendee)
+        self.assertFalse(self.temp_game.is_temporary)
+
+    def test_accept_proposal_assigns_group(self):
+        proposal = self._create_proposal(
+            proposed_owner=None, proposed_group=self.group,
+        )
+        proposal.accept()
+        self.temp_game.refresh_from_db()
+        self.assertEqual(self.temp_game.group, self.group)
+        self.assertFalse(self.temp_game.is_temporary)
+
+    def test_decline_proposal(self):
+        proposal = self._create_proposal()
+        proposal.decline()
+        proposal.refresh_from_db()
+        self.assertEqual(proposal.status, 'declined')
+        self.temp_game.refresh_from_db()
+        self.assertTrue(self.temp_game.is_temporary)
+        self.assertIsNone(self.temp_game.owner)
+
+    def test_cannot_accept_non_pending(self):
+        proposal = self._create_proposal()
+        proposal.decline()
+        with self.assertRaises(ValueError):
+            proposal.accept()
+
+    def test_cannot_decline_non_pending(self):
+        proposal = self._create_proposal()
+        proposal.accept()
+        with self.assertRaises(ValueError):
+            proposal.decline()
+
+    def test_cannot_accept_expired_proposal(self):
+        proposal = self._create_proposal(
+            expires_at=timezone.now() - timezone.timedelta(days=1),
+        )
+        with self.assertRaises(ValueError):
+            proposal.accept()
+
+    def test_unique_pending_proposal_per_game(self):
+        self._create_proposal()
+        with self.assertRaises(Exception):
+            self._create_proposal()
+
+    def test_can_create_new_proposal_after_decline(self):
+        proposal = self._create_proposal()
+        proposal.decline()
+        other_user = User.objects.create_user(username='other', password='testpass123')
+        new_proposal = self._create_proposal(proposed_owner=other_user)
+        self.assertEqual(new_proposal.status, 'pending')
+
+    def test_can_create_new_proposal_after_accept(self):
+        proposal = self._create_proposal()
+        proposal.accept()
+        other_game = BoardGame.objects.create(name='Other Temp', is_temporary=True)
+        new_proposal = self._create_proposal(board_game=other_game)
+        self.assertEqual(new_proposal.status, 'pending')
+
+
+@tag("unit")
+class CleanupTemporaryGamesCommandTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='organizer', password='testpass123')
+        self.group = Group.objects.create(name='Test Group', created_by=self.user)
+        GroupMembership.objects.create(user=self.user, group=self.group, role='admin')
+        self.event = Event.objects.create(
+            title='Test Event',
+            date=timezone.now() + timezone.timedelta(days=7),
+            created_by=self.user,
+            group=self.group,
+            voting_deadline=timezone.now() + timezone.timedelta(days=6),
+        )
+
+    def test_deletes_old_temporary_games(self):
+        game = BoardGame.objects.create(name='Old Temp', is_temporary=True)
+        BoardGame.objects.filter(pk=game.pk).update(
+            created_at=timezone.now() - timezone.timedelta(hours=169),
+        )
+        call_command('cleanup_temporary_games', stdout=StringIO())
+        self.assertFalse(BoardGame.objects.filter(pk=game.pk).exists())
+
+    def test_keeps_recent_temporary_games(self):
+        game = BoardGame.objects.create(name='Recent Temp', is_temporary=True)
+        call_command('cleanup_temporary_games', stdout=StringIO())
+        self.assertTrue(BoardGame.objects.filter(pk=game.pk).exists())
+
+    def test_does_not_delete_non_temporary_games(self):
+        game = BoardGame.objects.create(name='Normal Game', owner=self.user)
+        BoardGame.objects.filter(pk=game.pk).update(
+            created_at=timezone.now() - timezone.timedelta(hours=169),
+        )
+        call_command('cleanup_temporary_games', stdout=StringIO())
+        self.assertTrue(BoardGame.objects.filter(pk=game.pk).exists())
+
+    def test_keeps_temporary_game_with_pending_proposal(self):
+        game = BoardGame.objects.create(name='Proposed Temp', is_temporary=True)
+        BoardGame.objects.filter(pk=game.pk).update(
+            created_at=timezone.now() - timezone.timedelta(hours=169),
+        )
+        attendee = User.objects.create_user(username='attendee', password='testpass123')
+        GameOwnershipProposal.objects.create(
+            board_game=game,
+            proposed_owner=attendee,
+            proposed_by=self.user,
+            event=self.event,
+            expires_at=timezone.now() + timezone.timedelta(days=7),
+        )
+        call_command('cleanup_temporary_games', stdout=StringIO())
+        self.assertTrue(BoardGame.objects.filter(pk=game.pk).exists())
+
+    def test_expires_stale_proposals(self):
+        game = BoardGame.objects.create(name='Stale Temp', is_temporary=True)
+        attendee = User.objects.create_user(username='attendee2', password='testpass123')
+        proposal = GameOwnershipProposal.objects.create(
+            board_game=game,
+            proposed_owner=attendee,
+            proposed_by=self.user,
+            event=self.event,
+            expires_at=timezone.now() - timezone.timedelta(days=1),
+        )
+        call_command('cleanup_temporary_games', stdout=StringIO())
+        proposal.refresh_from_db()
+        self.assertEqual(proposal.status, 'expired')

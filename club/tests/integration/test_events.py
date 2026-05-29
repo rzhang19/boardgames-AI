@@ -13,6 +13,7 @@ from club.models import (
     EventPresence,
     EventTag,
     Friendship,
+    GameOwnershipProposal,
     GameSession,
     GameSessionPlayer,
     Group,
@@ -988,7 +989,6 @@ class PrivateEventCreateViewTest(TestCase):
             'location': 'My house',
             'privacy': 'public',
             'allow_invite_others': 'nobody',
-            'auto_add_games': False,
         })
         self.assertEqual(resp.status_code, 302)
         event = Event.objects.get(title='Game Night')
@@ -2093,7 +2093,6 @@ class PrivateEventCoCreatorCreateTest(TestCase):
             'date': future,
             'privacy': 'public',
             'allow_invite_others': 'nobody',
-            'auto_add_games': False,
             'co_creator_ids': '',
             'duration_minutes': 120,
         }
@@ -2226,7 +2225,6 @@ class CoCreatorPermissionTest(TestCase):
                 'date': future,
                 'privacy': 'public',
                 'allow_invite_others': 'nobody',
-                'auto_add_games': False,
                 'duration_minutes': 120,
             },
         )
@@ -2368,7 +2366,6 @@ class CoCreatorNotModifiableAfterCreationTest(TestCase):
                 'show_datetime_publicly': True,
                 'show_attendees_publicly': True,
                 'allow_invite_others': 'nobody',
-                'auto_add_games': False,
                 'organizers_can_edit_title': True,
                 'organizers_can_edit_description': True,
                 'organizers_can_edit_datetime': True,
@@ -2379,3 +2376,379 @@ class CoCreatorNotModifiableAfterCreationTest(TestCase):
         self.event.refresh_from_db()
         self.assertEqual(self.event.co_creators.count(), 1)
         self.assertTrue(self.event.co_creators.filter(pk=self.bob.pk).exists())
+
+
+@tag("integration")
+class QuickAddGameDuringEventTest(TestCase):
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(username='organizer', password='testpass123')
+        self.attendee = User.objects.create_user(username='attendee', password='testpass123')
+        self.group = Group.objects.create(name='Play Group')
+        GroupMembership.objects.create(user=self.organizer, group=self.group, role='admin')
+        GroupMembership.objects.create(user=self.attendee, group=self.group, role='member')
+        event_date = timezone.now() - timedelta(minutes=30)
+        self.event = Event.objects.create(
+            title='Ongoing Event',
+            date=event_date,
+            voting_deadline=event_date,
+            created_by=self.organizer,
+            group=self.group,
+            duration_minutes=120,
+        )
+        EventAttendance.objects.create(user=self.attendee, event=self.event)
+
+    def test_organizer_can_quick_add_game_by_name(self):
+        self.client.login(username='organizer', password='testpass123')
+        resp = self.client.post(reverse('event_play_game', kwargs={'pk': self.event.pk}), {
+            'ad_hoc_game_name': 'Monopoly',
+            'selection_method': 'manual',
+            'players': str(self.attendee.pk),
+        })
+        self.assertEqual(resp.status_code, 302)
+        game = BoardGame.objects.get(name='Monopoly')
+        self.assertTrue(game.is_temporary)
+        self.assertIsNone(game.owner)
+        self.assertIsNone(game.group)
+        self.assertTrue(GameSession.objects.filter(event=self.event, board_game=game).exists())
+
+    def test_quick_add_creates_temporary_game(self):
+        self.client.login(username='organizer', password='testpass123')
+        self.client.post(reverse('event_play_game', kwargs={'pk': self.event.pk}), {
+            'ad_hoc_game_name': 'Quick Game',
+            'selection_method': 'manual',
+        })
+        game = BoardGame.objects.get(name='Quick Game')
+        self.assertTrue(game.is_temporary)
+        self.assertFalse(hasattr(game, 'owner') and game.owner is not None)
+
+    def test_quick_add_ignored_when_board_game_selected(self):
+        existing_game = BoardGame.objects.create(name='Catan', owner=self.organizer)
+        self.client.login(username='organizer', password='testpass123')
+        self.client.post(reverse('event_play_game', kwargs={'pk': self.event.pk}), {
+            'board_game': existing_game.pk,
+            'ad_hoc_game_name': 'Should Be Ignored',
+            'selection_method': 'manual',
+        })
+        self.assertFalse(BoardGame.objects.filter(name='Should Be Ignored').exists())
+        session = GameSession.objects.get(event=self.event)
+        self.assertEqual(session.board_game, existing_game)
+        self.assertFalse(session.board_game.is_temporary)
+
+    def test_non_organizer_cannot_quick_add(self):
+        self.client.login(username='attendee', password='testpass123')
+        resp = self.client.post(reverse('event_play_game', kwargs={'pk': self.event.pk}), {
+            'ad_hoc_game_name': 'Blocked Game',
+            'selection_method': 'manual',
+        })
+        self.assertEqual(resp.status_code, 403)
+        self.assertFalse(BoardGame.objects.filter(name='Blocked Game').exists())
+
+    def test_quick_add_redirects_to_group_event(self):
+        self.client.login(username='organizer', password='testpass123')
+        resp = self.client.post(reverse('event_play_game', kwargs={'pk': self.event.pk}), {
+            'ad_hoc_game_name': 'Monopoly',
+            'selection_method': 'manual',
+        })
+        self.assertRedirects(resp, reverse('event_detail', kwargs={'slug': self.group.slug, 'pk': self.event.pk}))
+
+    def test_quick_add_with_guests(self):
+        self.client.login(username='organizer', password='testpass123')
+        self.client.post(reverse('event_play_game', kwargs={'pk': self.event.pk}), {
+            'ad_hoc_game_name': 'Party Game',
+            'selection_method': 'manual',
+            'guest_names': 'Guest1,Guest2',
+        })
+        session = GameSession.objects.get(event=self.event)
+        self.assertEqual(
+            GameSessionPlayer.objects.filter(game_session=session).count(), 2,
+        )
+
+    def test_quick_add_private_event(self):
+        creator = User.objects.create_user(username='privcreator', password='testpass123')
+        event_date = timezone.now() - timedelta(minutes=30)
+        private_event = Event.objects.create(
+            title='Private Ongoing',
+            date=event_date,
+            voting_deadline=event_date,
+            created_by=creator,
+            duration_minutes=120,
+        )
+        self.client.login(username='privcreator', password='testpass123')
+        resp = self.client.post(reverse('event_play_game', kwargs={'pk': private_event.pk}), {
+            'ad_hoc_game_name': 'Private Game',
+            'selection_method': 'manual',
+        })
+        self.assertRedirects(resp, reverse('private_event_detail', kwargs={'pk': private_event.pk}))
+        self.assertTrue(BoardGame.objects.filter(name='Private Game', is_temporary=True).exists())
+
+
+@tag("integration")
+class EventSummaryViewTest(TestCase):
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(username='organizer', password='testpass123')
+        self.member = User.objects.create_user(username='member', password='testpass123')
+        self.group = Group.objects.create(name='Summary Group')
+        GroupMembership.objects.create(user=self.organizer, group=self.group, role='admin')
+        GroupMembership.objects.create(user=self.member, group=self.group, role='member')
+        event_date = timezone.now() - timedelta(hours=3)
+        self.event = Event.objects.create(
+            title='Completed Event',
+            date=event_date,
+            voting_deadline=event_date,
+            created_by=self.organizer,
+            group=self.group,
+            duration_minutes=60,
+        )
+        EventAttendance.objects.create(user=self.member, event=self.event)
+
+    def test_organizer_can_view_summary(self):
+        self.client.login(username='organizer', password='testpass123')
+        resp = self.client.get(reverse('event_summary', kwargs={'pk': self.event.pk}))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_group_admin_can_view_summary(self):
+        admin = User.objects.create_user(username='admin2', password='testpass123')
+        GroupMembership.objects.create(user=admin, group=self.group, role='admin')
+        self.client.login(username='admin2', password='testpass123')
+        resp = self.client.get(reverse('event_summary', kwargs={'pk': self.event.pk}))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_member_cannot_view_summary(self):
+        self.client.login(username='member', password='testpass123')
+        resp = self.client.get(reverse('event_summary', kwargs={'pk': self.event.pk}))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_summary_shows_temporary_games(self):
+        temp_game = BoardGame.objects.create(name='Temp Catan', is_temporary=True)
+        GameSession.objects.create(
+            event=self.event, board_game=temp_game,
+            selection_method='manual', created_by=self.organizer,
+        )
+        self.client.login(username='organizer', password='testpass123')
+        resp = self.client.get(reverse('event_summary', kwargs={'pk': self.event.pk}))
+        self.assertContains(resp, 'Temp Catan')
+        self.assertContains(resp, 'Add to Library')
+
+    def test_summary_shows_owned_games(self):
+        owned_game = BoardGame.objects.create(name='Owned Catan', owner=self.organizer)
+        GameSession.objects.create(
+            event=self.event, board_game=owned_game,
+            selection_method='manual', created_by=self.organizer,
+        )
+        self.client.login(username='organizer', password='testpass123')
+        resp = self.client.get(reverse('event_summary', kwargs={'pk': self.event.pk}))
+        self.assertContains(resp, 'Owned Catan')
+        self.assertNotContains(resp, 'Add to Library')
+
+    def test_summary_not_available_for_ongoing_event(self):
+        event_date = timezone.now() - timedelta(minutes=30)
+        ongoing = Event.objects.create(
+            title='Ongoing',
+            date=event_date,
+            voting_deadline=event_date,
+            created_by=self.organizer,
+            group=self.group,
+            duration_minutes=120,
+        )
+        self.client.login(username='organizer', password='testpass123')
+        resp = self.client.get(reverse('event_summary', kwargs={'pk': ongoing.pk}))
+        self.assertEqual(resp.status_code, 302)
+
+    def test_summary_private_event(self):
+        creator = User.objects.create_user(username='privcreator', password='testpass123')
+        event_date = timezone.now() - timedelta(hours=3)
+        private_event = Event.objects.create(
+            title='Private Completed',
+            date=event_date,
+            voting_deadline=event_date,
+            created_by=creator,
+            duration_minutes=60,
+        )
+        self.client.login(username='privcreator', password='testpass123')
+        resp = self.client.get(reverse('event_summary', kwargs={'pk': private_event.pk}))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_summary_shows_pending_proposal(self):
+        temp_game = BoardGame.objects.create(name='Pending Game', is_temporary=True)
+        GameSession.objects.create(
+            event=self.event, board_game=temp_game,
+            selection_method='manual', created_by=self.organizer,
+        )
+        GameOwnershipProposal.objects.create(
+            board_game=temp_game,
+            proposed_owner=self.member,
+            proposed_by=self.organizer,
+            event=self.event,
+            expires_at=timezone.now() + timedelta(days=7),
+        )
+        self.client.login(username='organizer', password='testpass123')
+        resp = self.client.get(reverse('event_summary', kwargs={'pk': self.event.pk}))
+        self.assertContains(resp, 'Pending')
+        self.assertNotContains(resp, 'Add to Library')
+
+
+@tag("integration")
+class GameAddToLibraryTest(TestCase):
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(username='organizer', password='testpass123')
+        self.attendee = User.objects.create_user(username='attendee', password='testpass123')
+        self.group = Group.objects.create(name='Library Group')
+        GroupMembership.objects.create(user=self.organizer, group=self.group, role='admin')
+        GroupMembership.objects.create(user=self.attendee, group=self.group, role='member')
+        event_date = timezone.now() - timedelta(hours=3)
+        self.event = Event.objects.create(
+            title='Completed Event',
+            date=event_date,
+            voting_deadline=event_date,
+            created_by=self.organizer,
+            group=self.group,
+            duration_minutes=60,
+        )
+        EventAttendance.objects.create(user=self.attendee, event=self.event)
+        self.temp_game = BoardGame.objects.create(name='Temp Game', is_temporary=True)
+
+    def test_add_to_self_library(self):
+        self.client.login(username='organizer', password='testpass123')
+        resp = self.client.post(
+            reverse('game_add_to_library', kwargs={'pk': self.temp_game.pk}) + f'?event={self.event.pk}',
+            {'owner_type': 'self'},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.temp_game.refresh_from_db()
+        self.assertEqual(self.temp_game.owner, self.organizer)
+        self.assertFalse(self.temp_game.is_temporary)
+
+    def test_add_to_group_library(self):
+        self.client.login(username='organizer', password='testpass123')
+        resp = self.client.post(
+            reverse('game_add_to_library', kwargs={'pk': self.temp_game.pk}) + f'?event={self.event.pk}',
+            {'owner_type': 'group'},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.temp_game.refresh_from_db()
+        self.assertEqual(self.temp_game.group, self.group)
+        self.assertFalse(self.temp_game.is_temporary)
+
+    def test_propose_to_attendee(self):
+        self.client.login(username='organizer', password='testpass123')
+        resp = self.client.post(
+            reverse('game_add_to_library', kwargs={'pk': self.temp_game.pk}) + f'?event={self.event.pk}',
+            {'owner_type': 'attendee', 'owner_id': str(self.attendee.pk)},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.temp_game.refresh_from_db()
+        self.assertTrue(self.temp_game.is_temporary)
+        proposal = GameOwnershipProposal.objects.get(board_game=self.temp_game)
+        self.assertEqual(proposal.proposed_owner, self.attendee)
+        self.assertEqual(proposal.status, 'pending')
+
+    def test_propose_creates_notification(self):
+        self.client.login(username='organizer', password='testpass123')
+        self.client.post(
+            reverse('game_add_to_library', kwargs={'pk': self.temp_game.pk}) + f'?event={self.event.pk}',
+            {'owner_type': 'attendee', 'owner_id': str(self.attendee.pk)},
+        )
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.attendee,
+                notification_type='game_ownership_proposed',
+            ).exists()
+        )
+
+    def test_non_temporary_game_rejected(self):
+        owned_game = BoardGame.objects.create(name='Owned', owner=self.organizer)
+        self.client.login(username='organizer', password='testpass123')
+        resp = self.client.get(
+            reverse('game_add_to_library', kwargs={'pk': owned_game.pk}) + f'?event={self.event.pk}',
+        )
+        self.assertEqual(resp.status_code, 302)
+
+    def test_non_organizer_cannot_add_to_library(self):
+        self.client.login(username='attendee', password='testpass123')
+        resp = self.client.post(
+            reverse('game_add_to_library', kwargs={'pk': self.temp_game.pk}) + f'?event={self.event.pk}',
+            {'owner_type': 'self'},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+
+@tag("integration")
+class GameProposalAcceptDeclineTest(TestCase):
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(username='organizer', password='testpass123')
+        self.attendee = User.objects.create_user(username='attendee', password='testpass123')
+        self.group = Group.objects.create(name='Proposal Group')
+        GroupMembership.objects.create(user=self.organizer, group=self.group, role='admin')
+        event_date = timezone.now() - timedelta(hours=3)
+        self.event = Event.objects.create(
+            title='Proposal Event',
+            date=event_date,
+            voting_deadline=event_date,
+            created_by=self.organizer,
+            group=self.group,
+            duration_minutes=60,
+        )
+        self.temp_game = BoardGame.objects.create(name='Proposed Game', is_temporary=True)
+        self.proposal = GameOwnershipProposal.objects.create(
+            board_game=self.temp_game,
+            proposed_owner=self.attendee,
+            proposed_by=self.organizer,
+            event=self.event,
+            expires_at=timezone.now() + timedelta(days=7),
+        )
+
+    def test_proposed_owner_can_accept(self):
+        self.client.login(username='attendee', password='testpass123')
+        resp = self.client.post(reverse('game_proposal_accept', kwargs={'pk': self.proposal.pk}))
+        self.assertEqual(resp.status_code, 302)
+        self.proposal.refresh_from_db()
+        self.assertEqual(self.proposal.status, 'accepted')
+        self.temp_game.refresh_from_db()
+        self.assertEqual(self.temp_game.owner, self.attendee)
+        self.assertFalse(self.temp_game.is_temporary)
+
+    def test_proposed_owner_can_decline(self):
+        self.client.login(username='attendee', password='testpass123')
+        resp = self.client.post(reverse('game_proposal_decline', kwargs={'pk': self.proposal.pk}))
+        self.assertEqual(resp.status_code, 302)
+        self.proposal.refresh_from_db()
+        self.assertEqual(self.proposal.status, 'declined')
+        self.temp_game.refresh_from_db()
+        self.assertIsNone(self.temp_game.owner)
+        self.assertTrue(self.temp_game.is_temporary)
+
+    def test_other_user_cannot_accept(self):
+        other = User.objects.create_user(username='other', password='testpass123')
+        self.client.login(username='other', password='testpass123')
+        resp = self.client.post(reverse('game_proposal_accept', kwargs={'pk': self.proposal.pk}))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_accept_creates_notification_for_proposer(self):
+        self.client.login(username='attendee', password='testpass123')
+        self.client.post(reverse('game_proposal_accept', kwargs={'pk': self.proposal.pk}))
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.organizer,
+                notification_type='game_ownership_accepted',
+            ).exists()
+        )
+
+    def test_decline_creates_notification_for_proposer(self):
+        self.client.login(username='attendee', password='testpass123')
+        self.client.post(reverse('game_proposal_decline', kwargs={'pk': self.proposal.pk}))
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.organizer,
+                notification_type='game_ownership_declined',
+            ).exists()
+        )
+
+    def test_cannot_accept_already_accepted(self):
+        self.proposal.accept()
+        self.client.login(username='attendee', password='testpass123')
+        resp = self.client.post(reverse('game_proposal_accept', kwargs={'pk': self.proposal.pk}))
+        self.assertEqual(resp.status_code, 302)

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Complete Game Details: {{ game.name }}{% endblock %}
+
+{% block content %}
+<h1>Complete Game Details</h1>
+<h2>{{ game.name }}</h2>
+
+{% if event %}
+<a href="{% url 'event_summary' event.pk %}" class="btn btn-outline btn-sm">Back to Summary</a>
+{% else %}
+<a href="{% url 'game_list' %}" class="btn btn-outline btn-sm">Back to Games</a>
+{% endif %}
+
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit" class="btn btn-primary">Save Game</button>
+</form>
+
+{% endblock %}

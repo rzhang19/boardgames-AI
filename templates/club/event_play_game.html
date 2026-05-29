@@ -16,12 +16,17 @@
     {% csrf_token %}
     <div>
         <label for="id_board_game">Game</label>
-        <select id="id_board_game" name="board_game" required>
+        <select id="id_board_game" name="board_game">
             <option value="">-- Select a game --</option>
             {% for game in games %}
             <option value="{{ game.game_id }}"{% if preselected_game == game.game_id|stringformat:"s" %} selected{% endif %}>{{ game.name }}</option>
             {% endfor %}
         </select>
+    </div>
+    <p class="text-muted">Or enter a game name not listed:</p>
+    <div>
+        <label for="id_ad_hoc_game_name">New Game Name</label>
+        <input type="text" id="id_ad_hoc_game_name" name="ad_hoc_game_name" placeholder="e.g. Monopoly" maxlength="200">
     </div>
     <div>
         <label for="id_selection_method">Selection Method</label>
