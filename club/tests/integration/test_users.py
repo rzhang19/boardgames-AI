@@ -1306,6 +1306,33 @@ class ProfilePrivacyTest(TestCase):
         )
         self.assertContains(response, 'Joined')
 
+    def test_friends_link_hidden_when_show_friends_false(self):
+        self.owner.show_friends = False
+        self.owner.save()
+        self.client.login(username='viewer', password='testpass123')
+        response = self.client.get(
+            reverse('public_profile', kwargs={'username': 'owner'})
+        )
+        self.assertNotContains(response, reverse('friends_list', kwargs={'username': 'owner'}))
+
+    def test_friends_link_visible_when_show_friends_true(self):
+        self.owner.show_friends = True
+        self.owner.save()
+        self.client.login(username='viewer', password='testpass123')
+        response = self.client.get(
+            reverse('public_profile', kwargs={'username': 'owner'})
+        )
+        self.assertContains(response, reverse('friends_list', kwargs={'username': 'owner'}))
+
+    def test_owner_sees_friends_link_regardless_of_privacy(self):
+        self.owner.show_friends = False
+        self.owner.save()
+        self.client.login(username='owner', password='testpass123')
+        response = self.client.get(
+            reverse('public_profile', kwargs={'username': 'owner'})
+        )
+        self.assertContains(response, reverse('friends_list', kwargs={'username': 'owner'}))
+
 
 @tag("integration")
 class ProfilePictureUploadTest(TestCase):
@@ -1327,6 +1354,7 @@ class ProfilePictureUploadTest(TestCase):
             'show_games': True,
             'show_events': True,
             'show_date_joined': True,
+            'show_friends': True,
         })
         self.assertEqual(response.status_code, 302)
         self.user.refresh_from_db()
@@ -1345,6 +1373,7 @@ class ProfilePictureUploadTest(TestCase):
             'show_games': True,
             'show_events': True,
             'show_date_joined': True,
+            'show_friends': True,
         })
         self.assertEqual(response.status_code, 200)
         self.user.refresh_from_db()
@@ -1359,6 +1388,7 @@ class ProfilePictureUploadTest(TestCase):
             'show_games': True,
             'show_events': True,
             'show_date_joined': True,
+            'show_friends': True,
         })
         self.assertEqual(response.status_code, 302)
         self.user.refresh_from_db()
@@ -1373,12 +1403,14 @@ class ProfilePictureUploadTest(TestCase):
             'show_games': False,
             'show_events': False,
             'show_date_joined': False,
+            'show_friends': False,
         })
         self.assertEqual(response.status_code, 302)
         self.user.refresh_from_db()
         self.assertFalse(self.user.show_games)
         self.assertFalse(self.user.show_events)
         self.assertFalse(self.user.show_date_joined)
+        self.assertFalse(self.user.show_friends)
 
 
 @tag("integration")

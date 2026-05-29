@@ -616,6 +616,7 @@ def user_settings(request):
             new_show_games = form.cleaned_data.get('show_games', True)
             new_show_events = form.cleaned_data.get('show_events', True)
             new_show_date_joined = form.cleaned_data.get('show_date_joined', True)
+            new_show_friends = form.cleaned_data.get('show_friends', True)
             new_show_in_search = form.cleaned_data.get('show_in_search', True)
             new_theme = form.cleaned_data.get('theme', 'system')
             user = request.user
@@ -630,6 +631,7 @@ def user_settings(request):
                 new_show_games != user.show_games
                 or new_show_events != user.show_events
                 or new_show_date_joined != user.show_date_joined
+                or new_show_friends != user.show_friends
                 or new_show_in_search != user.show_in_search
             )
             theme_changed = new_theme != user.theme
@@ -662,6 +664,7 @@ def user_settings(request):
             user.show_games = new_show_games
             user.show_events = new_show_events
             user.show_date_joined = new_show_date_joined
+            user.show_friends = new_show_friends
             user.show_in_search = new_show_in_search
 
             if theme_changed:
@@ -690,6 +693,7 @@ def user_settings(request):
             'show_games': request.user.show_games,
             'show_events': request.user.show_events,
             'show_date_joined': request.user.show_date_joined,
+            'show_friends': request.user.show_friends,
             'show_in_search': request.user.show_in_search,
             'theme': request.user.theme or 'system',
         })
@@ -3483,6 +3487,8 @@ def user_search(request):
 @login_required
 def friends_list(request, username):
     profile_user = get_object_or_404(User, username__iexact=username)
+    if profile_user != request.user and not profile_user.show_friends:
+        raise PermissionDenied
     friends = Friendship.get_friends_of(profile_user)
     if profile_user == request.user:
         blocked_ids = Block.get_blocked_user_ids(request.user)

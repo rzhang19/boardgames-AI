@@ -445,6 +445,7 @@ class SettingsForm(forms.Form):
     show_games = forms.BooleanField(required=False)
     show_events = forms.BooleanField(required=False)
     show_date_joined = forms.BooleanField(required=False)
+    show_friends = forms.BooleanField(required=False)
     show_in_search = forms.BooleanField(required=False)
     theme = forms.ChoiceField(
         choices=[('light', 'Light'), ('dark', 'Dark'), ('system', 'System')],

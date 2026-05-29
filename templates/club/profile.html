@@ -80,9 +80,11 @@
 </div>
 
 {% if not is_blocked %}
+{% if is_own or profile_user.show_friends %}
 <div class="card">
     <p><a href="{% url 'friends_list' profile_user.username %}">Friends</a></p>
 </div>
+{% endif %}
 
 {% if games %}
 <div class="card">

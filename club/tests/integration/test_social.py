@@ -352,12 +352,30 @@ class FriendsListOnProfileTest(TestCase):
         self.assertIn('bob', friends_usernames)
         self.assertIn('carol', friends_usernames)
 
-    def test_friends_list_visible_to_other_users(self):
+    def test_friends_list_visible_to_other_users_when_show_friends_true(self):
+        self.a.show_friends = True
+        self.a.save()
         self.client.login(username='bob', password='testpass123')
         resp = self.client.get(reverse('friends_list', kwargs={'username': 'alice'}))
         self.assertEqual(resp.status_code, 200)
         friends_usernames = [u.username for u in resp.context['friends']]
         self.assertIn('carol', friends_usernames)
+
+    def test_friends_list_hidden_when_show_friends_false(self):
+        self.a.show_friends = False
+        self.a.save()
+        self.client.login(username='bob', password='testpass123')
+        resp = self.client.get(reverse('friends_list', kwargs={'username': 'alice'}))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_friends_list_always_visible_to_self(self):
+        self.a.show_friends = False
+        self.a.save()
+        self.client.login(username='alice', password='testpass123')
+        resp = self.client.get(reverse('friends_list', kwargs={'username': 'alice'}))
+        self.assertEqual(resp.status_code, 200)
+        friends_usernames = [u.username for u in resp.context['friends']]
+        self.assertIn('bob', friends_usernames)
 
     def test_friends_list_requires_login(self):
         resp = self.client.get(reverse('friends_list', kwargs={'username': 'alice'}))
