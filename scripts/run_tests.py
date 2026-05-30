@@ -17,6 +17,7 @@ AREA_MODULE_MAP = {
     'ui': 'test_ui',
     'site': 'test_site',
     'tags': 'test_tags',
+    'activity': 'test_activity',
 }
 
 AREA_LEVELS = {
@@ -30,6 +31,7 @@ AREA_LEVELS = {
     'ui': ['integration'],
     'site': ['unit'],
     'tags': ['unit'],
+    'activity': ['unit', 'integration'],
 }
 
 

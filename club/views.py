@@ -20,6 +20,13 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from .bgg import fetch_bgg_game, fetch_bgg_weight, search_bgg, weight_to_complexity
 from .borda import calculate_borda_scores
+from .activity_feed import (
+    record_event_created,
+    record_event_created_batch,
+    record_event_updated,
+    record_member_joined,
+    get_feed_for_user,
+)
 from .forms import (
     BetaAccessForm, BoardGameForm, ChangePasswordForm, EventForm, EventInviteForm, EventSettingsForm,
     FeedbackForm, FEEDBACK_TYPE_CHOICES,
@@ -533,10 +540,26 @@ def dashboard(request):
         end_time__gte=timezone.now(),
     ).select_related('created_by', 'group').order_by('date')[:5]
 
+    recent_activities = get_feed_for_user(request.user, limit=10, days=7)
+
     return render(request, 'club/dashboard.html', {
         'my_groups': my_groups,
         'my_games': my_games,
         'upcoming_events': upcoming_events,
+        'recent_activities': recent_activities,
+    })
+
+
+@login_required
+def activity_feed(request):
+    from django.core.paginator import Paginator
+    all_activities = get_feed_for_user(request.user)
+    paginator = Paginator(all_activities, 50)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+    return render(request, 'club/activity_feed.html', {
+        'activities': page_obj.object_list,
+        'page_obj': page_obj,
     })
 
 
@@ -1553,6 +1576,7 @@ def event_add(request, slug):
                 event.voting_deadline = event.date - timezone.timedelta(minutes=offset)
             event.duration_minutes = form.cleaned_data.get('duration_minutes') or 120
             event.save()
+            record_event_created(event, request.user)
             tag_id_list = form.cleaned_data.get('tag_id_list', [])
             if tag_id_list:
                 event.tags.set(tag_id_list)
@@ -1735,6 +1759,9 @@ def event_add_recurring_preview(request, slug):
             notify_group_event_created(
                 group, first_event, request.user, count=len(checked_indices),
             )
+            record_event_created_batch(
+                first_event, request.user, count=len(checked_indices),
+            )
 
         request.session.pop('recurring_event_form_data', None)
         request.session.pop('recurring_event_dates', None)
@@ -1771,6 +1798,7 @@ def event_edit(request, slug, pk):
             tag_id_list = form.cleaned_data.get('tag_id_list', [])
             event.tags.set(tag_id_list)
             notify_group_event_updated(event.group, event, request.user)
+            record_event_updated(event, request.user)
             return redirect('event_detail', slug=event.group.slug, pk=event.pk)
     else:
         form = EventForm(instance=event, initial={
@@ -2628,6 +2656,7 @@ def group_join(request, slug):
                     role='member',
                 )
             notify_group_member_joined(group, request.user, method='open join')
+            record_member_joined(request.user, group)
             return redirect('group_dashboard', slug=group.slug)
         elif group.join_policy == 'request':
             with transaction.atomic():
@@ -2732,6 +2761,7 @@ def group_join_request_manage(request, slug):
                     join_request.approve()
                     notify_group_join_approved(join_request.user, group, request.user)
                     notify_group_member_joined(group, join_request.user, method='join request')
+                    record_member_joined(join_request.user, group)
                 elif action == 'reject':
                     join_request.reject()
                     notify_group_join_rejected(join_request.user, group, request.user)
@@ -2817,6 +2847,7 @@ def group_invite_accept(request, token):
     try:
         invite.use(request.user)
         notify_group_member_joined(invite.group, request.user, method='invite')
+        record_member_joined(request.user, invite.group)
         return redirect('group_dashboard', slug=invite.group.slug)
     except ValueError as e:
         return render(request, 'club/group_invite_accept.html', {

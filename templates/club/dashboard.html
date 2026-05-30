@@ -7,6 +7,35 @@
 {% if user.is_authenticated %}
 <div class="dashboard-grid">
     <div class="card">
+        <h2>Recent Activity</h2>
+        {% if recent_activities %}
+        <ul class="dashboard-list">
+            {% for item in recent_activities %}
+            <li>
+                {% if item.activity_type == 'event_created' %}
+                    {% if item.extra_data.count %}
+                        <a href="{% url 'public_profile' item.actor.username %}">{{ item.actor.username }}</a> created {{ item.extra_data.count }} events in <a href="{% url 'group_dashboard' item.group.slug %}">{{ item.group.name }}</a>
+                    {% else %}
+                        <a href="{% url 'public_profile' item.actor.username %}">{{ item.actor.username }}</a> created <a href="{% url 'event_detail' item.group.slug item.event.pk %}">{{ item.event.title }}</a>
+                    {% endif %}
+                {% elif item.activity_type == 'event_updated' %}
+                    <a href="{% url 'public_profile' item.actor.username %}">{{ item.actor.username }}</a> updated <a href="{% url 'event_detail' item.group.slug item.event.pk %}">{{ item.event.title }}</a>
+                {% elif item.activity_type == 'member_joined' %}
+                    <a href="{% url 'public_profile' item.actor.username %}">{{ item.actor.username }}</a> joined <a href="{% url 'group_members' item.group.slug %}">{{ item.group.name }}</a>
+                {% endif %}
+                <span class="dashboard-meta">{{ item.timestamp|date:"M j" }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        <a href="{% url 'activity_feed' %}" class="btn btn-outline btn-sm">Show more activity</a>
+        {% else %}
+        <div class="empty-state">
+            <p>No recent activity from your groups.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
         <h2>My Groups</h2>
         {% if my_groups %}
         <ul class="dashboard-list">

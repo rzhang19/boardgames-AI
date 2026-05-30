@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import User, BoardGame, Event, EventAttendance, EventTag, GameTag, Notification, TagRequest, VerifiedIcon, Vote
+from .models import ActivityFeedItem, User, BoardGame, Event, EventAttendance, EventTag, GameTag, Notification, TagRequest, VerifiedIcon, Vote
 
 
 admin.site.register(User, UserAdmin)
@@ -63,3 +63,10 @@ class TagRequestAdmin(admin.ModelAdmin):
     list_display = ('name', 'tag_type', 'status', 'requested_by', 'created_at', 'reviewed_by')
     list_filter = ('status', 'tag_type')
     search_fields = ('name', 'requested_by__username')
+
+
+@admin.register(ActivityFeedItem)
+class ActivityFeedItemAdmin(admin.ModelAdmin):
+    list_display = ('activity_type', 'actor', 'event', 'group', 'timestamp')
+    list_filter = ('activity_type',)
+    search_fields = ('actor__username', 'event__title', 'group__name')

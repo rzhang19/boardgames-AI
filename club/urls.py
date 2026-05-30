@@ -7,6 +7,7 @@ from club.forms import EmailOrUsernameLoginForm
 urlpatterns = [
     path('feedback/', views.feedback, name='feedback'),
     path('', views.dashboard, name='dashboard'),
+    path('activity/', views.activity_feed, name='activity_feed'),
     path('beta-access/', views.beta_access, name='beta_access'),
     path('settings/', views.user_settings, name='user_settings'),
     path('settings/remove-email/', views.remove_email, name='remove_email'),

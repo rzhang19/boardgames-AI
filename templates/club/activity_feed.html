@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% load club_tags %}
+
+{% block title %}Activity Feed{% endblock %}
+
+{% block content %}
+<h1>Activity Feed</h1>
+
+{% if activities %}
+<div class="notification-list">
+    {% for item in activities %}
+    <div class="notification-item">
+        <div class="notification-content">
+            <div class="notification-message">
+                {% if item.activity_type == 'event_created' %}
+                    {% if item.extra_data.count %}
+                        <a href="{% url 'public_profile' item.actor.username %}">{{ item.actor.username }}</a> created {{ item.extra_data.count }} events from recurring schedule in <a href="{% url 'group_dashboard' item.group.slug %}">{{ item.group.name }}</a>
+                    {% else %}
+                        <a href="{% url 'public_profile' item.actor.username %}">{{ item.actor.username }}</a> created event <a href="{% url 'event_detail' item.group.slug item.event.pk %}">{{ item.event.title }}</a> in <a href="{% url 'group_dashboard' item.group.slug %}">{{ item.group.name }}</a>
+                    {% endif %}
+                {% elif item.activity_type == 'event_updated' %}
+                    <a href="{% url 'public_profile' item.actor.username %}">{{ item.actor.username }}</a> updated event <a href="{% url 'event_detail' item.group.slug item.event.pk %}">{{ item.event.title }}</a> in <a href="{% url 'group_dashboard' item.group.slug %}">{{ item.group.name }}</a>
+                {% elif item.activity_type == 'member_joined' %}
+                    <a href="{% url 'public_profile' item.actor.username %}">{{ item.actor.username }}</a> joined <a href="{% url 'group_members' item.group.slug %}">{{ item.group.name }}</a>
+                {% endif %}
+                <span class="notification-time">{{ item.timestamp|date:"M j, Y g:i A" }}</span>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if page_obj.has_other_pages %}
+<div class="pagination">
+    {% if page_obj.has_previous %}
+    <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-sm btn-outline">&laquo; Previous</a>
+    {% endif %}
+    <span class="pagination-info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a href="?page={{ page_obj.next_page_number }}" class="btn btn-sm btn-outline">Next &raquo;</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+    <p>No recent activity from your groups.</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -1080,3 +1080,41 @@ class TagRequest(models.Model):
 
     def __str__(self):
         return f'{self.name} ({self.tag_type}) - {self.status}'
+
+
+class ActivityFeedItem(models.Model):
+    ACTIVITY_TYPE_CHOICES = [
+        ('event_created', 'Event Created'),
+        ('event_updated', 'Event Updated'),
+        ('member_joined', 'Member Joined Group'),
+    ]
+
+    activity_type = models.CharField(max_length=30, choices=ACTIVITY_TYPE_CHOICES)
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='created_activity_items',
+    )
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='activity_items',
+    )
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='activity_items',
+    )
+    extra_data = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['-timestamp'], name='activity_feed_timestamp'),
+        ]
+
+    def __str__(self):
+        return f'{self.activity_type} by {self.actor} at {self.timestamp}'
