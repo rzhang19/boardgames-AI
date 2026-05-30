@@ -8,6 +8,12 @@
 
 <a href="{% url 'event_list' %}" class="btn btn-secondary btn-sm" style="margin-bottom:1rem;">Back to Events</a>
 
+{% if can_create_private_event %}
+<div class="action-bar" style="margin-bottom:1rem;">
+    <a href="{% url 'private_event_create' %}" class="btn btn-primary">Create Event</a>
+</div>
+{% endif %}
+
 {% if all_event_tags or 1 %}
 <form method="get" class="filter-bar">
     <div class="filter-group">

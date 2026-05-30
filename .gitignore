@@ -7,7 +7,6 @@ db.sqlite3
 db.sqlite3-journal
 media/
 test_media/
-*.sqlite3
 
 # Python
 __pycache__/

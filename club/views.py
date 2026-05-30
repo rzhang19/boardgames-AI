@@ -1420,12 +1420,18 @@ def event_list(request):
         end_time__gte=timezone.now(),
     ).select_related('created_by').order_by('date')
 
+    can_create = (
+        request.user.is_authenticated
+        and can_create_private_event(request.user)
+    )
+
     return render(request, 'club/event_list.html', {
         'group_events': group_events,
         'private_events': private_events,
         'time_midnight': dt_time(0, 0),
         'all_event_tags': EventTag.objects.all(),
         'tag_filter': tag_param,
+        'can_create_private_event': can_create,
     })
 
 
@@ -1472,6 +1478,11 @@ def discover_events(request):
     else:
         events = events.order_by('date')
 
+    can_create = (
+        request.user.is_authenticated
+        and can_create_private_event(request.user)
+    )
+
     return render(request, 'club/discover_events.html', {
         'events': events,
         'time_midnight': dt_time(0, 0),
@@ -1480,6 +1491,7 @@ def discover_events(request):
         'date_from': date_from or '',
         'date_to': date_to or '',
         'sort': sort,
+        'can_create_private_event': can_create,
     })
 
 

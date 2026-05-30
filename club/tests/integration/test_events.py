@@ -1048,6 +1048,65 @@ class PrivateEventCreateViewTest(TestCase):
         })
         self.assertEqual(resp.status_code, 403)
 
+    def test_unverified_user_blocked_on_post(self):
+        self.user.email_verified = False
+        self.user.save()
+        self.client.login(username='alice', password='testpass123')
+        future = (timezone.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        resp = self.client.post(reverse('private_event_create'), {
+            'title': 'Sneaky Event',
+            'date': future,
+            'privacy': 'public',
+            'allow_invite_others': 'nobody',
+        })
+        self.assertEqual(resp.status_code, 403)
+
+
+@tag("integration")
+class PrivateEventCreateButtonTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.verified_user = User.objects.create_user(
+            username='verified', password='testpass123', email_verified=True,
+        )
+        cls.unverified_user = User.objects.create_user(
+            username='unverified', password='testpass123', email_verified=False,
+        )
+
+    def test_event_list_shows_create_button_for_verified_user(self):
+        self.client.login(username='verified', password='testpass123')
+        resp = self.client.get(reverse('event_list'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, reverse('private_event_create'))
+        self.assertContains(resp, 'Create Event')
+
+    def test_event_list_hides_create_button_for_unverified_user(self):
+        self.client.login(username='unverified', password='testpass123')
+        resp = self.client.get(reverse('event_list'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, reverse('private_event_create'))
+
+    def test_event_list_hides_create_button_for_unauthenticated(self):
+        resp = self.client.get(reverse('event_list'))
+        self.assertNotContains(resp, reverse('private_event_create'))
+
+    def test_discover_events_shows_create_button_for_verified_user(self):
+        self.client.login(username='verified', password='testpass123')
+        resp = self.client.get(reverse('discover_events'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, reverse('private_event_create'))
+
+    def test_discover_events_hides_create_button_for_unverified_user(self):
+        self.client.login(username='unverified', password='testpass123')
+        resp = self.client.get(reverse('discover_events'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, reverse('private_event_create'))
+
+    def test_discover_events_hides_create_button_for_unauthenticated(self):
+        resp = self.client.get(reverse('discover_events'))
+        self.assertNotContains(resp, reverse('private_event_create'))
+
 
 @tag("integration")
 class PrivateEventDetailViewTest(TestCase):

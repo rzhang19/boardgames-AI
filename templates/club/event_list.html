@@ -90,6 +90,11 @@
 {% if user.is_authenticated and not group %}
 <div class="card">
     <h2>Your Non-Group Events</h2>
+    {% if can_create_private_event %}
+    <div class="action-bar">
+        <a href="{% url 'private_event_create' %}" class="btn btn-primary">Create Event</a>
+    </div>
+    {% endif %}
     {% if private_events %}
     <table>
         <thead>
