@@ -186,6 +186,7 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     CSRF_COOKIE_HTTPONLY = True
+    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 
 _csrf_origins = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
 if _csrf_origins:

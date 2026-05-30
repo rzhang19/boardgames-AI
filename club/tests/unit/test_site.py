@@ -713,6 +713,16 @@ class ProductionSecuritySettingsTest(TestCase):
         self.assertIsNotNone(csrf_cookie)
         self.assertTrue(csrf_cookie['httponly'])
 
+    @override_settings(SECURE_REFERRER_POLICY='strict-origin-when-cross-origin')
+    def test_referrer_policy_header_present(self):
+        response = self.client.get(reverse('login'))
+        self.assertEqual(response['Referrer-Policy'], 'strict-origin-when-cross-origin')
+
+    @override_settings(SECURE_REFERRER_POLICY='same-origin')
+    def test_referrer_policy_can_be_overridden_to_same_origin(self):
+        response = self.client.get(reverse('login'))
+        self.assertEqual(response['Referrer-Policy'], 'same-origin')
+
     @override_settings(
         SECURE_HSTS_SECONDS=31536000,
         SECURE_HSTS_INCLUDE_SUBDOMAINS=True,
@@ -721,12 +731,14 @@ class ProductionSecuritySettingsTest(TestCase):
         SESSION_COOKIE_SECURE=True,
         CSRF_COOKIE_SECURE=True,
         CSRF_COOKIE_HTTPONLY=True,
+        SECURE_REFERRER_POLICY='strict-origin-when-cross-origin',
     )
     def test_all_production_settings_active_together(self):
         self.client.login(username='testuser', password='testpass123')
         response = self.client.get(reverse('dashboard'), secure=True)
         self.assertEqual(response['Strict-Transport-Security'], 'max-age=31536000; includeSubDomains; preload')
         self.assertEqual(response['X-Content-Type-Options'], 'nosniff')
+        self.assertEqual(response['Referrer-Policy'], 'strict-origin-when-cross-origin')
         self.assertTrue(self.client.cookies[settings.SESSION_COOKIE_NAME]['secure'])
         self.assertTrue(self.client.cookies[settings.CSRF_COOKIE_NAME]['secure'])
         self.assertTrue(self.client.cookies[settings.CSRF_COOKIE_NAME]['httponly'])
