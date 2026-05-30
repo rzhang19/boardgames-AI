@@ -11,7 +11,15 @@ from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 
-from club.models import BoardGame, Group, GroupMembership, SiteSettings, VerifiedIcon
+from club.models import (
+    BoardGame,
+    GameOwnershipProposal,
+    Group,
+    GroupMembership,
+    Notification,
+    SiteSettings,
+    VerifiedIcon,
+)
 
 User = get_user_model()
 
@@ -737,3 +745,59 @@ class PrivacyPolicyViewTest(TestCase):
         self.client.login(username='testuser', password='testpass123')
         response = self.client.get(reverse('privacy_policy'))
         self.assertEqual(response.status_code, 200)
+
+
+@tag("unit")
+class CleanupAllCommandTest(TestCase):
+
+    def setUp(self):
+        self.out = StringIO()
+        self.user = User.objects.create_user(username='testuser', password='testpass123')
+
+    def test_runs_all_subcommands_and_cleans_up(self):
+        temp_game = BoardGame.objects.create(name='Old Temp', is_temporary=True)
+        BoardGame.objects.filter(pk=temp_game.pk).update(
+            created_at=timezone.now() - timezone.timedelta(hours=169),
+        )
+        soft_deleted_user = User.objects.create_user(
+            username='deleted_user', password='testpass123',
+            deleted_at=timezone.now() - timezone.timedelta(days=31),
+        )
+        disbanded_group = Group.objects.create(
+            name='Disbanded', created_by=self.user,
+            disbanded_at=timezone.now() - timezone.timedelta(days=31),
+        )
+        Notification.objects.create(
+            user=self.user, message='Old read', is_read=True,
+        )
+        Notification.objects.filter(message='Old read').update(
+            created_at=timezone.now() - timezone.timedelta(days=31),
+        )
+
+        call_command('cleanup_all', stdout=self.out)
+
+        self.assertFalse(BoardGame.objects.filter(pk=temp_game.pk).exists())
+        self.assertFalse(User.objects.filter(pk=soft_deleted_user.pk).exists())
+        self.assertFalse(Group.objects.filter(pk=disbanded_group.pk).exists())
+        self.assertFalse(Notification.objects.filter(message='Old read').exists())
+
+    def test_continues_when_one_subcommand_fails(self):
+        with patch('club.management.commands.cleanup_all.call_command') as mock_call:
+            mock_call.side_effect = [
+                Exception('temp games error'),
+                None,
+                None,
+                None,
+            ]
+            out = StringIO()
+            call_command('cleanup_all', stdout=out)
+
+            self.assertEqual(mock_call.call_count, 4)
+            output = out.getvalue()
+            self.assertIn('FAILED', output)
+            self.assertIn('OK', output)
+
+    def test_completes_with_nothing_to_clean(self):
+        call_command('cleanup_all', stdout=self.out)
+        output = self.out.getvalue()
+        self.assertIn('cleanup_all completed', output)

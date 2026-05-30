@@ -147,6 +147,38 @@ services:
       - docker-mgmt
     restart: unless-stopped
 
+  scheduler:
+    build: .
+    env_file:
+      - /opt/boardgames-secrets/.env
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        echo "Waiting for database..."
+        python -c "
+        import socket, time
+        while True:
+            try:
+                s = socket.create_connection(('db', 5432), timeout=2)
+                s.close()
+                break
+            except OSError:
+                time.sleep(1)
+        "
+        echo "Scheduler started. Running cleanup_all every 12 hours."
+        while true; do
+          echo "$$(date -Iseconds) Running cleanup_all..."
+          python manage.py cleanup_all 2>&1
+          echo "$$(date -Iseconds) Sleeping 12 hours..."
+          sleep 43200
+        done
+    depends_on:
+      db:
+        condition: service_started
+    networks:
+      - backend
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   staging_postgres_data:
