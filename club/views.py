@@ -10,9 +10,9 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import PermissionDenied
 from django.core.mail import send_mail
 from django.core.signing import TimestampSigner
+from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Q
 from django.http import Http404, JsonResponse
-from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -2047,19 +2047,27 @@ def event_detail(request, slug, pk):
     })
 
 
+def _rsvp_toggle(user, event):
+    with transaction.atomic():
+        attendance = EventAttendance.objects.select_for_update().filter(
+            user=user, event=event,
+        )
+        if attendance.exists():
+            attendance.delete()
+        else:
+            try:
+                EventAttendance.objects.create(user=user, event=event)
+            except IntegrityError:
+                pass
+
+
 def event_rsvp(request, slug, pk):
     if not request.user.is_authenticated:
         return redirect('/login/')
     event = get_object_or_404(Event, pk=pk)
     if not is_group_member(request.user, event.group):
         raise PermissionDenied
-    attendance = EventAttendance.objects.filter(
-        user=request.user, event=event
-    )
-    if attendance.exists():
-        attendance.delete()
-    else:
-        EventAttendance.objects.create(user=request.user, event=event)
+    _rsvp_toggle(request.user, event)
     return redirect('event_detail', slug=event.group.slug, pk=event.pk)
 
 
@@ -3744,13 +3752,7 @@ def private_event_rsvp(request, pk):
     if not can_rsvp_private_event(request.user, event):
         raise PermissionDenied
 
-    attendance = EventAttendance.objects.filter(
-        user=request.user, event=event,
-    )
-    if attendance.exists():
-        attendance.delete()
-    else:
-        EventAttendance.objects.create(user=request.user, event=event)
+    _rsvp_toggle(request.user, event)
 
     return redirect('private_event_detail', pk=event.pk)
 

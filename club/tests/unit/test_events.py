@@ -1840,3 +1840,112 @@ class PrivateEventFormCoCreatorTest(TestCase):
             creator=self.alice,
         )
         self.assertFalse(form.is_valid())
+
+
+@tag("unit")
+class RsvpToggleTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username='rsvpuser', password='testpass123')
+        cls.admin = User.objects.create_user(
+            username='rsvpadmin', password='testpass123', is_site_admin=True
+        )
+        cls.group = Group.objects.create(name='RSVP Toggle Group')
+        _make_admin(cls.admin, cls.group)
+        FUTURE = timezone.now() + timedelta(days=30)
+        cls.event = Event.objects.create(
+            title='Toggle Event', date=FUTURE,
+            voting_deadline=FUTURE, created_by=cls.admin,
+            group=cls.group,
+        )
+
+    def test_toggle_creates_attendance_when_not_attending(self):
+        from club.views import _rsvp_toggle
+
+        _rsvp_toggle(self.user, self.event)
+        self.assertTrue(
+            EventAttendance.objects.filter(user=self.user, event=self.event).exists()
+        )
+
+    def test_toggle_removes_attendance_when_already_attending(self):
+        from club.views import _rsvp_toggle
+
+        EventAttendance.objects.create(user=self.user, event=self.event)
+        _rsvp_toggle(self.user, self.event)
+        self.assertFalse(
+            EventAttendance.objects.filter(user=self.user, event=self.event).exists()
+        )
+
+    def test_toggle_is_idempotent_round_trip(self):
+        from club.views import _rsvp_toggle
+
+        _rsvp_toggle(self.user, self.event)
+        _rsvp_toggle(self.user, self.event)
+        self.assertFalse(
+            EventAttendance.objects.filter(user=self.user, event=self.event).exists()
+        )
+        _rsvp_toggle(self.user, self.event)
+        self.assertTrue(
+            EventAttendance.objects.filter(user=self.user, event=self.event).exists()
+        )
+
+    def test_concurrent_toggle_produces_consistent_state(self):
+        import threading
+        from django.db import OperationalError
+        from club.views import _rsvp_toggle
+
+        barrier = threading.Barrier(2, timeout=5)
+        errors = []
+
+        def toggle():
+            try:
+                barrier.wait()
+                _rsvp_toggle(self.user, self.event)
+            except OperationalError:
+                pass
+            except Exception as e:
+                errors.append(e)
+
+        t1 = threading.Thread(target=toggle)
+        t2 = threading.Thread(target=toggle)
+        t1.start()
+        t2.start()
+        t1.join(timeout=10)
+        t2.join(timeout=10)
+
+        self.assertEqual(errors, [], f"Concurrent threads raised errors: {errors}")
+        count = EventAttendance.objects.filter(
+            user=self.user, event=self.event
+        ).count()
+        self.assertIn(count, (0, 1), f"Expected 0 or 1 attendance records, got {count}")
+
+    def test_concurrent_create_race_no_duplicates(self):
+        import threading
+        from django.db import OperationalError
+        from club.views import _rsvp_toggle
+
+        num_threads = 5
+        barrier = threading.Barrier(num_threads, timeout=5)
+        errors = []
+
+        def toggle():
+            try:
+                barrier.wait()
+                _rsvp_toggle(self.user, self.event)
+            except OperationalError:
+                pass
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=toggle) for _ in range(num_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=15)
+
+        self.assertEqual(errors, [], f"Concurrent threads raised errors: {errors}")
+        count = EventAttendance.objects.filter(
+            user=self.user, event=self.event
+        ).count()
+        self.assertLessEqual(count, 1, f"Expected at most 1 attendance record, got {count}")
