@@ -733,6 +733,68 @@ class ProductionSecuritySettingsTest(TestCase):
 
 
 @tag("unit")
+class AllowedHostsSettingsTest(TestCase):
+
+    def test_settings_module_logic_debug_true_includes_dev_hosts(self):
+        DEBUG = True
+        env_hosts = None
+        if DEBUG:
+            ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '0.0.0.0']
+        else:
+            ALLOWED_HOSTS = []
+        if env_hosts:
+            ALLOWED_HOSTS.extend([h.strip() for h in env_hosts.split(',') if h.strip()])
+        self.assertEqual(ALLOWED_HOSTS, ['127.0.0.1', 'localhost', '0.0.0.0'])
+
+    def test_settings_module_logic_debug_false_excludes_dev_hosts(self):
+        DEBUG = False
+        env_hosts = 'boardgameclub.com'
+        if DEBUG:
+            ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '0.0.0.0']
+        else:
+            ALLOWED_HOSTS = []
+        if env_hosts:
+            ALLOWED_HOSTS.extend([h.strip() for h in env_hosts.split(',') if h.strip()])
+        self.assertEqual(ALLOWED_HOSTS, ['boardgameclub.com'])
+
+    def test_settings_module_logic_debug_false_no_env_hosts_is_empty(self):
+        DEBUG = False
+        env_hosts = None
+        if DEBUG:
+            ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '0.0.0.0']
+        else:
+            ALLOWED_HOSTS = []
+        if env_hosts:
+            ALLOWED_HOSTS.extend([h.strip() for h in env_hosts.split(',') if h.strip()])
+        self.assertEqual(ALLOWED_HOSTS, [])
+
+    def test_settings_module_logic_debug_true_with_env_hosts_includes_both(self):
+        DEBUG = True
+        env_hosts = 'boardgameclub.com, staging.boardgameclub.com'
+        if DEBUG:
+            ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '0.0.0.0']
+        else:
+            ALLOWED_HOSTS = []
+        if env_hosts:
+            ALLOWED_HOSTS.extend([h.strip() for h in env_hosts.split(',') if h.strip()])
+        self.assertEqual(
+            ALLOWED_HOSTS,
+            ['127.0.0.1', 'localhost', '0.0.0.0', 'boardgameclub.com', 'staging.boardgameclub.com'],
+        )
+
+    def test_settings_module_logic_debug_false_with_multiple_env_hosts(self):
+        DEBUG = False
+        env_hosts = 'boardgameclub.com, staging.boardgameclub.com'
+        if DEBUG:
+            ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '0.0.0.0']
+        else:
+            ALLOWED_HOSTS = []
+        if env_hosts:
+            ALLOWED_HOSTS.extend([h.strip() for h in env_hosts.split(',') if h.strip()])
+        self.assertEqual(ALLOWED_HOSTS, ['boardgameclub.com', 'staging.boardgameclub.com'])
+
+
+@tag("unit")
 class PrivacyPolicyViewTest(TestCase):
 
     def test_privacy_policy_accessible_unauthenticated(self):

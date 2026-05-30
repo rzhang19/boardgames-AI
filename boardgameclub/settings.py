@@ -28,7 +28,10 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '0.0.0.0']
+if DEBUG:
+    ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '0.0.0.0']
+else:
+    ALLOWED_HOSTS = []
 env_hosts = os.environ.get('ALLOWED_HOSTS')
 if env_hosts:
     ALLOWED_HOSTS.extend([host.strip() for host in env_hosts.split(',') if host.strip()])
