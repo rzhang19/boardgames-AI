@@ -1484,6 +1484,8 @@ def discover_events(request):
 
 
 def group_event_list(request, slug):
+    if not request.user.is_authenticated:
+        raise PermissionDenied
     group = get_object_or_404(Group, slug=slug)
     if not can_view_group(request.user, group):
         raise PermissionDenied
@@ -2011,6 +2013,8 @@ def event_toggle_voting(request, slug, pk):
 
 
 def event_detail(request, slug, pk):
+    if not request.user.is_authenticated:
+        raise PermissionDenied
     event = get_object_or_404(Event, pk=pk)
     if not can_view_group(request.user, event.group):
         raise PermissionDenied
@@ -2427,14 +2431,22 @@ def group_dashboard(request, slug):
         and is_group_organizer(request.user, group)
     )
 
-    members = GroupMembership.objects.filter(
-        group=group,
-    ).select_related('user', 'user__verified_icon').order_by('-role', 'joined_at')
+    members = (
+        GroupMembership.objects.filter(
+            group=group,
+        ).select_related('user', 'user__verified_icon').order_by('-role', 'joined_at')
+        if request.user.is_authenticated
+        else GroupMembership.objects.none()
+    )
 
-    upcoming_events = Event.objects.filter(
-        group=group,
-        end_time__gte=timezone.now(),
-    ).order_by('date')[:5]
+    upcoming_events = (
+        Event.objects.filter(
+            group=group,
+            end_time__gte=timezone.now(),
+        ).order_by('date')[:5]
+        if request.user.is_authenticated
+        else Event.objects.none()
+    )
 
     return render(request, 'club/group_dashboard.html', {
         'group': group,
@@ -2535,6 +2547,8 @@ def group_restore(request, slug):
 
 
 def group_members(request, slug):
+    if not request.user.is_authenticated:
+        raise PermissionDenied
     group = get_object_or_404(Group, slug=slug)
     if not can_view_group(request.user, group):
         raise PermissionDenied

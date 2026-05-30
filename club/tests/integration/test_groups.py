@@ -192,6 +192,22 @@ class GroupDashboardViewTest(TestCase):
         response = self.client.get(f'/groups/{private.slug}/')
         self.assertEqual(response.status_code, 403)
 
+    def test_unauthenticated_does_not_see_members_section(self):
+        self.client.logout()
+        response = self.client.get(f'/groups/{self.group.slug}/')
+        self.assertNotContains(response, '<h2>Members</h2>')
+
+    def test_unauthenticated_does_not_see_upcoming_events_section(self):
+        self.client.logout()
+        response = self.client.get(f'/groups/{self.group.slug}/')
+        self.assertNotContains(response, '<h2>Upcoming Events</h2>')
+
+    def test_unauthenticated_does_not_see_action_bar_links(self):
+        self.client.logout()
+        response = self.client.get(f'/groups/{self.group.slug}/')
+        self.assertNotContains(response, f'/groups/{self.group.slug}/events/')
+        self.assertNotContains(response, f'/groups/{self.group.slug}/members/')
+
 
 @tag("integration")
 class GroupSettingsViewTest(TestCase):
@@ -454,10 +470,10 @@ class GroupMembersViewTest(TestCase):
         response = self.client.get(f'/groups/{self.group.slug}/members/')
         self.assertEqual(response.status_code, 200)
 
-    def test_unauthenticated_can_view_discoverable(self):
+    def test_unauthenticated_cannot_view_discoverable(self):
         self.client.logout()
         response = self.client.get(f'/groups/{self.group.slug}/members/')
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)
 
     def test_unauthenticated_cannot_view_non_discoverable(self):
         private = Group.objects.create(name='Priv2', discoverable=False)

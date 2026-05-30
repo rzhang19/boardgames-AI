@@ -307,6 +307,9 @@ class EventDetailViewTest(TestCase):
             created_by=cls.admin, group=cls.group
         )
 
+    def setUp(self):
+        self.client.login(username='admin', password='testpass123')
+
     def test_event_detail_displays_info(self):
         response = self.client.get(reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertEqual(response.status_code, 200)
@@ -329,6 +332,11 @@ class EventDetailViewTest(TestCase):
         self.client.login(username='attendee', password='testpass123')
         response = self.client.get(reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertContains(response, 'RSVP')
+
+    def test_unauthenticated_gets_403_on_event_detail(self):
+        self.client.logout()
+        response = self.client.get(reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
+        self.assertEqual(response.status_code, 403)
 
 
 @tag("integration")
@@ -696,9 +704,9 @@ class EventDetailEditButtonTest(TestCase):
         response = self.client.get(reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
         self.assertNotContains(response, 'Edit Event')
 
-    def test_anonymous_user_does_not_see_edit_button(self):
+    def test_anonymous_user_gets_403_on_event_detail(self):
         response = self.client.get(reverse('event_detail', kwargs={'slug': self.event.group.slug, 'pk': self.event.pk}))
-        self.assertNotContains(response, 'Edit Event')
+        self.assertEqual(response.status_code, 403)
 
     def test_site_admin_who_is_organizer_sees_edit_button_on_event_detail(self):
         self.client.login(username='siteadminonly', password='testpass123')
@@ -902,6 +910,22 @@ class RecurringEventButtonTest(TestCase):
         self.client.login(username='regular', password='testpass123')
         response = self.client.get(reverse('group_event_list', kwargs={'slug': self.group.slug}))
         self.assertNotContains(response, 'Create Recurring Event')
+
+
+@tag("integration")
+class GroupEventListUnauthenticatedTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(
+            username='admin', password='testpass123', is_site_admin=True
+        )
+        cls.group = Group.objects.create(name='Public Events Group')
+        _make_group_admin(cls.admin, cls.group)
+
+    def test_unauthenticated_gets_403_on_group_event_list(self):
+        response = self.client.get(reverse('group_event_list', kwargs={'slug': self.group.slug}))
+        self.assertEqual(response.status_code, 403)
 
 
 @tag("integration")

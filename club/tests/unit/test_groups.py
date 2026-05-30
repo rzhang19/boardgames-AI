@@ -670,6 +670,10 @@ class GroupHelperMethodsTest(TestCase):
         other_user = User.objects.create_user(username='other', password='testpass123')
         self.assertTrue(self.group.visible_to(other_user))
 
+    def test_visible_to_returns_true_for_anonymous_on_discoverable(self):
+        from django.contrib.auth.models import AnonymousUser
+        self.assertTrue(self.group.visible_to(AnonymousUser()))
+
     def test_visible_to_returns_false_for_non_discoverable_to_anon(self):
         from django.contrib.auth.models import AnonymousUser
         self.group.discoverable = False
@@ -1578,6 +1582,16 @@ class CanViewGroupTest(TestCase):
         self.group.save()
         sa = User.objects.create_user(username='sa', password='p', is_site_admin=True)
         self.assertTrue(can_view_group(sa, self.group))
+
+    def test_true_for_anonymous_on_discoverable(self):
+        from django.contrib.auth.models import AnonymousUser
+        self.assertTrue(can_view_group(AnonymousUser(), self.group))
+
+    def test_false_for_anonymous_on_non_discoverable(self):
+        from django.contrib.auth.models import AnonymousUser
+        self.group.discoverable = False
+        self.group.save()
+        self.assertFalse(can_view_group(AnonymousUser(), self.group))
 
 
 @tag("unit")
