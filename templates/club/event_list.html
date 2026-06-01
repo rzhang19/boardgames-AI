@@ -9,32 +9,46 @@
 {% if not group %}
 <div class="action-bar" style="margin-bottom:1rem;">
     <a href="{% url 'discover_events' %}" class="btn btn-primary">Discover Events</a>
+    <button type="button" class="btn btn-neutral filter-modal-btn" onclick="document.getElementById('filterModal').classList.add('active')">
+        <span class="filter-icon">&#9881;</span> Filter{% if active_filter_count > 0 %} ({{ active_filter_count }}){% endif %}
+    </button>
 </div>
 {% endif %}
 
 {% if all_event_tags %}
-<form method="get" class="filter-bar">
-    <div class="filter-group">
-        <label>Tags</label>
-        <label class="inline-checkbox">
-            <input type="checkbox" name="tag" value="__none__" {% if "__none__" in tag_filter %}checked{% endif %} onchange="this.form.submit();">
-            No tags
-        </label>
-        {% for tag in all_event_tags %}
-        <label class="inline-checkbox" style="display: block; margin-left: 1rem;">
-            <input type="checkbox" name="tag" value="{{ tag.name }}" {% if tag.name in tag_filter %}checked{% endif %} onchange="this.form.submit();">
-            {{ tag.name }}
-        </label>
-        {% endfor %}
+<div id="filterModal" class="filter-modal-overlay" onclick="if(event.target===this)this.classList.remove('active')">
+    <div class="filter-modal">
+        <div class="filter-modal-header">
+            <h2>Filter Events</h2>
+            <button type="button" class="filter-modal-close" onclick="document.getElementById('filterModal').classList.remove('active')">&times;</button>
+        </div>
+        <form method="get" class="filter-modal-body">
+            <div class="filter-group">
+                <label>Tags</label>
+                <div class="filter-tag-list">
+                    <label class="inline-checkbox">
+                        <input type="checkbox" name="tag" value="__none__" {% if "__none__" in tag_filter %}checked{% endif %}>
+                        No tags
+                    </label>
+                    {% for tag in all_event_tags %}
+                    <label class="inline-checkbox" style="display: block; margin-left: 1rem;">
+                        <input type="checkbox" name="tag" value="{{ tag.name }}" {% if tag.name in tag_filter %}checked{% endif %}>
+                        {{ tag.name }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="filter-modal-footer">
+                {% if group %}
+                <a href="{% url 'group_event_list' group.slug %}" class="btn btn-neutral">Clear</a>
+                {% else %}
+                <a href="{% url 'event_list' %}" class="btn btn-neutral">Clear</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary filter-apply-btn">Apply</button>
+            </div>
+        </form>
     </div>
-    <div class="filter-actions">
-        {% if group %}
-        <a href="{% url 'group_event_list' group.slug %}" class="btn btn-neutral btn-sm">Clear Filters</a>
-        {% else %}
-        <a href="{% url 'event_list' %}" class="btn btn-neutral btn-sm">Clear Filters</a>
-        {% endif %}
-    </div>
-</form>
+</div>
 {% endif %}
 
 <div class="card">

@@ -2835,3 +2835,165 @@ class GameProposalAcceptDeclineTest(TestCase):
         self.client.login(username='attendee', password='testpass123')
         resp = self.client.post(reverse('game_proposal_accept', kwargs={'pk': self.proposal.pk}))
         self.assertEqual(resp.status_code, 302)
+
+
+@tag("integration")
+class EventListFilterModalTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username='member', password='testpass123')
+        cls.group = Group.objects.create(name='My Group')
+        _make_member(cls.user, cls.group)
+        cls.tag = EventTag.objects.create(name='tournament')
+        cls.event = Event.objects.create(
+            title='Group Game Night',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            created_by=cls.user,
+            group=cls.group,
+        )
+        cls.event.tags.add(cls.tag)
+
+    def test_event_list_has_filter_button(self):
+        self.client.login(username='member', password='testpass123')
+        response = self.client.get(reverse('event_list'))
+        self.assertContains(response, 'filter-modal-btn')
+
+    def test_event_list_has_filter_modal(self):
+        self.client.login(username='member', password='testpass123')
+        response = self.client.get(reverse('event_list'))
+        self.assertContains(response, 'filter-modal-overlay')
+        self.assertContains(response, 'filter-modal-close')
+        self.assertContains(response, 'filter-apply-btn')
+
+    def test_event_list_filter_button_shows_active_count(self):
+        self.client.login(username='member', password='testpass123')
+        response = self.client.get(reverse('event_list'), {'tag': ['tournament']})
+        self.assertContains(response, 'filter-modal-btn')
+        self.assertEqual(response.context['active_filter_count'], 1)
+
+    def test_event_list_no_active_filters_shows_zero_count(self):
+        self.client.login(username='member', password='testpass123')
+        response = self.client.get(reverse('event_list'))
+        self.assertEqual(response.context['active_filter_count'], 0)
+
+    def test_event_list_tag_filter_works_via_modal_submit(self):
+        Event.objects.create(
+            title='Other Event',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            created_by=self.user,
+            group=self.group,
+        )
+        self.client.login(username='member', password='testpass123')
+        response = self.client.get(reverse('event_list'), {'tag': ['tournament']})
+        self.assertContains(response, 'Group Game Night')
+        self.assertNotContains(response, 'Other Event')
+
+    def test_event_list_filter_has_clear_link(self):
+        self.client.login(username='member', password='testpass123')
+        response = self.client.get(reverse('event_list'))
+        self.assertContains(response, reverse('event_list'))
+
+    def test_event_list_unauthenticated_has_filter_button(self):
+        response = self.client.get(reverse('event_list'))
+        self.assertContains(response, 'filter-modal-btn')
+
+    def test_event_list_no_tags_still_shows_filter_when_tags_exist(self):
+        self.client.login(username='member', password='testpass123')
+        response = self.client.get(reverse('event_list'))
+        self.assertContains(response, 'filter-modal-overlay')
+
+
+@tag("integration")
+class DiscoverEventsFilterModalTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.creator = User.objects.create_user(username='creator', password='testpass123')
+        cls.tag = EventTag.objects.create(name='boardgames')
+        cls.event_tagged = Event.objects.create(
+            title='Tagged Event',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            created_by=cls.creator,
+            privacy='public',
+        )
+        cls.event_tagged.tags.add(cls.tag)
+        cls.event_untagged = Event.objects.create(
+            title='Untagged Event',
+            date=FUTURE_DATE,
+            voting_deadline=FUTURE_DATE,
+            created_by=cls.creator,
+            privacy='public',
+        )
+
+    def test_discover_has_filter_button(self):
+        response = self.client.get(reverse('discover_events'))
+        self.assertContains(response, 'filter-modal-btn')
+
+    def test_discover_has_filter_modal(self):
+        response = self.client.get(reverse('discover_events'))
+        self.assertContains(response, 'filter-modal-overlay')
+        self.assertContains(response, 'filter-modal-close')
+        self.assertContains(response, 'filter-apply-btn')
+
+    def test_discover_filter_button_shows_active_count_for_tag(self):
+        response = self.client.get(reverse('discover_events'), {'tag': ['boardgames']})
+        self.assertEqual(response.context['active_filter_count'], 1)
+
+    def test_discover_filter_button_shows_active_count_for_date(self):
+        response = self.client.get(
+            reverse('discover_events'),
+            {'date_from': (timezone.now() + timedelta(days=1)).strftime('%Y-%m-%d')},
+        )
+        self.assertEqual(response.context['active_filter_count'], 1)
+
+    def test_discover_filter_button_shows_active_count_for_sort_non_default(self):
+        response = self.client.get(reverse('discover_events'), {'sort': 'desc'})
+        self.assertEqual(response.context['active_filter_count'], 1)
+
+    def test_discover_filter_button_shows_active_count_for_multiple(self):
+        response = self.client.get(
+            reverse('discover_events'),
+            {'tag': ['boardgames'], 'sort': 'desc'},
+        )
+        self.assertEqual(response.context['active_filter_count'], 2)
+
+    def test_discover_no_active_filters_shows_zero_count(self):
+        response = self.client.get(reverse('discover_events'))
+        self.assertEqual(response.context['active_filter_count'], 0)
+
+    def test_discover_tag_filter_still_works(self):
+        response = self.client.get(reverse('discover_events'), {'tag': ['boardgames']})
+        self.assertContains(response, 'Tagged Event')
+        self.assertNotContains(response, 'Untagged Event')
+
+    def test_discover_date_filter_still_works(self):
+        future_plus = timezone.now() + timedelta(days=60)
+        Event.objects.create(
+            title='Far Future Event',
+            date=future_plus,
+            voting_deadline=future_plus,
+            created_by=self.creator,
+            privacy='public',
+        )
+        response = self.client.get(reverse('discover_events'), {
+            'date_from': (timezone.now() + timedelta(days=45)).strftime('%Y-%m-%d'),
+        })
+        self.assertContains(response, 'Far Future Event')
+        self.assertNotContains(response, 'Tagged Event')
+
+    def test_discover_sort_still_works(self):
+        early = timezone.now() + timedelta(days=5)
+        late = timezone.now() + timedelta(days=15)
+        Event.objects.create(title='Late Evt', date=late, voting_deadline=late, created_by=self.creator, privacy='public')
+        Event.objects.create(title='Early Evt', date=early, voting_deadline=early, created_by=self.creator, privacy='public')
+        response = self.client.get(reverse('discover_events'), {'sort': 'desc'})
+        content = response.content.decode()
+        self.assertLess(content.index('Late Evt'), content.index('Early Evt'))
+
+    def test_discover_filter_has_clear_link(self):
+        response = self.client.get(reverse('discover_events'))
+        self.assertContains(response, reverse('discover_events'))
