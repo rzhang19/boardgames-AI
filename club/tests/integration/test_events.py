@@ -1717,6 +1717,71 @@ class PlayGameViewTest(TestCase):
 
 
 @tag("integration")
+class SelectionMethodValidationTest(TestCase):
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(username='organizer', password='testpass123')
+        self.group = Group.objects.create(name='Validation Group')
+        from club.models import GroupMembership
+        GroupMembership.objects.create(user=self.organizer, group=self.group, role='admin')
+        self.event = Event.objects.create(
+            title='Validation Event',
+            date=timezone.now() + timedelta(days=7),
+            voting_deadline=timezone.now() + timedelta(days=7),
+            created_by=self.organizer, group=self.group,
+        )
+        self.game = BoardGame.objects.create(name='Catan', owner=self.organizer)
+
+    def test_valid_selection_method_manual_stores_correctly(self):
+        self.client.login(username='organizer', password='testpass123')
+        self.client.post(reverse('event_play_game', kwargs={'pk': self.event.pk}), {
+            'board_game': self.game.pk, 'selection_method': 'manual',
+        })
+        session = GameSession.objects.get(event=self.event)
+        self.assertEqual(session.selection_method, 'manual')
+
+    def test_valid_selection_method_random_stores_correctly(self):
+        self.client.login(username='organizer', password='testpass123')
+        self.client.post(reverse('event_play_game', kwargs={'pk': self.event.pk}), {
+            'board_game': self.game.pk, 'selection_method': 'random',
+        })
+        session = GameSession.objects.get(event=self.event)
+        self.assertEqual(session.selection_method, 'random')
+
+    def test_valid_selection_method_vote_stores_correctly(self):
+        self.client.login(username='organizer', password='testpass123')
+        self.client.post(reverse('event_play_game', kwargs={'pk': self.event.pk}), {
+            'board_game': self.game.pk, 'selection_method': 'vote',
+        })
+        session = GameSession.objects.get(event=self.event)
+        self.assertEqual(session.selection_method, 'vote')
+
+    def test_invalid_selection_method_defaults_to_manual(self):
+        self.client.login(username='organizer', password='testpass123')
+        self.client.post(reverse('event_play_game', kwargs={'pk': self.event.pk}), {
+            'board_game': self.game.pk, 'selection_method': 'hacked_value',
+        })
+        session = GameSession.objects.get(event=self.event)
+        self.assertEqual(session.selection_method, 'manual')
+
+    def test_empty_selection_method_defaults_to_manual(self):
+        self.client.login(username='organizer', password='testpass123')
+        self.client.post(reverse('event_play_game', kwargs={'pk': self.event.pk}), {
+            'board_game': self.game.pk, 'selection_method': '',
+        })
+        session = GameSession.objects.get(event=self.event)
+        self.assertEqual(session.selection_method, 'manual')
+
+    def test_missing_selection_method_defaults_to_manual(self):
+        self.client.login(username='organizer', password='testpass123')
+        self.client.post(reverse('event_play_game', kwargs={'pk': self.event.pk}), {
+            'board_game': self.game.pk,
+        })
+        session = GameSession.objects.get(event=self.event)
+        self.assertEqual(session.selection_method, 'manual')
+
+
+@tag("integration")
 class GameSessionDetailViewTest(TestCase):
 
     def setUp(self):

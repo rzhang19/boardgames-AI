@@ -3366,7 +3366,10 @@ def event_play_game(request, pk):
             if event.group_id is not None:
                 return redirect('event_play_game', pk=event.pk)
             return redirect('event_play_game', pk=event.pk)
+        _valid_methods = {m[0] for m in GameSession.SELECTION_METHODS}
         selection_method = request.POST.get('selection_method', 'manual')
+        if selection_method not in _valid_methods:
+            selection_method = 'manual'
         session = GameSession.objects.create(
             event=event,
             board_game=board_game,
