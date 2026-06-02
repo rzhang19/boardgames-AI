@@ -15,7 +15,7 @@ from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 from django.core.signing import TimestampSigner
-from django.test import TestCase, override_settings, tag
+from django.test import Client, TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
@@ -3450,3 +3450,180 @@ class PasswordResetRateLimitIPTest(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(mail.outbox), 1)
+
+
+@tag("integration")
+class PasswordResetSessionInvalidationTest(TestCase):
+
+    def setUp(self):
+        from django.core.cache import caches
+        caches['rate_limit'].clear()
+
+    def test_password_reset_invalidates_existing_sessions(self):
+        user = User.objects.create_user(
+            username='sessuser',
+            email='sess@example.com',
+            password='OriginalPass123',
+        )
+        attacker_client = Client()
+        attacker_client.login(username='sessuser', password='OriginalPass123')
+        response = attacker_client.get(reverse('user_settings'))
+        self.assertEqual(response.status_code, 200)
+
+        from club.views import generate_password_token
+        token = generate_password_token(user)
+        self.client.post(reverse('password_reset_form', kwargs={'token': token}), {
+            'new_password1': 'ResetPass456',
+            'new_password2': 'ResetPass456',
+        })
+
+        response = attacker_client.get(reverse('user_settings'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_user_can_login_with_new_password_after_reset(self):
+        user = User.objects.create_user(
+            username='loginafter',
+            email='loginafter@example.com',
+            password='OriginalPass123',
+        )
+        from club.views import generate_password_token
+        token = generate_password_token(user)
+        self.client.post(reverse('password_reset_form', kwargs={'token': token}), {
+            'new_password1': 'ResetPass456',
+            'new_password2': 'ResetPass456',
+        })
+        self.client.login(username='loginafter', password='ResetPass456')
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_password_reset_invalidates_multiple_sessions(self):
+        user = User.objects.create_user(
+            username='multisess',
+            email='multisess@example.com',
+            password='OriginalPass123',
+        )
+        client_a = Client()
+        client_b = Client()
+        client_a.login(username='multisess', password='OriginalPass123')
+        client_b.login(username='multisess', password='OriginalPass123')
+
+        from club.views import generate_password_token
+        token = generate_password_token(user)
+        self.client.post(reverse('password_reset_form', kwargs={'token': token}), {
+            'new_password1': 'ResetPass456',
+            'new_password2': 'ResetPass456',
+        })
+
+        response_a = client_a.get(reverse('user_settings'))
+        response_b = client_b.get(reverse('user_settings'))
+        self.assertEqual(response_a.status_code, 302)
+        self.assertIn('/login/', response_a.url)
+        self.assertEqual(response_b.status_code, 302)
+        self.assertIn('/login/', response_b.url)
+
+
+@tag("integration")
+class ChangePasswordSessionInvalidationTest(TestCase):
+
+    def test_change_password_invalidates_other_sessions(self):
+        user = User.objects.create_user(
+            username='chgpwuser',
+            password='OldPass123',
+            email='chgpw@example.com',
+        )
+        other_client = Client()
+        other_client.login(username='chgpwuser', password='OldPass123')
+        response = other_client.get(reverse('user_settings'))
+        self.assertEqual(response.status_code, 200)
+
+        self.client.login(username='chgpwuser', password='OldPass123')
+        self.client.post(reverse('change_password'), {
+            'current_password': 'OldPass123',
+            'new_password1': 'NewPass456',
+            'new_password2': 'NewPass456',
+        })
+
+        response = other_client.get(reverse('user_settings'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_change_password_keeps_current_session_alive(self):
+        user = User.objects.create_user(
+            username='keepalive',
+            password='OldPass123',
+            email='keepalive@example.com',
+        )
+        self.client.login(username='keepalive', password='OldPass123')
+        self.client.post(reverse('change_password'), {
+            'current_password': 'OldPass123',
+            'new_password1': 'NewPass456',
+            'new_password2': 'NewPass456',
+        })
+        response = self.client.get(reverse('user_settings'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_change_password_invalidates_multiple_other_sessions(self):
+        user = User.objects.create_user(
+            username='multichg',
+            password='OldPass123',
+            email='multichg@example.com',
+        )
+        other_client_a = Client()
+        other_client_b = Client()
+        other_client_a.login(username='multichg', password='OldPass123')
+        other_client_b.login(username='multichg', password='OldPass123')
+
+        self.client.login(username='multichg', password='OldPass123')
+        self.client.post(reverse('change_password'), {
+            'current_password': 'OldPass123',
+            'new_password1': 'NewPass456',
+            'new_password2': 'NewPass456',
+        })
+
+        response_a = other_client_a.get(reverse('user_settings'))
+        response_b = other_client_b.get(reverse('user_settings'))
+        self.assertEqual(response_a.status_code, 302)
+        self.assertIn('/login/', response_a.url)
+        self.assertEqual(response_b.status_code, 302)
+        self.assertIn('/login/', response_b.url)
+
+
+@tag("integration")
+class ForcedPasswordChangeSessionInvalidationTest(TestCase):
+
+    def test_forced_password_change_invalidates_other_sessions(self):
+        user = User.objects.create_user(
+            username='forcedsess',
+            password='TempPassword123',
+            must_change_password=True,
+        )
+        other_client = Client()
+        other_client.login(username='forcedsess', password='TempPassword123')
+        response = other_client.get(reverse('user_settings'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/change-password/', response.url)
+
+        self.client.login(username='forcedsess', password='TempPassword123')
+        self.client.post(reverse('forced_password_change'), {
+            'new_password1': 'NewPassword456',
+            'new_password2': 'NewPassword456',
+        })
+
+        response = other_client.get(reverse('user_settings'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_forced_password_change_keeps_current_session_alive(self):
+        user = User.objects.create_user(
+            username='forcedalive',
+            password='TempPassword123',
+            must_change_password=True,
+        )
+        self.client.login(username='forcedalive', password='TempPassword123')
+        self.client.post(reverse('forced_password_change'), {
+            'new_password1': 'NewPassword456',
+            'new_password2': 'NewPassword456',
+        })
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.status_code, 200)

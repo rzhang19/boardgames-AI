@@ -86,6 +86,17 @@ from .permissions import (
 )
 
 
+def delete_user_sessions(user, exclude_session_key=None):
+    from django.contrib.sessions.models import Session
+    user_id_str = str(user.pk)
+    for session in Session.objects.all():
+        if session.session_key == exclude_session_key:
+            continue
+        data = session.get_decoded()
+        if data.get('_auth_user_id') == user_id_str:
+            session.delete()
+
+
 def save_password_history(user, password):
     PasswordHistory.objects.create(user=user, password=password)
     history = PasswordHistory.objects.filter(user=user).order_by('-created_at')[5:]
@@ -405,6 +416,7 @@ def forced_password_change(request):
                 request.user.must_change_password = False
                 request.user.save()
                 save_password_history(request.user, old_password)
+                delete_user_sessions(request.user, exclude_session_key=request.session.session_key)
                 login(request, request.user)
                 return redirect('dashboard')
     else:
@@ -509,6 +521,7 @@ def password_reset_form(request, token):
             user.password = make_password(form.cleaned_data['new_password1'])
             user.save()
             save_password_history(user, old_password)
+            delete_user_sessions(user)
             return render(request, 'registration/password_reset_done.html')
     else:
         form = SetPasswordForm(user=user)
@@ -761,6 +774,7 @@ def change_password(request):
             request.user.set_password(new_password)
             request.user.save()
             save_password_history(request.user, old_password)
+            delete_user_sessions(request.user, exclude_session_key=request.session.session_key)
             login(request, request.user)
             return redirect(reverse('user_settings') + '?password_changed=1')
     else:
