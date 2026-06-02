@@ -2443,8 +2443,8 @@ class VerifiedBadgeEventPagesTest(TestCase):
         )
         group = Group.objects.create(name='Test Group')
         Event.objects.create(
-            title='Game Night', date='2026-06-01T18:00:00Z',
-            voting_deadline='2026-06-01T18:00:00Z',
+            title='Game Night', date=timezone.now() + timedelta(days=7),
+            voting_deadline=timezone.now() + timedelta(days=7),
             created_by=creator, group=group
         )
         GroupMembership.objects.create(user=creator, group=group, role='member')
@@ -2752,8 +2752,8 @@ class VerifiedBadgeCustomIconRenderingTest(TestCase):
             email_verified=True, verified_icon=self.icon,
         )
         Event.objects.create(
-            title='Game Night', date='2026-06-01T18:00:00Z',
-            voting_deadline='2026-06-01T18:00:00Z',
+            title='Game Night', date=timezone.now() + timedelta(days=7),
+            voting_deadline=timezone.now() + timedelta(days=7),
             created_by=creator, group=self.group,
         )
         GroupMembership.objects.create(user=creator, group=self.group, role='member')

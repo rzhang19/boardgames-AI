@@ -1668,8 +1668,8 @@ class GroupGameVotingIntegrationTest(TestCase):
         )
         cls.event = Event.objects.create(
             title='Game Night',
-            date='2026-06-01T18:00:00Z',
-            voting_deadline='2026-06-01T18:00:00Z',
+            date=timezone.now() + timedelta(days=7),
+            voting_deadline=timezone.now() + timedelta(days=7),
             created_by=cls.organizer,
             group=cls.group,
         )
@@ -1845,8 +1845,8 @@ class GroupOwnedGameFullFlowTest(TestCase):
         )
         cls.event = Event.objects.create(
             title='Full Flow Event',
-            date='2026-06-01T18:00:00Z',
-            voting_deadline='2026-06-01T18:00:00Z',
+            date=timezone.now() + timedelta(days=7),
+            voting_deadline=timezone.now() + timedelta(days=7),
             created_by=cls.organizer,
             group=cls.group,
         )

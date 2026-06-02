@@ -1,7 +1,8 @@
 from datetime import timedelta
+from unittest import skipIf
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
+from django.db import IntegrityError, connection
 from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
@@ -1890,6 +1891,7 @@ class RsvpToggleTest(TestCase):
             EventAttendance.objects.filter(user=self.user, event=self.event).exists()
         )
 
+    @skipIf(connection.vendor == 'sqlite', 'select_for_update not supported on SQLite')
     def test_concurrent_toggle_produces_consistent_state(self):
         import threading
         from django.db import OperationalError
@@ -1920,6 +1922,7 @@ class RsvpToggleTest(TestCase):
         ).count()
         self.assertIn(count, (0, 1), f"Expected 0 or 1 attendance records, got {count}")
 
+    @skipIf(connection.vendor == 'sqlite', 'select_for_update not supported on SQLite')
     def test_concurrent_create_race_no_duplicates(self):
         import threading
         from django.db import OperationalError
