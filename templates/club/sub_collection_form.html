@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action }} Sub-Collection{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>{{ action }} Sub-Collection</h1>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="field-group">
+            <label for="{{ form.name.id_for_label }}">Name</label>
+            {{ form.name }}
+            {% if form.name.errors %}
+            <ul class="errorlist">
+                {% for error in form.name.errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+
+        <div class="field-group">
+            <label for="{{ form.games.id_for_label }}">Games</label>
+            {{ form.games }}
+            {% if form.games.errors %}
+            <ul class="errorlist">
+                {% for error in form.games.errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+            <small>Select games from your collection to include in this sub-collection.</small>
+        </div>
+
+        <div class="field-group">
+            <label>
+                {{ form.is_default }}
+                Set as default sub-collection
+            </label>
+            {% if form.is_default.errors %}
+            <ul class="errorlist">
+                {% for error in form.is_default.errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+            {% if sub_collection and sub_collection.is_default %}
+            <small class="note">
+                If you uncheck this, your "Entire Collection" will become the default.
+            </small>
+            {% endif %}
+        </div>
+
+        {% if form.non_field_errors %}
+        <ul class="errorlist">
+            {% for error in form.non_field_errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">{{ action }}</button>
+            <a href="{% url 'sub_collection_list' %}" class="btn btn-neutral">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

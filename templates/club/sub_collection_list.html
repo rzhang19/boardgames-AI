@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}My Sub-Collections{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>My Sub-Collections ({{ sub_collection_count }}/{{ max_sub_collections }})</h1>
+
+    <div class="sub-collection-entry entire-collection">
+        <div class="sub-collection-header" onclick="toggleSubCollection('entire')">
+            <span class="toggle-icon" id="toggle-entire">&#9654;</span>
+            <span class="sub-collection-name">Entire Collection</span>
+            {% if not has_any_default %}<span class="badge badge-default">default</span>{% endif %}
+            <span class="sub-collection-count">{{ all_my_games_count }} game{{ all_my_games_count|pluralize }}</span>
+        </div>
+        <div class="sub-collection-games" id="games-entire" style="display:none;">
+            {% if all_my_games_count > 0 %}
+            <ul>
+                {% for game in all_my_games %}
+                <li>{{ game.name }}</li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p>No games in your collection yet.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% for sc in sub_collections %}
+    <div class="sub-collection-entry">
+        <div class="sub-collection-header" onclick="toggleSubCollection('{{ sc.pk }}')">
+            <span class="toggle-icon" id="toggle-{{ sc.pk }}">&#9654;</span>
+            <span class="sub-collection-name">{{ sc.name }}</span>
+            {% if sc.is_default %}<span class="badge badge-default">default</span>{% endif %}
+            <span class="sub-collection-count">{{ sc.games.count }} game{{ sc.games.count|pluralize }}</span>
+            <div class="sub-collection-actions">
+                <a href="{% url 'sub_collection_edit' sc.pk %}" class="btn btn-sm btn-neutral">Edit</a>
+                <a href="{% url 'sub_collection_delete' sc.pk %}" class="btn btn-sm btn-danger">Delete</a>
+            </div>
+        </div>
+        <div class="sub-collection-games" id="games-{{ sc.pk }}" style="display:none;">
+            {% if sc.games.count > 0 %}
+            <ul>
+                {% for game in sc.games.all %}
+                <li>{{ game.name }}</li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p>No games in this sub-collection.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+
+    {% if can_create %}
+    <div class="action-bar">
+        <a href="{% url 'sub_collection_create' %}" class="btn btn-primary">New Sub-Collection</a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function toggleSubCollection(id) {
+    var gamesEl = document.getElementById('games-' + id);
+    var toggleEl = document.getElementById('toggle-' + id);
+    if (gamesEl.style.display === 'none') {
+        gamesEl.style.display = 'block';
+        toggleEl.innerHTML = '&#9660;';
+    } else {
+        gamesEl.style.display = 'none';
+        toggleEl.innerHTML = '&#9654;';
+    }
+}
+</script>
+{% endblock %}

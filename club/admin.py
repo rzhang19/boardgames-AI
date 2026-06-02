@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import ActivityFeedItem, User, BoardGame, Event, EventAttendance, EventTag, GameTag, Notification, TagRequest, VerifiedIcon, Vote
+from .models import ActivityFeedItem, GameSubCollection, User, BoardGame, Event, EventAttendance, EventTag, GameTag, Notification, TagRequest, VerifiedIcon, Vote
 
 
 admin.site.register(User, UserAdmin)
@@ -70,3 +70,10 @@ class ActivityFeedItemAdmin(admin.ModelAdmin):
     list_display = ('activity_type', 'actor', 'event', 'group', 'timestamp')
     list_filter = ('activity_type',)
     search_fields = ('actor__username', 'event__title', 'group__name')
+
+
+@admin.register(GameSubCollection)
+class GameSubCollectionAdmin(admin.ModelAdmin):
+    list_display = ('name', 'user', 'is_default', 'created_at')
+    list_filter = ('is_default', 'user')
+    search_fields = ('name', 'user__username')

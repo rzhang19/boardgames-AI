@@ -11,6 +11,8 @@ from uuid import uuid4
 
 MAX_TAGS_PER_ITEM = 5
 TAG_MAX_LENGTH = 25
+MAX_SUB_COLLECTIONS = 10
+RESERVED_SUB_COLLECTION_NAMES = {'Entire Collection'}
 
 
 class ClubUserManager(UserManager):
@@ -404,6 +406,35 @@ class BoardGame(models.Model):
         'GameTag', blank=True, related_name='tagged_games',
     )
     is_temporary = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.name
+
+
+class GameSubCollection(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='game_sub_collections',
+    )
+    name = models.CharField(max_length=100)
+    is_default = models.BooleanField(default=False)
+    games = models.ManyToManyField(
+        BoardGame,
+        blank=True,
+        related_name='sub_collections',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'name'],
+                name='unique_sub_collection_per_user',
+            ),
+        ]
+        ordering = ['name']
 
     def __str__(self):
         return self.name

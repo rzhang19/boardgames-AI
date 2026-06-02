@@ -13,6 +13,7 @@ from club.models import (
     EventAttendance,
     EventGameOverride,
     EventPresence,
+    GameSubCollection,
     Group,
     GroupMembership,
 )
@@ -2506,3 +2507,511 @@ class PoolOverrideViewTest(TestCase):
             content_type='application/json',
         )
         self.assertEqual(response.status_code, 403)
+
+
+@tag("integration")
+class SubCollectionListViewTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            username='collector', password='testpass123'
+        )
+        cls.other_user = User.objects.create_user(
+            username='other', password='testpass123'
+        )
+        cls.game1 = BoardGame.objects.create(name='Catan', owner=cls.user)
+        cls.game2 = BoardGame.objects.create(name='Chess', owner=cls.user)
+        cls.game3 = BoardGame.objects.create(name='Risk', owner=cls.user)
+        cls.other_game = BoardGame.objects.create(name='Monopoly', owner=cls.other_user)
+
+    def test_list_requires_login(self):
+        response = self.client.get(reverse('sub_collection_list'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_list_shows_entire_collection_pseudo_entry(self):
+        self.client.login(username='collector', password='testpass123')
+        response = self.client.get(reverse('sub_collection_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Entire Collection')
+        self.assertContains(response, '3 games')
+
+    def test_list_shows_user_sub_collections(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Favorites')
+        sc.games.add(self.game1, self.game2)
+        self.client.login(username='collector', password='testpass123')
+        response = self.client.get(reverse('sub_collection_list'))
+        self.assertContains(response, 'Favorites')
+
+    def test_list_shows_count_over_10(self):
+        for i in range(10):
+            GameSubCollection.objects.create(user=self.user, name=f'Collection {i}')
+        self.client.login(username='collector', password='testpass123')
+        response = self.client.get(reverse('sub_collection_list'))
+        self.assertContains(response, '10/10')
+
+    def test_list_shows_create_button_when_under_limit(self):
+        self.client.login(username='collector', password='testpass123')
+        response = self.client.get(reverse('sub_collection_list'))
+        self.assertContains(response, 'New Sub-Collection')
+
+    def test_list_hides_create_button_at_limit(self):
+        for i in range(10):
+            GameSubCollection.objects.create(user=self.user, name=f'Collection {i}')
+        self.client.login(username='collector', password='testpass123')
+        response = self.client.get(reverse('sub_collection_list'))
+        self.assertNotContains(response, 'New Sub-Collection')
+
+    def test_list_hides_create_button_when_no_games(self):
+        user_no_games = User.objects.create_user(
+            username='nogames', password='testpass123'
+        )
+        self.client.login(username='nogames', password='testpass123')
+        response = self.client.get(reverse('sub_collection_list'))
+        self.assertNotContains(response, 'New Sub-Collection')
+
+    def test_entire_collection_shows_default_badge_when_no_default(self):
+        self.client.login(username='collector', password='testpass123')
+        response = self.client.get(reverse('sub_collection_list'))
+        self.assertContains(response, 'default')
+
+    def test_entire_collection_no_default_badge_when_sub_collection_is_default(self):
+        sc = GameSubCollection.objects.create(
+            user=self.user, name='My Default', is_default=True
+        )
+        sc.games.add(self.game1)
+        self.client.login(username='collector', password='testpass123')
+        response = self.client.get(reverse('sub_collection_list'))
+        html = response.content.decode()
+        entire_section = html[html.index('Entire Collection'):]
+        self.assertNotIn('default', entire_section[:entire_section.index('</')])
+
+
+@tag("integration")
+class SubCollectionCreateViewTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            username='creator', password='testpass123'
+        )
+        cls.other_user = User.objects.create_user(
+            username='other', password='testpass123'
+        )
+        cls.game1 = BoardGame.objects.create(name='Catan', owner=cls.user)
+        cls.game2 = BoardGame.objects.create(name='Chess', owner=cls.user)
+        cls.game3 = BoardGame.objects.create(name='Risk', owner=cls.user)
+        cls.other_game = BoardGame.objects.create(name='Monopoly', owner=cls.other_user)
+
+    def test_create_requires_login(self):
+        response = self.client.get(reverse('sub_collection_create'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_create_successful(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('sub_collection_create'), {
+            'name': 'Light Games',
+            'games': [self.game1.pk, self.game2.pk],
+            'is_default': False,
+        })
+        self.assertEqual(response.status_code, 302)
+        sc = GameSubCollection.objects.get(user=self.user, name='Light Games')
+        self.assertEqual(sc.games.count(), 2)
+        self.assertFalse(sc.is_default)
+
+    def test_create_with_is_default(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('sub_collection_create'), {
+            'name': 'Default Collection',
+            'games': [self.game1.pk],
+            'is_default': True,
+        })
+        self.assertEqual(response.status_code, 302)
+        sc = GameSubCollection.objects.get(user=self.user)
+        self.assertTrue(sc.is_default)
+
+    def test_create_sets_default_unsets_previous(self):
+        GameSubCollection.objects.create(
+            user=self.user, name='Old Default', is_default=True
+        )
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('sub_collection_create'), {
+            'name': 'New Default',
+            'games': [self.game1.pk],
+            'is_default': True,
+        })
+        self.assertEqual(response.status_code, 302)
+        old = GameSubCollection.objects.get(user=self.user, name='Old Default')
+        self.assertFalse(old.is_default)
+        new = GameSubCollection.objects.get(user=self.user, name='New Default')
+        self.assertTrue(new.is_default)
+
+    def test_create_denied_at_limit(self):
+        for i in range(10):
+            GameSubCollection.objects.create(user=self.user, name=f'Col {i}')
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('sub_collection_create'), {
+            'name': 'Overflow',
+            'games': [self.game1.pk],
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            GameSubCollection.objects.filter(user=self.user, name='Overflow').exists()
+        )
+
+    def test_create_denied_no_games_owned(self):
+        user_no_games = User.objects.create_user(
+            username='nogames', password='testpass123'
+        )
+        self.client.login(username='nogames', password='testpass123')
+        response = self.client.get(reverse('sub_collection_create'))
+        self.assertEqual(response.status_code, 302)
+
+    def test_create_rejects_reserved_name(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('sub_collection_create'), {
+            'name': 'Entire Collection',
+            'games': [self.game1.pk],
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            GameSubCollection.objects.filter(
+                user=self.user, name='Entire Collection'
+            ).exists()
+        )
+
+    def test_create_rejects_reserved_name_case_insensitive(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('sub_collection_create'), {
+            'name': 'entire collection',
+            'games': [self.game1.pk],
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            GameSubCollection.objects.filter(
+                user=self.user, name='entire collection'
+            ).exists()
+        )
+
+    def test_create_rejects_duplicate_name(self):
+        GameSubCollection.objects.create(user=self.user, name='Favorites')
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('sub_collection_create'), {
+            'name': 'Favorites',
+            'games': [self.game1.pk],
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            GameSubCollection.objects.filter(user=self.user, name='Favorites').count(), 1
+        )
+
+    def test_create_rejects_empty_games(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('sub_collection_create'), {
+            'name': 'No Games',
+            'games': [],
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            GameSubCollection.objects.filter(user=self.user, name='No Games').exists()
+        )
+
+    def test_create_rejects_all_games_selection(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('sub_collection_create'), {
+            'name': 'All Of Them',
+            'games': [self.game1.pk, self.game2.pk, self.game3.pk],
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            GameSubCollection.objects.filter(user=self.user, name='All Of Them').exists()
+        )
+
+    def test_create_rejects_duplicate_game_set(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Existing')
+        sc.games.add(self.game1, self.game2)
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('sub_collection_create'), {
+            'name': 'Duplicate Set',
+            'games': [self.game1.pk, self.game2.pk],
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            GameSubCollection.objects.filter(
+                user=self.user, name='Duplicate Set'
+            ).exists()
+        )
+
+    def test_create_rejects_non_owned_games(self):
+        self.client.login(username='creator', password='testpass123')
+        response = self.client.post(reverse('sub_collection_create'), {
+            'name': 'Hacked',
+            'games': [self.other_game.pk],
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            GameSubCollection.objects.filter(user=self.user, name='Hacked').exists()
+        )
+
+
+@tag("integration")
+class SubCollectionEditViewTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            username='editor', password='testpass123'
+        )
+        cls.other_user = User.objects.create_user(
+            username='othereditor', password='testpass123'
+        )
+        cls.game1 = BoardGame.objects.create(name='Catan', owner=cls.user)
+        cls.game2 = BoardGame.objects.create(name='Chess', owner=cls.user)
+        cls.game3 = BoardGame.objects.create(name='Risk', owner=cls.user)
+
+    def test_edit_requires_login(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Test')
+        response = self.client.get(
+            reverse('sub_collection_edit', kwargs={'pk': sc.pk})
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_edit_owner_only(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Test')
+        sc.games.add(self.game1)
+        self.client.login(username='othereditor', password='testpass123')
+        response = self.client.get(
+            reverse('sub_collection_edit', kwargs={'pk': sc.pk})
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_edit_nonexistent_pk_returns_404(self):
+        self.client.login(username='editor', password='testpass123')
+        response = self.client.get(
+            reverse('sub_collection_edit', kwargs={'pk': 99999})
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_edit_successful(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Original')
+        sc.games.add(self.game1)
+        self.client.login(username='editor', password='testpass123')
+        response = self.client.post(
+            reverse('sub_collection_edit', kwargs={'pk': sc.pk}),
+            {'name': 'Renamed', 'games': [self.game2.pk], 'is_default': False}
+        )
+        self.assertEqual(response.status_code, 302)
+        sc.refresh_from_db()
+        self.assertEqual(sc.name, 'Renamed')
+        self.assertEqual(set(sc.games.values_list('pk', flat=True)), {self.game2.pk})
+
+    def test_edit_setting_default_unsets_previous(self):
+        sc1 = GameSubCollection.objects.create(
+            user=self.user, name='Old Default', is_default=True
+        )
+        sc1.games.add(self.game1)
+        sc2 = GameSubCollection.objects.create(
+            user=self.user, name='New Default', is_default=False
+        )
+        sc2.games.add(self.game2)
+        self.client.login(username='editor', password='testpass123')
+        response = self.client.post(
+            reverse('sub_collection_edit', kwargs={'pk': sc2.pk}),
+            {'name': 'New Default', 'games': [self.game2.pk], 'is_default': True}
+        )
+        self.assertEqual(response.status_code, 302)
+        sc1.refresh_from_db()
+        sc2.refresh_from_db()
+        self.assertFalse(sc1.is_default)
+        self.assertTrue(sc2.is_default)
+
+    def test_edit_rejects_reserved_name(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Test')
+        sc.games.add(self.game1)
+        self.client.login(username='editor', password='testpass123')
+        response = self.client.post(
+            reverse('sub_collection_edit', kwargs={'pk': sc.pk}),
+            {'name': 'Entire Collection', 'games': [self.game1.pk], 'is_default': False}
+        )
+        self.assertEqual(response.status_code, 200)
+        sc.refresh_from_db()
+        self.assertEqual(sc.name, 'Test')
+
+    def test_edit_rejects_duplicate_name(self):
+        GameSubCollection.objects.create(user=self.user, name='Existing')
+        sc2 = GameSubCollection.objects.create(user=self.user, name='To Rename')
+        sc2.games.add(self.game1)
+        self.client.login(username='editor', password='testpass123')
+        response = self.client.post(
+            reverse('sub_collection_edit', kwargs={'pk': sc2.pk}),
+            {'name': 'Existing', 'games': [self.game1.pk], 'is_default': False}
+        )
+        self.assertEqual(response.status_code, 200)
+        sc2.refresh_from_db()
+        self.assertEqual(sc2.name, 'To Rename')
+
+    def test_edit_rejects_empty_games(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Test')
+        sc.games.add(self.game1)
+        self.client.login(username='editor', password='testpass123')
+        response = self.client.post(
+            reverse('sub_collection_edit', kwargs={'pk': sc.pk}),
+            {'name': 'Test', 'games': [], 'is_default': False}
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_edit_rejects_all_games_selection(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Test')
+        sc.games.add(self.game1)
+        self.client.login(username='editor', password='testpass123')
+        response = self.client.post(
+            reverse('sub_collection_edit', kwargs={'pk': sc.pk}),
+            {
+                'name': 'Test',
+                'games': [self.game1.pk, self.game2.pk, self.game3.pk],
+                'is_default': False,
+            }
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_edit_rejects_duplicate_game_set(self):
+        sc1 = GameSubCollection.objects.create(user=self.user, name='First')
+        sc1.games.add(self.game1, self.game2)
+        sc2 = GameSubCollection.objects.create(user=self.user, name='Second')
+        sc2.games.add(self.game3)
+        self.client.login(username='editor', password='testpass123')
+        response = self.client.post(
+            reverse('sub_collection_edit', kwargs={'pk': sc2.pk}),
+            {
+                'name': 'Second',
+                'games': [self.game1.pk, self.game2.pk],
+                'is_default': False,
+            }
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_edit_same_name_allowed_for_same_collection(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='My Col')
+        sc.games.add(self.game1)
+        self.client.login(username='editor', password='testpass123')
+        response = self.client.post(
+            reverse('sub_collection_edit', kwargs={'pk': sc.pk}),
+            {'name': 'My Col', 'games': [self.game1.pk, self.game2.pk], 'is_default': False}
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(sc.games.count(), 2)
+
+    def test_edit_post_owner_only(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Test')
+        sc.games.add(self.game1)
+        self.client.login(username='othereditor', password='testpass123')
+        response = self.client.post(
+            reverse('sub_collection_edit', kwargs={'pk': sc.pk}),
+            {'name': 'Hacked', 'games': [self.game1.pk], 'is_default': False}
+        )
+        self.assertEqual(response.status_code, 403)
+
+
+@tag("integration")
+class SubCollectionDeleteViewTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            username='deleter', password='testpass123'
+        )
+        cls.other_user = User.objects.create_user(
+            username='otherdeleter', password='testpass123'
+        )
+        cls.game1 = BoardGame.objects.create(name='Catan', owner=cls.user)
+
+    def test_delete_requires_login(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Test')
+        response = self.client.get(
+            reverse('sub_collection_delete', kwargs={'pk': sc.pk})
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_delete_owner_only(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Test')
+        sc.games.add(self.game1)
+        self.client.login(username='otherdeleter', password='testpass123')
+        response = self.client.get(
+            reverse('sub_collection_delete', kwargs={'pk': sc.pk})
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_delete_post_owner_only(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Test')
+        self.client.login(username='otherdeleter', password='testpass123')
+        response = self.client.post(
+            reverse('sub_collection_delete', kwargs={'pk': sc.pk})
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(GameSubCollection.objects.filter(pk=sc.pk).exists())
+
+    def test_delete_nonexistent_pk_returns_404(self):
+        self.client.login(username='deleter', password='testpass123')
+        response = self.client.get(
+            reverse('sub_collection_delete', kwargs={'pk': 99999})
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_delete_successful(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='ToDelete')
+        sc.games.add(self.game1)
+        self.client.login(username='deleter', password='testpass123')
+        response = self.client.post(
+            reverse('sub_collection_delete', kwargs={'pk': sc.pk})
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(GameSubCollection.objects.filter(pk=sc.pk).exists())
+
+    def test_delete_shows_default_warning(self):
+        sc = GameSubCollection.objects.create(
+            user=self.user, name='Default', is_default=True
+        )
+        sc.games.add(self.game1)
+        self.client.login(username='deleter', password='testpass123')
+        response = self.client.get(
+            reverse('sub_collection_delete', kwargs={'pk': sc.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'default')
+
+    def test_delete_no_default_warning_for_non_default(self):
+        sc = GameSubCollection.objects.create(
+            user=self.user, name='NotDefault', is_default=False
+        )
+        sc.games.add(self.game1)
+        self.client.login(username='deleter', password='testpass123')
+        response = self.client.get(
+            reverse('sub_collection_delete', kwargs={'pk': sc.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        warning_phrases = [
+            'default sub-collection',
+            'Entire Collection will become your default',
+        ]
+        for phrase in warning_phrases:
+            self.assertNotIn(phrase, html)
+
+
+@tag("integration")
+class GameListSubCollectionLinkTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            username='linkuser', password='testpass123'
+        )
+
+    def test_sub_collections_link_present_for_authenticated_users(self):
+        self.client.login(username='linkuser', password='testpass123')
+        response = self.client.get(reverse('game_list'))
+        self.assertContains(response, 'sub-collections')

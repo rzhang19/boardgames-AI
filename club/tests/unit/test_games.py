@@ -14,9 +14,10 @@ from club.models import (
     Event,
     EventTag,
     GameOwnershipProposal,
-    GameTag,
     GameSession,
     GameSessionPlayer,
+    GameSubCollection,
+    GameTag,
     Group,
     GroupMembership,
 )
@@ -1416,3 +1417,158 @@ class CleanupTemporaryGamesCommandTest(TestCase):
         call_command('cleanup_temporary_games', stdout=StringIO())
         proposal.refresh_from_db()
         self.assertEqual(proposal.status, 'expired')
+
+
+@tag("unit")
+class GameSubCollectionModelTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='collector', password='testpass123'
+        )
+        self.other_user = User.objects.create_user(
+            username='othercollector', password='testpass123'
+        )
+        self.game1 = BoardGame.objects.create(name='Catan', owner=self.user)
+        self.game2 = BoardGame.objects.create(name='Chess', owner=self.user)
+        self.game3 = BoardGame.objects.create(name='Risk', owner=self.user)
+        self.other_game = BoardGame.objects.create(name='Monopoly', owner=self.other_user)
+
+    def test_create_sub_collection_with_games(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Light Games')
+        sc.games.add(self.game1, self.game2)
+        self.assertEqual(sc.name, 'Light Games')
+        self.assertEqual(sc.user, self.user)
+        self.assertFalse(sc.is_default)
+        self.assertEqual(sc.games.count(), 2)
+        self.assertIsNotNone(sc.created_at)
+        self.assertIsNotNone(sc.updated_at)
+
+    def test_create_sub_collection_without_games(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Empty')
+        self.assertEqual(sc.games.count(), 0)
+
+    def test_sub_collection_string_representation(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Party Games')
+        self.assertEqual(str(sc), 'Party Games')
+
+    def test_unique_name_per_user(self):
+        GameSubCollection.objects.create(user=self.user, name='Favorites')
+        with self.assertRaises(IntegrityError):
+            GameSubCollection.objects.create(user=self.user, name='Favorites')
+
+    def test_same_name_allowed_for_different_users(self):
+        GameSubCollection.objects.create(user=self.user, name='Favorites')
+        sc2 = GameSubCollection.objects.create(user=self.other_user, name='Favorites')
+        self.assertEqual(sc2.name, 'Favorites')
+        self.assertEqual(sc2.user, self.other_user)
+
+    def test_is_default_starts_false(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Default')
+        self.assertFalse(sc.is_default)
+
+    def test_sub_collection_ordering_by_name(self):
+        GameSubCollection.objects.create(user=self.user, name='Zeta')
+        GameSubCollection.objects.create(user=self.user, name='Alpha')
+        GameSubCollection.objects.create(user=self.user, name='Middle')
+        names = list(
+            GameSubCollection.objects.filter(user=self.user).values_list('name', flat=True)
+        )
+        self.assertEqual(names, ['Alpha', 'Middle', 'Zeta'])
+
+    def test_games_m2m_only_contains_added_games(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='My Games')
+        sc.games.add(self.game1, self.game3)
+        self.assertIn(self.game1, sc.games.all())
+        self.assertIn(self.game3, sc.games.all())
+        self.assertNotIn(self.game2, sc.games.all())
+
+    def test_games_can_include_games_from_multiple_owners_at_model_level(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Mixed')
+        sc.games.add(self.game1, self.other_game)
+        self.assertEqual(sc.games.count(), 2)
+
+    def test_cascade_delete_user_removes_sub_collections(self):
+        GameSubCollection.objects.create(user=self.user, name='SC1')
+        GameSubCollection.objects.create(user=self.user, name='SC2')
+        self.assertEqual(GameSubCollection.objects.filter(user=self.user).count(), 2)
+        self.user.delete()
+        self.assertEqual(GameSubCollection.objects.filter(user__username='collector').count(), 0)
+
+    def test_cascade_delete_game_removes_from_m2m(self):
+        sc = GameSubCollection.objects.create(user=self.user, name='Has Catan')
+        sc.games.add(self.game1, self.game2)
+        self.assertEqual(sc.games.count(), 2)
+        self.game1.delete()
+        self.assertEqual(sc.games.count(), 1)
+        self.assertNotIn(self.game1, sc.games.all())
+
+    def test_max_sub_collections_constant_value(self):
+        from club.models import MAX_SUB_COLLECTIONS
+        self.assertEqual(MAX_SUB_COLLECTIONS, 10)
+
+    def test_reserved_sub_collection_names_contains_entire_collection(self):
+        from club.models import RESERVED_SUB_COLLECTION_NAMES
+        self.assertIn('Entire Collection', RESERVED_SUB_COLLECTION_NAMES)
+
+
+@tag("unit")
+class GameSubCollectionDefaultEnforcementTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='defaultuser', password='testpass123'
+        )
+        self.game1 = BoardGame.objects.create(name='Catan', owner=self.user)
+        self.game2 = BoardGame.objects.create(name='Chess', owner=self.user)
+
+    def test_setting_default_unsets_previous_default(self):
+        sc1 = GameSubCollection.objects.create(
+            user=self.user, name='First', is_default=True
+        )
+        sc1.games.add(self.game1)
+        sc2 = GameSubCollection.objects.create(
+            user=self.user, name='Second', is_default=True
+        )
+        sc2.games.add(self.game2)
+        GameSubCollection.objects.filter(
+            user=self.user, is_default=True
+        ).exclude(pk=sc2.pk).update(is_default=False)
+        sc1.refresh_from_db()
+        sc2.refresh_from_db()
+        self.assertFalse(sc1.is_default)
+        self.assertTrue(sc2.is_default)
+
+    def test_multiple_defaults_without_manual_enforcement(self):
+        GameSubCollection.objects.create(
+            user=self.user, name='First', is_default=True
+        )
+        GameSubCollection.objects.create(
+            user=self.user, name='Second', is_default=True
+        )
+        defaults = GameSubCollection.objects.filter(
+            user=self.user, is_default=True
+        )
+        self.assertEqual(defaults.count(), 2)
+
+    def test_unsetting_all_defaults_is_allowed(self):
+        sc = GameSubCollection.objects.create(
+            user=self.user, name='Only', is_default=True
+        )
+        sc.is_default = False
+        sc.save()
+        sc.refresh_from_db()
+        self.assertFalse(sc.is_default)
+        defaults = GameSubCollection.objects.filter(
+            user=self.user, is_default=True
+        )
+        self.assertEqual(defaults.count(), 0)
+
+    def test_no_defaults_at_all_is_valid_state(self):
+        GameSubCollection.objects.create(
+            user=self.user, name='NoDefault', is_default=False
+        )
+        defaults = GameSubCollection.objects.filter(
+            user=self.user, is_default=True
+        )
+        self.assertEqual(defaults.count(), 0)

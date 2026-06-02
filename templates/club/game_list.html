@@ -13,6 +13,7 @@
 
 <div class="action-bar">
     <a href="{% url 'game_add' %}" class="btn btn-primary">Add a Game</a>
+    <a href="{% url 'sub_collection_list' %}" class="btn btn-neutral">Sub-Collections</a>
     <button type="button" class="btn btn-neutral filter-modal-btn" onclick="document.getElementById('filterModal').classList.add('active')">
         <span class="filter-icon">&#9881;</span> Filter{% if active_filter_count > 0 %} ({{ active_filter_count }}){% endif %}
     </button>

@@ -8,8 +8,8 @@ from django.contrib.auth.hashers import check_password
 from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
 
-from .models import BoardGame, Event, EventAttendance, EventInvite, Group, GroupMembership, PasswordHistory, PrivateEventCreationLog, VerifiedIcon, Vote
-from .models import MAX_TAGS_PER_ITEM
+from .models import BoardGame, Event, EventAttendance, EventInvite, GameSubCollection, Group, GroupMembership, PasswordHistory, PrivateEventCreationLog, VerifiedIcon, Vote
+from .models import MAX_TAGS_PER_ITEM, MAX_SUB_COLLECTIONS, RESERVED_SUB_COLLECTION_NAMES
 from .timezone_utils import get_timezone_choices, is_valid_timezone
 from .utils import MAX_FILE_SIZE, parse_bgg_link, validate_image_size
 
@@ -845,3 +845,70 @@ class FeedbackForm(forms.Form):
     feedback_type = forms.ChoiceField(choices=FEEDBACK_TYPE_CHOICES)
     email = forms.EmailField()
     message = forms.CharField(max_length=1000, widget=forms.Textarea)
+
+
+class GameSubCollectionForm(forms.ModelForm):
+    class Meta:
+        model = GameSubCollection
+        fields = ['name', 'games', 'is_default']
+
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop('user')
+        super().__init__(*args, **kwargs)
+        self.fields['games'].queryset = BoardGame.objects.filter(owner=self.user)
+        self.fields['games'].widget.attrs.update({'size': '10'})
+
+    def clean_name(self):
+        name = self.cleaned_data.get('name', '').strip()
+        if not name:
+            raise forms.ValidationError('Name is required.')
+        if name.lower() in [n.lower() for n in RESERVED_SUB_COLLECTION_NAMES]:
+            raise forms.ValidationError(
+                f'"{name}" is a reserved name and cannot be used.'
+            )
+        qs = GameSubCollection.objects.filter(user=self.user, name=name)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError(
+                'You already have a sub-collection with this name.'
+            )
+        return name
+
+    def clean_games(self):
+        games = self.cleaned_data.get('games')
+        if not games:
+            raise forms.ValidationError(
+                'At least one game is required.'
+            )
+        return games
+
+    def clean(self):
+        cleaned_data = super().clean()
+        games = cleaned_data.get('games')
+        if not games:
+            return cleaned_data
+
+        game_ids = set(g.pk for g in games)
+        all_owned_ids = set(
+            BoardGame.objects.filter(owner=self.user).values_list('pk', flat=True)
+        )
+        if game_ids == all_owned_ids and all_owned_ids:
+            raise forms.ValidationError(
+                'You cannot select all of your games. '
+                'Use "Entire Collection" instead.'
+            )
+
+        existing = GameSubCollection.objects.filter(user=self.user)
+        if self.instance and self.instance.pk:
+            existing = existing.exclude(pk=self.instance.pk)
+        for sc in existing:
+            existing_ids = set(sc.games.values_list('pk', flat=True))
+            if existing_ids == game_ids:
+                raise forms.ValidationError(
+                    f'You already have a sub-collection "{sc.name}" '
+                    f'with these exact games.'
+                )
+                break
+
+        return cleaned_data

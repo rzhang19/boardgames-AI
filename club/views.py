@@ -30,13 +30,14 @@ from .activity_feed import (
 from .forms import (
     BetaAccessForm, BoardGameForm, ChangePasswordForm, EventForm, EventInviteForm, EventSettingsForm,
     FeedbackForm, FEEDBACK_TYPE_CHOICES,
+    GameSubCollectionForm,
     GroupCreateForm, GroupSettingsForm,
     PasswordResetForm, PrivateEventForm, RecurringEventForm, SetPasswordForm,
     SettingsForm, SuccessorPickForm,
     UserAddForm, UserManageForm, RegistrationForm, VerifiedIconForm,
 )
-from .models import BoardGame, Block, Event, EventAttendance, EventGameOverride, EventInvite, EventPresence, EventTag, GameOwnershipProposal, GameSession, GameSessionPlayer, GameTag, Group, GroupCreationLog, GroupInvite, GroupJoinRequest, GroupMembership, Friendship, Notification, PasswordHistory, PrivateEventCreationLog, SiteSettings, TagRequest, VerifiedIcon, Vote
-from .models import TAG_MAX_LENGTH
+from .models import BoardGame, Block, Event, EventAttendance, EventGameOverride, EventInvite, EventPresence, EventTag, GameOwnershipProposal, GameSession, GameSessionPlayer, GameSubCollection, GameTag, Group, GroupCreationLog, GroupInvite, GroupJoinRequest, GroupMembership, Friendship, Notification, PasswordHistory, PrivateEventCreationLog, SiteSettings, TagRequest, VerifiedIcon, Vote
+from .models import TAG_MAX_LENGTH, MAX_SUB_COLLECTIONS
 from .notifications import (
     generate_missing_complexity_notifications,
     generate_missing_max_players_notifications,
@@ -1373,6 +1374,103 @@ def game_delete(request, pk):
     return render(request, 'club/game_confirm_delete.html', {
         'game': game,
         'is_superuser_deleting_others': request.user.is_superuser and game.owner != request.user,
+    })
+
+
+def sub_collection_list(request):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    sub_collections = GameSubCollection.objects.filter(
+        user=request.user
+    ).prefetch_related('games')
+    all_my_games = BoardGame.objects.filter(owner=request.user)
+    all_my_games_count = all_my_games.count()
+    sub_collection_count = sub_collections.count()
+    has_any_default = sub_collections.filter(is_default=True).exists()
+    can_create = (
+        sub_collection_count < MAX_SUB_COLLECTIONS and all_my_games_count > 0
+    )
+    return render(request, 'club/sub_collection_list.html', {
+        'sub_collections': sub_collections,
+        'all_my_games': all_my_games,
+        'all_my_games_count': all_my_games_count,
+        'sub_collection_count': sub_collection_count,
+        'max_sub_collections': MAX_SUB_COLLECTIONS,
+        'has_any_default': has_any_default,
+        'can_create': can_create,
+    })
+
+
+def sub_collection_create(request):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    owned_games_count = BoardGame.objects.filter(owner=request.user).count()
+    if owned_games_count == 0:
+        from django.contrib import messages
+        messages.error(request, 'You need at least one game to create a sub-collection.')
+        return redirect('sub_collection_list')
+    current_count = GameSubCollection.objects.filter(user=request.user).count()
+    if current_count >= MAX_SUB_COLLECTIONS:
+        from django.contrib import messages
+        messages.error(request, 'You have reached the maximum number of sub-collections.')
+        return redirect('sub_collection_list')
+    if request.method == 'POST':
+        form = GameSubCollectionForm(request.POST, user=request.user)
+        if form.is_valid():
+            sub_collection = form.save(commit=False)
+            sub_collection.user = request.user
+            if sub_collection.is_default:
+                GameSubCollection.objects.filter(
+                    user=request.user, is_default=True
+                ).update(is_default=False)
+            sub_collection.save()
+            form.save_m2m()
+            return redirect('sub_collection_list')
+    else:
+        form = GameSubCollectionForm(user=request.user)
+    return render(request, 'club/sub_collection_form.html', {
+        'form': form,
+        'action': 'Create',
+    })
+
+
+def sub_collection_edit(request, pk):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    sub_collection = get_object_or_404(GameSubCollection, pk=pk)
+    if sub_collection.user != request.user:
+        raise PermissionDenied
+    if request.method == 'POST':
+        form = GameSubCollectionForm(
+            request.POST, instance=sub_collection, user=request.user
+        )
+        if form.is_valid():
+            if form.cleaned_data.get('is_default'):
+                GameSubCollection.objects.filter(
+                    user=request.user, is_default=True
+                ).exclude(pk=sub_collection.pk).update(is_default=False)
+            form.save()
+            return redirect('sub_collection_list')
+    else:
+        form = GameSubCollectionForm(instance=sub_collection, user=request.user)
+    return render(request, 'club/sub_collection_form.html', {
+        'form': form,
+        'action': 'Edit',
+        'sub_collection': sub_collection,
+    })
+
+
+def sub_collection_delete(request, pk):
+    if not request.user.is_authenticated:
+        return redirect('/login/')
+    sub_collection = get_object_or_404(GameSubCollection, pk=pk)
+    if sub_collection.user != request.user:
+        raise PermissionDenied
+    if request.method == 'POST':
+        sub_collection.delete()
+        return redirect('sub_collection_list')
+    return render(request, 'club/sub_collection_confirm_delete.html', {
+        'sub_collection': sub_collection,
     })
 
 
