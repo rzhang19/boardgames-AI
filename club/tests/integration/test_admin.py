@@ -1342,6 +1342,11 @@ class UserPermanentDeleteTest(TestCase):
         self.assertContains(response, "type the user's username to confirm")
         self.assertContains(response, '<code>deleted</code>', html=True)
 
+    def test_unauthenticated_user_redirected_to_login(self):
+        response = self.client.get(reverse('user_permanent_delete', kwargs={'pk': self.deleted_user.pk}))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
 
 @tag("integration")
 class DeactivatedLoginMessageTest(TestCase):

@@ -209,6 +209,16 @@ def site_admin_required(view_func):
     return wrapper
 
 
+def superuser_required(view_func):
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('/login/')
+        if not request.user.is_superuser:
+            raise PermissionDenied
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
 def _get_manage_queryset(request):
     qs = User.objects.all()
     if not request.user.is_superuser:
@@ -338,9 +348,8 @@ def user_restore(request, pk):
     return render(request, 'club/manage_users_restore.html', {'target_user': user})
 
 
+@superuser_required
 def user_permanent_delete(request, pk):
-    if not request.user.is_superuser:
-        raise PermissionDenied
     user = get_object_or_404(User, pk=pk, deleted_at__isnull=False)
     if request.method == 'POST':
         confirm_username = request.POST.get('confirm_username', '').strip()
