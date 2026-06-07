@@ -41,8 +41,8 @@ jobs:
     steps:
       - name: Configure git authentication
         run: |
-          git config --global credential.helper store
-          echo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
+          git config --global credential.helper 'cache --timeout=60'
+          printf "protocol=https\nhost=github.com\nusername=x-access-token\npassword=%s\n" "${{ secrets.GITHUB_TOKEN }}" | git credential approve
 
       - name: Configure git safe directory
         run: git config --global --add safe.directory /opt/boardgames
