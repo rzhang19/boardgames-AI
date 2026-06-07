@@ -314,7 +314,7 @@ class ViewOnlyMiddlewareMessageTest(TestCase):
 class SeedStagingViewOnlyTest(TestCase):
 
     @patch.dict(os.environ, {'SEED_USER_PASSWORD': 'testpw'})
-    @override_settings(VIEW_ONLY_PASSWORD='ViewerPass123!')
+    @override_settings(VIEW_ONLY_USERNAME='testviewer', VIEW_ONLY_PASSWORD='ViewerPass123!')
     def test_creates_view_only_user_when_password_set(self):
         from django.core.management import call_command
         call_command('seed_staging')
@@ -324,7 +324,7 @@ class SeedStagingViewOnlyTest(TestCase):
         self.assertTrue(viewer.email_verified)
 
     @patch.dict(os.environ, {'SEED_USER_PASSWORD': 'testpw'})
-    @override_settings(VIEW_ONLY_PASSWORD='ViewerPass123!')
+    @override_settings(VIEW_ONLY_USERNAME='testviewer', VIEW_ONLY_PASSWORD='ViewerPass123!')
     def test_view_only_user_in_public_group(self):
         from django.core.management import call_command
         call_command('seed_staging')
@@ -336,7 +336,7 @@ class SeedStagingViewOnlyTest(TestCase):
         self.assertEqual(membership.role, 'member')
 
     @patch.dict(os.environ, {'SEED_USER_PASSWORD': 'testpw'})
-    @override_settings(VIEW_ONLY_PASSWORD='ViewerPass123!')
+    @override_settings(VIEW_ONLY_USERNAME='testviewer', VIEW_ONLY_PASSWORD='ViewerPass123!')
     def test_view_only_user_not_in_private_group(self):
         from django.core.management import call_command
         call_command('seed_staging')
@@ -352,6 +352,13 @@ class SeedStagingViewOnlyTest(TestCase):
         from django.core.management import call_command
         call_command('seed_staging')
         self.assertFalse(User.objects.filter(username='testviewer').exists())
+
+    @patch.dict(os.environ, {'SEED_USER_PASSWORD': 'testpw'})
+    @override_settings(VIEW_ONLY_PASSWORD='ViewerPass123!')
+    def test_skips_view_only_user_when_username_not_set(self):
+        from django.core.management import call_command
+        call_command('seed_staging')
+        self.assertFalse(User.objects.filter(is_view_only=True).exists())
 
     @patch.dict(os.environ, {'SEED_USER_PASSWORD': 'testpw'})
     @override_settings(

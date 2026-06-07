@@ -38,7 +38,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         view_only_username = settings.VIEW_ONLY_USERNAME
         all_usernames = [u['username'] for u in self.TEST_USERS]
-        if settings.VIEW_ONLY_PASSWORD:
+        if settings.VIEW_ONLY_USERNAME and settings.VIEW_ONLY_PASSWORD:
             all_usernames.append(view_only_username)
 
         existing = User.objects.filter(username__in=all_usernames).count()
@@ -71,7 +71,7 @@ class Command(BaseCommand):
             users[user_data['username']] = user
             role = 'site admin' if user_data['is_site_admin'] else 'user'
             self.stdout.write(f'  Created {user_data["username"]} ({role})')
-        if settings.VIEW_ONLY_PASSWORD:
+        if settings.VIEW_ONLY_USERNAME and settings.VIEW_ONLY_PASSWORD:
             viewer = User.objects.create_user(
                 username=view_only_username,
                 password=settings.VIEW_ONLY_PASSWORD,
@@ -82,8 +82,8 @@ class Command(BaseCommand):
             self.stdout.write(f'  Created {view_only_username} (view-only visitor)')
         else:
             self.stdout.write(self.style.WARNING(
-                '  VIEW_ONLY_PASSWORD not set \u2014 skipping view-only user. '
-                'Set it in .env to enable.'
+                '  VIEW_ONLY_USERNAME or VIEW_ONLY_PASSWORD not set \u2014 skipping view-only user. '
+                'Set both in .env to enable.'
             ))
 
         private_group = Group.objects.create(
