@@ -80,28 +80,27 @@ class TestTelegramServiceSecurity:
                     in_env = False
         assert found_docker_host, "telegram service missing DOCKER_HOST env var"
 
-    def test_telegram_mounts_secrets_readonly(self):
+    def test_telegram_does_not_mount_secrets_directory(self):
         content = read_compose()
         lines = content.splitlines()
         in_telegram = False
         in_volumes = False
-        found_secrets_mount = False
         for line in lines:
             if line.strip() == "telegram:":
                 in_telegram = True
             elif in_telegram and line and not line[0].isspace():
                 in_telegram = False
                 in_volumes = False
+            elif in_telegram and line.startswith("  ") and not line.startswith("    "):
+                in_telegram = False
+                in_volumes = False
             elif in_telegram and "volumes:" in line:
                 in_volumes = True
             elif in_telegram and in_volumes:
-                if "/opt/boardgames-secrets" in line and ":ro" in line:
-                    found_secrets_mount = True
-                if line and not line[0].isspace():
-                    in_volumes = False
-        assert found_secrets_mount, (
-            "telegram service missing read-only mount for /opt/boardgames-secrets"
-        )
+                if "/opt/boardgames-secrets" in line:
+                    pytest.fail(
+                        "telegram service must not mount /opt/boardgames-secrets"
+                    )
 
 
 @pytest.mark.unit

@@ -140,7 +140,6 @@ services:
       DOCKER_HOST: tcp://socket-proxy:2375
     volumes:
       - .:${PROJECT_DIR:-/opt/boardgames}
-      - /opt/boardgames-secrets:/opt/boardgames-secrets:ro
     depends_on:
       - socket-proxy
     networks:
